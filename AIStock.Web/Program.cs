@@ -4,8 +4,11 @@ using AIStock.Data.Providers.Eastmoney;
 using AIStock.Data.Providers.Sanhu;
 using AIStock.Data.Providers.Tencent;
 using AIStock.Data.Providers.Tdx;
+using AIStock.EventEngine;
 using AIStock.Infrastructure.Database.Context;
 using AIStock.Infrastructure.MessageBus;
+using AIStock.Intelligence;
+using AIStock.LLM;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
 using StackExchange.Redis;
@@ -29,6 +32,7 @@ builder.Host.UseSerilog();
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddOpenApi();
+builder.Services.AddMemoryCache();
 
 // 配置MySQL
 var connectionString = builder.Configuration.GetConnectionString("MySQL");
@@ -42,6 +46,15 @@ builder.Services.AddSingleton<IConnectionMultiplexer>(sp =>
 
 // 注册消息总线
 builder.Services.AddSingleton<IMessageBus, RedisMessageBus>();
+
+// 注册LLM服务
+builder.Services.AddLLMServices();
+
+// 注册情报服务
+builder.Services.AddIntelligenceServices();
+
+// 注册事件引擎服务
+builder.Services.AddEventEngineServices();
 
 // 注册数据源Provider
 builder.Services.AddSingleton<IDataProviderResolver, DataProviderResolver>();
@@ -147,6 +160,19 @@ using (var scope = app.Services.CreateScope())
     foreach (var provider in providers)
     {
         resolver.RegisterProvider(provider);
+    }
+}
+
+// 检查 Playwright 是否已安装（可选）
+if (builder.Configuration.GetValue<bool>("Playwright:CheckOnStartup"))
+{
+    try
+    {
+        await AIStock.Intelligence.PlaywrightInitializer.EnsureInstalledAsync();
+    }
+    catch (Exception ex)
+    {
+        Log.Warning("Playwright check failed: {Message}", ex.Message);
     }
 }
 

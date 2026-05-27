@@ -34,9 +34,9 @@ Portfolio Engine → Risk Engine → OMS → Execution Engine → SanhuQuant API
 | 历史分笔 | 历史分笔成交 | 通达信 | P0 | ✅ 完成 |
 | 集合竞价 | 集合竞价明细 | 通达信 | P1 | ✅ 完成 |
 | 股票池 | 股票/指数/ETF代码列表 | 通达信 | P0 | ✅ 完成 |
-| 研报采集 | 券商研报 | Playwright + 东财/慧博 | P0 | ⏳ 阶段二 |
-| 新闻采集 | 财经新闻 | Playwright + HTTP | P0 | ⏳ 阶段二 |
-| 政策采集 | 政策文件 | Playwright | P1 | ⏳ 阶段二 |
+| 研报采集 | 券商研报 | Playwright + 东财/慧博 | P0 | ✅ 完成 |
+| 新闻采集 | 财经新闻 | Playwright + HTTP | P0 | ✅ 完成 |
+| 政策采集 | 政策文件 | Playwright | P1 | ✅ 完成 |
 | 知识星球 | 付费圈内容 | Playwright | P2 | ⏳ 阶段二 |
 | 社交媒体 | 雪球/股吧 | Playwright | P2 | ⏳ 阶段三 |
 
@@ -44,8 +44,8 @@ Portfolio Engine → Risk Engine → OMS → Execution Engine → SanhuQuant API
 
 | 模块 | 功能 | 优先级 | 状态 |
 |------|------|--------|------|
-| 研报分析Agent | 自动摘要/超预期点/产业方向 | P0 | ⏳ 阶段二 |
-| 政策分析Agent | 政策摘要/产业链推演 | P1 | ⏳ 阶段二 |
+| 研报分析Agent | 自动摘要/超预期点/产业方向 | P0 | ✅ 完成 |
+| 政策分析Agent | 政策摘要/产业链推演 | P1 | ✅ 完成 |
 | 小作文分析Agent | OCR/ASR解析/可信度分析 | P2 | ⏳ 阶段三 |
 | 知识星球Agent | 新内容监控/关键词报警 | P2 | ⏳ 阶段三 |
 
@@ -53,10 +53,10 @@ Portfolio Engine → Risk Engine → OMS → Execution Engine → SanhuQuant API
 
 | 模块 | 功能 | 优先级 | 状态 |
 |------|------|--------|------|
-| 多模型管理 | 动态配置BaseURL/ApiKey/Model | P0 | ⏳ 阶段二 |
-| 事件抽取 | 公司/产品/时间/利好方向 | P0 | ⏳ 阶段二 |
-| 情绪分析 | 利好/利空/中性判断 | P0 | ⏳ 阶段二 |
-| 强度评分 | 重磅程度/可信度/传播速度 | P1 | ⏳ 阶段二 |
+| 多模型管理 | 动态配置BaseURL/ApiKey/Model | P0 | ✅ 完成 |
+| 事件抽取 | 公司/产品/时间/利好方向 | P0 | ✅ 完成 |
+| 情绪分析 | 利好/利空/中性判断 | P0 | ✅ 完成 |
+| 强度评分 | 重磅程度/可信度/传播速度 | P1 | ✅ 完成 |
 | 时效性分析 | 信息发现速度评估 | P1 | ⏳ 阶段三 |
 
 ### 第4层：传播链分析
@@ -220,7 +220,7 @@ Portfolio Engine → Risk Engine → OMS → Execution Engine → SanhuQuant API
 
 ---
 
-### 阶段二：情报+NLP（待开发）
+### 阶段二：情报+NLP（已完成 ✅）
 
 **工期：** 4-5周
 
@@ -228,17 +228,44 @@ Portfolio Engine → Risk Engine → OMS → Execution Engine → SanhuQuant API
 
 #### 任务清单
 
-| 任务 | 优先级 | 说明 |
-|------|--------|------|
-| LLM Gateway | P0 | 多模型动态配置（BaseURL/ApiKey/Model） |
-| 多模型对比 | P0 | 并行调用 + 投票机制 |
-| 研报采集 | P0 | Playwright抓取东财/慧博研报 |
-| 新闻采集 | P0 | 财经新闻抓取 |
-| 研报分析Agent | P0 | 自动摘要/超预期点/产业方向 |
-| 事件抽取引擎 | P0 | 公司/产品/时间/利好方向 |
-| 情绪分析 | P0 | 利好/利空/中性判断 |
-| 政策分析Agent | P1 | 政策摘要/产业链推演 |
-| 强度评分 | P1 | 重磅程度/可信度/传播速度 |
+| 任务 | 优先级 | 说明 | 状态 |
+|------|--------|------|------|
+| LLM Gateway | P0 | 多模型动态配置（BaseURL/ApiKey/Model） | ✅ 完成 |
+| 多模型对比 | P0 | 并行调用 + 投票机制 | ✅ 完成 |
+| 研报采集 | P0 | Playwright抓取东财/慧博研报 | ✅ 完成 |
+| 新闻采集 | P0 | 财经新闻抓取 | ✅ 完成 |
+| 研报分析Agent | P0 | 自动摘要/超预期点/产业方向 | ✅ 完成 |
+| 事件抽取引擎 | P0 | 公司/产品/时间/利好方向 | ✅ 完成 |
+| 情绪分析 | P0 | 利好/利空/中性判断 | ✅ 完成 |
+| 政策分析Agent | P1 | 政策摘要/产业链推演 | ✅ 完成 |
+| 强度评分 | P1 | 重磅程度/可信度/传播速度 | ✅ 完成 |
+
+#### 已实现API
+
+| 接口 | 方法 | 说明 |
+|------|------|------|
+| `/api/llm/models` | GET | 获取所有可用模型 |
+| `/api/llm/models/{modelId}` | GET | 获取指定模型配置 |
+| `/api/llm/models/refresh` | POST | 刷新模型配置缓存 |
+| `/api/llm/chat` | POST | 发送LLM请求 |
+| `/api/llm/compare` | POST | 多模型对比 |
+| `/api/intelligence/reports` | GET | 采集最新研报 |
+| `/api/intelligence/reports/{stockCode}` | GET | 采集指定股票研报 |
+| `/api/intelligence/reports/analyze` | POST | 分析研报 |
+| `/api/intelligence/reports/process` | POST | 处理并保存研报事件 |
+| `/api/intelligence/news` | GET | 采集最新新闻 |
+| `/api/intelligence/news/{stockCode}` | GET | 采集指定股票新闻 |
+| `/api/intelligence/news/category/{category}` | GET | 采集指定类别新闻 |
+| `/api/intelligence/news/process` | POST | 处理并保存新闻事件 |
+| `/api/intelligence/policy/analyze` | POST | 分析政策 |
+| `/api/intelligence/policy/process` | POST | 处理并保存政策事件 |
+| `/api/event` | GET | 获取最近事件 |
+| `/api/event/{eventId}` | GET | 获取事件详情 |
+| `/api/event/search` | GET | 搜索事件 |
+| `/api/event/statistics` | GET | 获取事件统计 |
+| `/api/event/extract` | POST | 从文本中抽取事件 |
+| `/api/event/sentiment` | POST | 分析文本情绪 |
+| `/api/event/intensity` | POST | 评估事件强度 |
 
 ---
 
@@ -458,7 +485,7 @@ curl http://localhost:5172/api/health
 | 阶段 | 工期 | 累计 | 状态 |
 |------|------|------|------|
 | 阶段一 | 3-4周 | 4周 | ✅ 完成 |
-| 阶段二 | 4-5周 | 9周 | ⏳ 待开发 |
+| 阶段二 | 4-5周 | 9周 | ✅ 完成 |
 | 阶段三 | 3-4周 | 13周 | ⏳ 待开发 |
 | 阶段四 | 4-5周 | 18周 | ⏳ 待开发 |
 | 阶段五 | 3-4周 | 22周 | ⏳ 待开发 |
@@ -478,3 +505,4 @@ curl http://localhost:5172/api/health
 | 2026-05-28 | v1.3 | 股票池支持类型区分：Stock/Index/ETF |
 | 2026-05-28 | v1.4 | 新增参股关系图谱功能设计（上市公司/未上市龙头参股关系挖掘） |
 | 2026-05-28 | v1.5 | 修正阶段划分：新增阶段五（风控+执行），原阶段五改为阶段六，原阶段六改为阶段七 |
+| 2026-05-28 | v2.0 | 完成阶段二：情报+NLP（LLM Gateway、研报/新闻采集、事件抽取、情绪分析、强度评分） |
