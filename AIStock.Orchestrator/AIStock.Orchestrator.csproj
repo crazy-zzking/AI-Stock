@@ -1,0 +1,18 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\AIStock.Core\AIStock.Core.csproj" />
+    <ProjectReference Include="..\AIStock.Infrastructure\AIStock.Infrastructure.csproj" />
+    <ProjectReference Include="..\AIStock.Intelligence\AIStock.Intelligence.csproj" />
+    <ProjectReference Include="..\AIStock.Strategy\AIStock.Strategy.csproj" />
+    <ProjectReference Include="..\AIStock.Risk\AIStock.Risk.csproj" />
+    <ProjectReference Include="..\AIStock.Execution\AIStock.Execution.csproj" />
+  </ItemGroup>
+
+</Project>

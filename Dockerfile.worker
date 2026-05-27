@@ -1,0 +1,52 @@
+# 使用官方 .NET 9 SDK 镜像作为构建阶段
+FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
+WORKDIR /src
+
+# 复制项目文件
+COPY ["AIStock.Worker/AIStock.Worker.csproj", "AIStock.Worker/"]
+COPY ["AIStock.Core/AIStock.Core.csproj", "AIStock.Core/"]
+COPY ["AIStock.Infrastructure/AIStock.Infrastructure.csproj", "AIStock.Infrastructure/"]
+COPY ["AIStock.Data/AIStock.Data.csproj", "AIStock.Data/"]
+COPY ["AIStock.LLM/AIStock.LLM.csproj", "AIStock.LLM/"]
+COPY ["AIStock.Intelligence/AIStock.Intelligence.csproj", "AIStock.Intelligence/"]
+COPY ["AIStock.EventEngine/AIStock.EventEngine.csproj", "AIStock.EventEngine/"]
+COPY ["AIStock.Knowledge/AIStock.Knowledge.csproj", "AIStock.Knowledge/"]
+COPY ["AIStock.Feature/AIStock.Feature.csproj", "AIStock.Feature/"]
+COPY ["AIStock.Strategy/AIStock.Strategy.csproj", "AIStock.Strategy/"]
+COPY ["AIStock.Risk/AIStock.Risk.csproj", "AIStock.Risk/"]
+COPY ["AIStock.Execution/AIStock.Execution.csproj", "AIStock.Execution/"]
+COPY ["AIStock.Orchestrator/AIStock.Orchestrator.csproj", "AIStock.Orchestrator/"]
+COPY ["AIStock.Monitor/AIStock.Monitor.csproj", "AIStock.Monitor/"]
+
+# 还原依赖
+RUN dotnet restore "AIStock.Worker/AIStock.Worker.csproj"
+
+# 复制所有源代码
+COPY . .
+
+# 构建项目
+WORKDIR "/src/AIStock.Worker"
+RUN dotnet build -c Release -o /app/build
+
+# 发布阶段
+FROM build AS publish
+RUN dotnet publish -c Release -o /app/publish
+
+# 运行阶段
+FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS final
+WORKDIR /app
+
+# 安装中文字体
+RUN apt-get update && apt-get install -y fonts-wqy-zenhei && rm -rf /var/lib/apt/lists/*
+
+# 复制发布文件
+COPY --from=publish /app/publish .
+
+# 创建日志目录
+RUN mkdir -p /app/logs
+
+# 设置环境变量
+ENV ASPNETCORE_ENVIRONMENT=Production
+
+# 启动应用
+ENTRYPOINT ["dotnet", "AIStock.Worker.dll"]

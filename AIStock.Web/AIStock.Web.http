@@ -1,0 +1,6 @@
+@AIStock.Web_HostAddress = http://localhost:5172
+
+GET {{AIStock.Web_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

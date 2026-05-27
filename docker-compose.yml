@@ -1,0 +1,88 @@
+version: '3.8'
+
+services:
+  # MySQL 数据库
+  mysql:
+    image: mysql:8.0
+    container_name: aistock-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: aistock
+      MYSQL_USER: aistock
+      MYSQL_PASSWORD: aistock123
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./scripts/database/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - aistock-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis 缓存
+  redis:
+    image: redis:6.2.6
+    container_name: aistock-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - aistock-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # AIStock Web API
+  aistock-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: aistock-api
+    ports:
+      - "8080:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ConnectionStrings__MySQL=Server=mysql;Port=3306;Database=aistock;User=root;Password=root;
+      - ConnectionStrings__Redis=redis:6379
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - aistock-network
+    restart: unless-stopped
+
+  # AIStock Worker (后台服务)
+  aistock-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    container_name: aistock-worker
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ConnectionStrings__MySQL=Server=mysql;Port=3306;Database=aistock;User=root;Password=root;
+      - ConnectionStrings__Redis=redis:6379
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - aistock-network
+    restart: unless-stopped
+
+networks:
+  aistock-network:
+    driver: bridge
+
+volumes:
+  mysql_data:
+  redis_data:
