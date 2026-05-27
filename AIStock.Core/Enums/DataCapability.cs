@@ -21,6 +21,26 @@ public enum DataCapability
     Intraday,
 
     /// <summary>
+    /// 历史分时
+    /// </summary>
+    HistoryIntraday,
+
+    /// <summary>
+    /// 分笔成交
+    /// </summary>
+    Trades,
+
+    /// <summary>
+    /// 历史分笔成交
+    /// </summary>
+    HistoryTrades,
+
+    /// <summary>
+    /// 集合竞价
+    /// </summary>
+    CallAuction,
+
+    /// <summary>
     /// 资金流向
     /// </summary>
     CapitalFlow,

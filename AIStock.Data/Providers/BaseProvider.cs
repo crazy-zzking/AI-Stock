@@ -70,6 +70,56 @@ public abstract class BaseProvider : IDataProvider
     public abstract Task<List<IntradayData>> GetIntradayAsync(string code);
 
     /// <summary>
+    /// 获取历史分时数据
+    /// </summary>
+    public virtual Task<List<IntradayData>> GetHistoryIntradayAsync(string date, string code)
+    {
+        throw new NotSupportedException($"Provider {ProviderId} does not support history intraday data");
+    }
+
+    /// <summary>
+    /// 获取分笔成交数据
+    /// </summary>
+    public virtual Task<List<TradeData>> GetTradesAsync(string code, int start = 0, int count = 100)
+    {
+        throw new NotSupportedException($"Provider {ProviderId} does not support trades data");
+    }
+
+    /// <summary>
+    /// 获取历史分笔成交数据
+    /// </summary>
+    public virtual Task<List<TradeData>> GetHistoryTradesAsync(string date, string code, int start = 0, int count = 100)
+    {
+        throw new NotSupportedException($"Provider {ProviderId} does not support history trades data");
+    }
+
+    /// <summary>
+    /// 获取集合竞价数据
+    /// </summary>
+    public virtual Task<List<CallAuctionData>> GetCallAuctionAsync(string code)
+    {
+        throw new NotSupportedException($"Provider {ProviderId} does not support call auction data");
+    }
+
+    /// <summary>
+    /// 获取股票代码列表
+    /// </summary>
+    public virtual Task<List<StockCodeInfo>> GetStockCodesAsync(string market)
+    {
+        throw new NotSupportedException($"Provider {ProviderId} does not support stock codes");
+    }
+
+    /// <summary>
+    /// 获取股票代码列表（按类型过滤）
+    /// </summary>
+    public virtual async Task<List<StockCodeInfo>> GetStockCodesAsync(string market, SecurityType securityType)
+    {
+        var allCodes = await GetStockCodesAsync(market);
+        var typeStr = securityType.ToString();
+        return allCodes.Where(x => x.SecurityType.Equals(typeStr, StringComparison.OrdinalIgnoreCase)).ToList();
+    }
+
+    /// <summary>
     /// 获取资金流向
     /// </summary>
     public virtual Task<CapitalFlowData?> GetCapitalFlowAsync(string code)

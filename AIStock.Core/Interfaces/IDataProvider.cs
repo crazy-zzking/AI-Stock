@@ -26,56 +26,70 @@ public interface IDataProvider
     /// <summary>
     /// 获取实时行情
     /// </summary>
-    /// <param name="code">股票代码</param>
-    /// <returns>行情数据</returns>
     Task<QuoteData?> GetQuoteAsync(string code);
 
     /// <summary>
     /// 批量获取实时行情
     /// </summary>
-    /// <param name="codes">股票代码列表</param>
-    /// <returns>行情数据列表</returns>
     Task<List<QuoteData>> GetQuotesAsync(IEnumerable<string> codes);
 
     /// <summary>
     /// 获取K线数据
     /// </summary>
-    /// <param name="code">股票代码</param>
-    /// <param name="interval">K线周期</param>
-    /// <param name="count">数量</param>
-    /// <returns>K线数据列表</returns>
     Task<List<KlineData>> GetKlinesAsync(string code, KlineInterval interval, int count = 100);
 
     /// <summary>
     /// 获取分时数据
     /// </summary>
-    /// <param name="code">股票代码</param>
-    /// <returns>分时数据列表</returns>
     Task<List<IntradayData>> GetIntradayAsync(string code);
+
+    /// <summary>
+    /// 获取历史分时数据
+    /// </summary>
+    Task<List<IntradayData>> GetHistoryIntradayAsync(string date, string code);
+
+    /// <summary>
+    /// 获取分笔成交数据
+    /// </summary>
+    Task<List<TradeData>> GetTradesAsync(string code, int start = 0, int count = 100);
+
+    /// <summary>
+    /// 获取历史分笔成交数据
+    /// </summary>
+    Task<List<TradeData>> GetHistoryTradesAsync(string date, string code, int start = 0, int count = 100);
+
+    /// <summary>
+    /// 获取集合竞价数据
+    /// </summary>
+    Task<List<CallAuctionData>> GetCallAuctionAsync(string code);
+
+    /// <summary>
+    /// 获取股票代码列表
+    /// </summary>
+    Task<List<StockCodeInfo>> GetStockCodesAsync(string market);
+
+    /// <summary>
+    /// 获取股票代码列表（按类型过滤）
+    /// </summary>
+    Task<List<StockCodeInfo>> GetStockCodesAsync(string market, SecurityType securityType);
 
     /// <summary>
     /// 获取资金流向
     /// </summary>
-    /// <param name="code">股票代码</param>
-    /// <returns>资金流向数据</returns>
     Task<CapitalFlowData?> GetCapitalFlowAsync(string code);
 
     /// <summary>
     /// 获取股票列表
     /// </summary>
-    /// <returns>股票列表</returns>
     Task<List<StockInfo>> GetStockListAsync();
 
     /// <summary>
     /// 检查是否为交易日
     /// </summary>
-    /// <param name="date">日期</param>
-    /// <returns>是否为交易日</returns>
     Task<bool> IsTradingDayAsync(DateTime date);
 
     /// <summary>
     /// 健康检查
     /// </summary>
-    /// <returns>是否健康</returns>
     Task<bool> IsHealthyAsync();
 }

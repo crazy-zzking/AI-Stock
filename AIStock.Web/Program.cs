@@ -101,8 +101,10 @@ builder.Services.AddSingleton<IDataProvider>(sp =>
 builder.Services.AddSingleton<IDataProvider>(sp =>
 {
     var logger = sp.GetRequiredService<ILogger<TdxProvider>>();
-    var httpClient = sp.GetRequiredService<IHttpClientFactory>().CreateClient();
-    return new TdxProvider(logger, httpClient);
+    // 通达信服务器配置（可从配置文件读取）
+    var host = builder.Configuration["Tdx:Host"] ?? "119.147.212.81";
+    var port = builder.Configuration.GetValue<int>("Tdx:Port", 7709);
+    return new TdxProvider(logger, host, port);
 });
 
 // 配置CORS
