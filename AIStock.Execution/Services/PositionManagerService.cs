@@ -33,7 +33,9 @@ public class PositionManagerService : IPositionManager
                 return new PositionSummary();
             }
 
+            _logger.LogInformation("Calling GetAccountPositionsAsync on Sanhu provider");
             var positions = await provider.GetAccountPositionsAsync();
+            _logger.LogInformation("Got {Count} positions from Sanhu", positions.Count);
 
             var portfolioPositions = positions.Select(p => new PortfolioPosition
             {
