@@ -362,14 +362,15 @@ Portfolio Engine → Risk Engine → OMS → Execution Engine → SanhuQuant API
 | `/api/risk/atr-stop-loss` | POST | ATR止损计算 |
 | `/api/risk/fixed-stop-loss` | POST | 固定止损计算 |
 | `/api/risk/trailing-stop` | POST | 动态止盈计算 |
-| `/api/execution/order` | POST | 下单 |
-| `/api/execution/order/{orderId}` | DELETE | 撤单 |
+| `/api/execution/positions` | GET | 获取持仓和账户信息 |
+| `/api/execution/positions/{code}` | GET | 获取指定股票持仓 |
+| `/api/execution/order` | POST | 下单（买入/卖出） |
 | `/api/execution/order/{orderId}/status` | GET | 查询订单状态 |
 | `/api/execution/orders` | GET | 获取订单列表 |
 
 ---
 
-### 阶段五：风控+执行（部分完成）
+### 阶段五：风控+执行（已完成 ✅）
 
 **工期：** 3-4周
 
@@ -386,7 +387,29 @@ Portfolio Engine → Risk Engine → OMS → Execution Engine → SanhuQuant API
 | 黑天鹅保护 | P1 | 熔断/波动率异常检测 | ⏳ 阶段六 |
 | OMS订单管理 | P0 | 下单/撤单/改单/状态同步 | ✅ 完成 |
 | 执行算法 | P1 | TWAP/VWAP/冰山单 | ⏳ 阶段六 |
-| SanhuQuant集成 | P0 | 实盘交易接口对接 | ⏳ 阶段六 |
+| SanhuQuant集成 | P0 | 实盘交易接口对接 | ✅ 完成 |
+
+#### 已实现API
+
+| 接口 | 方法 | 说明 |
+|------|------|------|
+| `/api/execution/positions` | GET | 获取持仓和账户信息（对接散户量化） |
+| `/api/execution/positions/{code}` | GET | 获取指定股票持仓 |
+| `/api/execution/order` | POST | 下单（即时买入/卖出） |
+| `/api/execution/order/{orderId}/status` | GET | 查询订单状态 |
+| `/api/execution/orders` | GET | 获取今日成交记录 |
+
+#### 散户量化接口对接
+
+| 接口 | 路径 | 说明 |
+|------|------|------|
+| 持仓查询 | `/v1/jycx_chicang` | 获取持仓+账户资金 |
+| 即时买入 | `/v1/ssjy_jimairu` | 需要mykey认证 |
+| 即时卖出 | `/v1/ssjy_jimaichu` | 需要mykey认证 |
+| 订单查询 | `/v1/jycx_chadan` | 查询订单状态 |
+| 可撤委托 | `/v1/jycx_keche` | 获取可撤委托列表 |
+| 今日成交 | `/v1/jycx_jrcj` | 获取今日成交记录 |
+| 近期成交 | `/v1/jycx_cjjl` | 获取近期成交记录 |
 
 ---
 
@@ -504,7 +527,8 @@ AI-Stock/
   "DataProviders": {
     "Sanhu": {
       "BaseUrl": "http://www.sanhulianghua.com:2008",
-      "Token": "your_token"
+      "Token": "your_token",
+      "MyKey": "your_private_key"
     }
   },
   "Proxy": {
@@ -543,7 +567,7 @@ curl http://localhost:5172/api/health
 | 阶段二 | 4-5周 | 9周 | ✅ 完成 |
 | 阶段三 | 3-4周 | 13周 | ✅ 完成 |
 | 阶段四 | 4-5周 | 18周 | ✅ 完成 |
-| 阶段五 | 3-4周 | 22周 | ⏳ 部分完成 |
+| 阶段五 | 3-4周 | 22周 | ✅ 完成 |
 | 阶段六 | 4-5周 | 27周 | ⏳ 待开发 |
 | 阶段七 | 3-4周 | 31周 | ⏳ 待开发 |
 | **总计** | **28-35周** | | |
@@ -564,3 +588,5 @@ curl http://localhost:5172/api/health
 | 2026-05-28 | v3.0 | 完成阶段三：知识图谱+传播分析（公司关系图谱、产业链图谱、概念扩散、标的筛选、真假识别、传播链分析、小作文分析、数据源记录） |
 | 2026-05-28 | v4.0 | 完成阶段四：策略+回测（Feature Store、传统因子计算、回测引擎、规则策略、Alpha Engine、Portfolio Engine、Risk Engine、仓位控制、止损系统） |
 | 2026-05-28 | v4.1 | 对接散户量化持仓和订单接口（持仓查询、买入、卖出、订单查询、可撤委托、成交记录） |
+| 2026-05-28 | v4.2 | 合并持仓和资金接口（一次请求返回持仓+账户资金） |
+| 2026-05-28 | v4.3 | 移除GetAccountBalanceAsync，统一使用GetAccountPositionsAsync |
