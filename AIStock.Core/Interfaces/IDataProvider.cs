@@ -92,4 +92,91 @@ public interface IDataProvider
     /// 健康检查
     /// </summary>
     Task<bool> IsHealthyAsync();
+
+    /// <summary>
+    /// 获取账户持仓
+    /// </summary>
+    Task<List<AccountPosition>> GetAccountPositionsAsync();
+
+    /// <summary>
+    /// 获取账户资金
+    /// </summary>
+    Task<AccountBalance?> GetAccountBalanceAsync();
+}
+
+/// <summary>
+/// 账户持仓
+/// </summary>
+public class AccountPosition
+{
+    /// <summary>
+    /// 股票代码
+    /// </summary>
+    public string Code { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 股票名称
+    /// </summary>
+    public string Name { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 持仓数量
+    /// </summary>
+    public long Volume { get; set; }
+
+    /// <summary>
+    /// 可用数量
+    /// </summary>
+    public long AvailableVolume { get; set; }
+
+    /// <summary>
+    /// 成本价
+    /// </summary>
+    public decimal CostPrice { get; set; }
+
+    /// <summary>
+    /// 现价
+    /// </summary>
+    public decimal CurrentPrice { get; set; }
+
+    /// <summary>
+    /// 市值
+    /// </summary>
+    public decimal MarketValue { get; set; }
+
+    /// <summary>
+    /// 盈亏金额
+    /// </summary>
+    public decimal Profit { get; set; }
+
+    /// <summary>
+    /// 盈亏比例
+    /// </summary>
+    public decimal ProfitRate { get; set; }
+}
+
+/// <summary>
+/// 账户资金
+/// </summary>
+public class AccountBalance
+{
+    /// <summary>
+    /// 总资产
+    /// </summary>
+    public decimal TotalAssets { get; set; }
+
+    /// <summary>
+    /// 可用资金
+    /// </summary>
+    public decimal AvailableBalance { get; set; }
+
+    /// <summary>
+    /// 持仓市值
+    /// </summary>
+    public decimal PositionValue { get; set; }
+
+    /// <summary>
+    /// 冻结资金
+    /// </summary>
+    public decimal FrozenBalance { get; set; }
 }

@@ -455,6 +455,18 @@ public class TdxProvider : IDataProvider, IDisposable
         }
     }
 
+    public Task<List<AccountPosition>> GetAccountPositionsAsync()
+    {
+        // 通达信不支持账户持仓
+        return Task.FromResult(new List<AccountPosition>());
+    }
+
+    public Task<AccountBalance?> GetAccountBalanceAsync()
+    {
+        // 通达信不支持账户资金
+        return Task.FromResult<AccountBalance?>(null);
+    }
+
     public void Dispose()
     {
         if (!_disposed)

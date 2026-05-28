@@ -8,8 +8,9 @@ public static class DependencyInjection
 {
     public static IServiceCollection AddExecutionServices(this IServiceCollection services)
     {
-        services.AddScoped<ISignalGenerator, SignalGeneratorService>();
-        services.AddScoped<IOrderManager, OrderManagerService>();
+        services.AddSingleton<ISignalGenerator, SignalGeneratorService>();
+        services.AddSingleton<IOrderManager, OrderManagerService>();
+        services.AddSingleton<IPositionManager, PositionManagerService>();
         return services;
     }
 }

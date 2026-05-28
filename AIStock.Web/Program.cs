@@ -92,7 +92,8 @@ builder.Services.AddSingleton<IDataProvider>(sp =>
         logger,
         httpClient,
         config["BaseUrl"]!,
-        config["Token"]!);
+        config["Token"]!,
+        config["MyKey"] ?? "");
 });
 
 builder.Services.AddSingleton<IDataProvider>(sp =>

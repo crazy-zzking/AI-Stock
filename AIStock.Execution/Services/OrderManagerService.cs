@@ -1,19 +1,24 @@
 using AIStock.Core.Enums;
 using AIStock.Core.Interfaces;
+using AIStock.Data.Providers.Sanhu;
 using Microsoft.Extensions.Logging;
 
 namespace AIStock.Execution.Services;
 
 /// <summary>
-/// 订单管理实现
+/// 订单管理实现 - 对接散户量化
 /// </summary>
 public class OrderManagerService : IOrderManager
 {
+    private readonly IDataProviderResolver _dataProviderResolver;
     private readonly ILogger<OrderManagerService> _logger;
     private readonly Dictionary<string, OrderInfo> _orders = new();
 
-    public OrderManagerService(ILogger<OrderManagerService> logger)
+    public OrderManagerService(
+        IDataProviderResolver dataProviderResolver,
+        ILogger<OrderManagerService> logger)
     {
+        _dataProviderResolver = dataProviderResolver;
         _logger = logger;
     }
 
@@ -21,31 +26,62 @@ public class OrderManagerService : IOrderManager
     {
         try
         {
-            var orderId = Guid.NewGuid().ToString("N");
+            var provider = _dataProviderResolver.GetDefaultProvider() as SanhuProvider;
+            if (provider == null)
+            {
+                return new OrderResult
+                {
+                    Success = false,
+                    Message = "不支持的交易接口",
+                    Status = OrderStatus.Failed
+                };
+            }
 
-            var order = new OrderInfo
+            var hands = (int)(request.Volume / 100);
+            if (hands <= 0)
+            {
+                return new OrderResult
+                {
+                    Success = false,
+                    Message = "下单数量不足1手",
+                    Status = OrderStatus.Failed
+                };
+            }
+
+            SanhuOrderResult result;
+            if (request.Side.ToLower() == "buy")
+            {
+                result = await provider.PlaceBuyOrderAsync(request.Code, request.Price, hands);
+            }
+            else
+            {
+                result = await provider.PlaceSellOrderAsync(request.Code, request.Price, hands);
+            }
+
+            var orderId = result.OrderId.ToString();
+            var status = result.IsAccepted ? OrderStatus.Submitted :
+                         result.IsCompleted ? OrderStatus.Filled :
+                         result.IsFailed ? OrderStatus.Failed :
+                         OrderStatus.Pending;
+
+            _orders[orderId] = new OrderInfo
             {
                 OrderId = orderId,
                 Code = request.Code,
                 Side = request.Side,
                 Price = request.Price,
                 Volume = request.Volume,
-                Status = OrderStatus.Submitted,
+                Status = status,
                 CreateTime = DateTime.UtcNow,
                 UpdateTime = DateTime.UtcNow
             };
 
-            _orders[orderId] = order;
-
-            _logger.LogInformation("Order placed: {OrderId} {Side} {Code} {Volume}@{Price}",
-                orderId, request.Side, request.Code, request.Volume, request.Price);
-
             return new OrderResult
             {
                 OrderId = orderId,
-                Success = true,
-                Message = "订单已提交",
-                Status = OrderStatus.Submitted
+                Success = !result.IsFailed,
+                Message = result.Msg,
+                Status = status
             };
         }
         catch (Exception ex)
@@ -62,41 +98,62 @@ public class OrderManagerService : IOrderManager
 
     public async Task<bool> CancelOrderAsync(string orderId)
     {
-        if (!_orders.ContainsKey(orderId))
-        {
-            _logger.LogWarning("Order not found: {OrderId}", orderId);
-            return false;
-        }
-
-        var order = _orders[orderId];
-        if (order.Status == OrderStatus.Filled)
-        {
-            _logger.LogWarning("Cannot cancel filled order: {OrderId}", orderId);
-            return false;
-        }
-
-        order.Status = OrderStatus.Cancelled;
-        order.UpdateTime = DateTime.UtcNow;
-
-        _logger.LogInformation("Order cancelled: {OrderId}", orderId);
-        return true;
+        _logger.LogWarning("CancelOrder not supported via SanhuQuant API");
+        return false;
     }
 
     public async Task<OrderStatus> GetOrderStatusAsync(string orderId)
     {
-        if (!_orders.ContainsKey(orderId))
+        try
         {
+            if (!long.TryParse(orderId, out var orderIdLong))
+                return OrderStatus.Failed;
+
+            var provider = _dataProviderResolver.GetDefaultProvider() as SanhuProvider;
+            if (provider == null)
+                return OrderStatus.Failed;
+
+            var result = await provider.QueryOrderAsync(orderIdLong);
+            if (result == null)
+                return OrderStatus.Failed;
+
+            if (result.IsCompleted) return OrderStatus.Filled;
+            if (result.IsFailed) return OrderStatus.Failed;
+            if (result.IsPending) return OrderStatus.Submitted;
+            return OrderStatus.Pending;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to get order status for {OrderId}", orderId);
             return OrderStatus.Failed;
         }
-
-        return _orders[orderId].Status;
     }
 
     public async Task<List<OrderInfo>> GetOrdersAsync(DateTime startTime, DateTime endTime)
     {
-        return _orders.Values
-            .Where(o => o.CreateTime >= startTime && o.CreateTime <= endTime)
-            .OrderByDescending(o => o.CreateTime)
-            .ToList();
+        try
+        {
+            var provider = _dataProviderResolver.GetDefaultProvider() as SanhuProvider;
+            if (provider == null)
+                return new List<OrderInfo>();
+
+            var trades = await provider.GetTodayTradesAsync();
+            return trades.Select(t => new OrderInfo
+            {
+                OrderId = t.AgreeId.ToString(),
+                Code = t.Code,
+                Side = t.Type,
+                Price = t.Price,
+                Volume = t.Volume,
+                Status = OrderStatus.Filled,
+                CreateTime = DateTime.UtcNow,
+                UpdateTime = DateTime.UtcNow
+            }).ToList();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to get orders");
+            return new List<OrderInfo>();
+        }
     }
 }

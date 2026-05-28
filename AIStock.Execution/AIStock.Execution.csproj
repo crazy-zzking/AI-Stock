@@ -9,6 +9,7 @@
   <ItemGroup>
     <ProjectReference Include="..\AIStock.Core\AIStock.Core.csproj" />
     <ProjectReference Include="..\AIStock.Infrastructure\AIStock.Infrastructure.csproj" />
+    <ProjectReference Include="..\AIStock.Data\AIStock.Data.csproj" />
     <ProjectReference Include="..\AIStock.Risk\AIStock.Risk.csproj" />
   </ItemGroup>
 

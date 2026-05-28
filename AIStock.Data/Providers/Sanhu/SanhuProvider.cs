@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text.Json;
 using AIStock.Core.Enums;
+using AIStock.Core.Interfaces;
 using AIStock.Core.Models;
 using AIStock.Data.Providers;
 using Microsoft.Extensions.Logging;
@@ -14,17 +15,20 @@ public class SanhuProvider : BaseProvider
 {
     private readonly string _baseUrl;
     private readonly string _token;
+    private readonly string _mykey;
 
     public SanhuProvider(
         ILogger<SanhuProvider> logger,
         HttpClient httpClient,
         string baseUrl,
         string token,
+        string mykey = "",
         IWebProxy? proxy = null)
         : base(logger, httpClient, proxy)
     {
         _baseUrl = baseUrl?.TrimEnd('/') ?? throw new ArgumentNullException(nameof(baseUrl));
         _token = token ?? throw new ArgumentNullException(nameof(token));
+        _mykey = mykey ?? "";
     }
 
     public override string ProviderId => "sanhu";
@@ -260,4 +264,380 @@ public class SanhuProvider : BaseProvider
             return false;
         }
     }
+
+    /// <summary>
+    /// 获取账户持仓
+    /// </summary>
+    public override async Task<List<AccountPosition>> GetAccountPositionsAsync()
+    {
+        try
+        {
+            var url = $"{_baseUrl}/v1/jycx_chicang?token={_token}";
+            var response = await SendRequestAsync(url);
+
+            if (response == null)
+                return new List<AccountPosition>();
+
+            var jsonDoc = JsonDocument.Parse(response);
+            var root = jsonDoc.RootElement;
+
+            if (root.GetProperty("ret").GetInt32() != 200)
+                return new List<AccountPosition>();
+
+            var data = root.GetProperty("data");
+            var result = new List<AccountPosition>();
+
+            foreach (var item in data.EnumerateArray())
+            {
+                var position = new AccountPosition
+                {
+                    Code = item.GetProperty("code").GetString() ?? "",
+                    Name = item.GetProperty("name").GetString() ?? "",
+                    Volume = item.GetProperty("GuShu").GetInt64(),
+                    AvailableVolume = item.GetProperty("KeMai").GetInt64(),
+                    CostPrice = item.GetProperty("ChengBen").GetInt64() / 1000m,
+                    CurrentPrice = item.GetProperty("JiaGe").GetInt64() / 1000m,
+                    Profit = item.GetProperty("YingKui").GetInt64() / 1000m,
+                    ProfitRate = item.GetProperty("LiRunLv").GetInt64() / 1000m
+                };
+                position.MarketValue = position.Volume * position.CurrentPrice;
+                result.Add(position);
+            }
+
+            return result;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to get account positions");
+            return new List<AccountPosition>();
+        }
+    }
+
+    /// <summary>
+    /// 获取账户资金
+    /// </summary>
+    public override async Task<AccountBalance?> GetAccountBalanceAsync()
+    {
+        try
+        {
+            var url = $"{_baseUrl}/v1/jycx_chicang?token={_token}";
+            var response = await SendRequestAsync(url);
+
+            if (response == null)
+                return null;
+
+            var jsonDoc = JsonDocument.Parse(response);
+            var root = jsonDoc.RootElement;
+
+            if (root.GetProperty("ret").GetInt32() != 200)
+                return null;
+
+            var baseData = root.GetProperty("base");
+            var totalAssets = baseData.GetProperty("ZongZhi").GetDecimal();
+            var profit = baseData.GetProperty("YingLi").GetDecimal();
+            var availableCash = baseData.GetProperty("ZiJin").GetDecimal();
+
+            return new AccountBalance
+            {
+                TotalAssets = totalAssets,
+                AvailableBalance = availableCash,
+                PositionValue = totalAssets - availableCash,
+                FrozenBalance = 0
+            };
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to get account balance");
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// 即时买入
+    /// </summary>
+    public async Task<SanhuOrderResult> PlaceBuyOrderAsync(string code, decimal price, int hands, string? policy = null)
+    {
+        try
+        {
+            var priceInt = (int)(price * 1000);
+            var url = $"{_baseUrl}/v1/ssjy_jimairu?token={_token}&mykey={_mykey}&code={code}&price={priceInt}&hand={hands}";
+            if (!string.IsNullOrEmpty(policy))
+                url += $"&policy={Uri.EscapeDataString(policy)}";
+
+            var response = await SendRequestAsync(url);
+            if (response == null)
+                return new SanhuOrderResult { Ret = -1, Msg = "请求失败" };
+
+            var jsonDoc = JsonDocument.Parse(response);
+            var root = jsonDoc.RootElement;
+
+            return new SanhuOrderResult
+            {
+                Ret = root.GetProperty("ret").GetInt32(),
+                Msg = root.TryGetProperty("msg", out var msg) ? msg.GetString() ?? "" : "",
+                OrderId = root.TryGetProperty("orderid", out var oid) ? oid.GetInt64() : 0,
+                AgreeId = root.TryGetProperty("agreeid", out var aid) ? aid.GetInt64() : 0,
+                Time = root.TryGetProperty("time", out var time) ? time.GetString() : null,
+                Type = root.TryGetProperty("type", out var type) ? type.GetString() : null,
+                Code = root.TryGetProperty("code", out var c) ? c.GetString() : null,
+                Price = root.TryGetProperty("price", out var p) ? p.GetInt32() : 0,
+                Hands = root.TryGetProperty("hand", out var h) ? h.GetInt32() : 0,
+                Policy = root.TryGetProperty("policy", out var pol) ? pol.GetString() : null
+            };
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to place buy order for {Code}", code);
+            return new SanhuOrderResult { Ret = -1, Msg = ex.Message };
+        }
+    }
+
+    /// <summary>
+    /// 即时卖出
+    /// </summary>
+    public async Task<SanhuOrderResult> PlaceSellOrderAsync(string code, decimal price, int hands, string? policy = null)
+    {
+        try
+        {
+            var priceInt = (int)(price * 1000);
+            var url = $"{_baseUrl}/v1/ssjy_jimaichu?token={_token}&mykey={_mykey}&code={code}&price={priceInt}&hand={hands}";
+            if (!string.IsNullOrEmpty(policy))
+                url += $"&policy={Uri.EscapeDataString(policy)}";
+
+            var response = await SendRequestAsync(url);
+            if (response == null)
+                return new SanhuOrderResult { Ret = -1, Msg = "请求失败" };
+
+            var jsonDoc = JsonDocument.Parse(response);
+            var root = jsonDoc.RootElement;
+
+            return new SanhuOrderResult
+            {
+                Ret = root.GetProperty("ret").GetInt32(),
+                Msg = root.TryGetProperty("msg", out var msg) ? msg.GetString() ?? "" : "",
+                OrderId = root.TryGetProperty("orderid", out var oid) ? oid.GetInt64() : 0,
+                AgreeId = root.TryGetProperty("agreeid", out var aid) ? aid.GetInt64() : 0,
+                Time = root.TryGetProperty("time", out var time) ? time.GetString() : null,
+                Type = root.TryGetProperty("type", out var type) ? type.GetString() : null,
+                Code = root.TryGetProperty("code", out var c) ? c.GetString() : null,
+                Price = root.TryGetProperty("price", out var p) ? p.GetInt32() : 0,
+                Hands = root.TryGetProperty("hand", out var h) ? h.GetInt32() : 0,
+                Policy = root.TryGetProperty("policy", out var pol) ? pol.GetString() : null
+            };
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to place sell order for {Code}", code);
+            return new SanhuOrderResult { Ret = -1, Msg = ex.Message };
+        }
+    }
+
+    /// <summary>
+    /// 查询订单状态
+    /// </summary>
+    public async Task<SanhuOrderResult?> QueryOrderAsync(long orderId)
+    {
+        try
+        {
+            var url = $"{_baseUrl}/v1/jycx_chadan?token={_token}&orderid={orderId}";
+            var response = await SendRequestAsync(url);
+
+            if (response == null)
+                return null;
+
+            var jsonDoc = JsonDocument.Parse(response);
+            var root = jsonDoc.RootElement;
+
+            return new SanhuOrderResult
+            {
+                Ret = root.GetProperty("ret").GetInt32(),
+                OrderId = orderId,
+                AgreeId = root.TryGetProperty("agreeid", out var aid) ? aid.GetInt64() : 0,
+                Time = root.TryGetProperty("time", out var time) ? time.GetString() : null,
+                Type = root.TryGetProperty("type", out var type) ? type.GetString() : null,
+                Code = root.TryGetProperty("code", out var c) ? c.GetString() : null,
+                Price = root.TryGetProperty("price", out var p) ? p.GetInt32() : 0,
+                Hands = root.TryGetProperty("hand", out var h) ? h.GetInt32() : 0,
+                Policy = root.TryGetProperty("policy", out var pol) ? pol.GetString() : null
+            };
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to query order {OrderId}", orderId);
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// 获取可撤委托列表
+    /// </summary>
+    public async Task<List<SanhuEntrustment>> GetCancelableOrdersAsync()
+    {
+        try
+        {
+            var url = $"{_baseUrl}/v1/jycx_keche?token={_token}";
+            var response = await SendRequestAsync(url);
+
+            if (response == null)
+                return new List<SanhuEntrustment>();
+
+            var jsonDoc = JsonDocument.Parse(response);
+            var root = jsonDoc.RootElement;
+
+            if (root.GetProperty("ret").GetInt32() != 200)
+                return new List<SanhuEntrustment>();
+
+            var data = root.GetProperty("data");
+            var result = new List<SanhuEntrustment>();
+
+            foreach (var item in data.EnumerateArray())
+            {
+                result.Add(new SanhuEntrustment
+                {
+                    AgreeId = item.GetProperty("agreeid").GetInt64(),
+                    Code = item.GetProperty("code").GetString() ?? "",
+                    Name = item.GetProperty("name").GetString() ?? "",
+                    Type = item.GetProperty("type").GetString() ?? "",
+                    Price = item.GetProperty("price").GetInt64() / 1000m,
+                    Volume = item.GetProperty("volume").GetInt64()
+                });
+            }
+
+            return result;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to get cancelable orders");
+            return new List<SanhuEntrustment>();
+        }
+    }
+
+    /// <summary>
+    /// 获取今日成交记录
+    /// </summary>
+    public async Task<List<SanhuTrade>> GetTodayTradesAsync()
+    {
+        try
+        {
+            var url = $"{_baseUrl}/v1/jycx_jrcj?token={_token}";
+            var response = await SendRequestAsync(url);
+
+            if (response == null)
+                return new List<SanhuTrade>();
+
+            var jsonDoc = JsonDocument.Parse(response);
+            var root = jsonDoc.RootElement;
+
+            if (root.GetProperty("ret").GetInt32() != 200)
+                return new List<SanhuTrade>();
+
+            return ParseTrades(root.GetProperty("data"));
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to get today trades");
+            return new List<SanhuTrade>();
+        }
+    }
+
+    /// <summary>
+    /// 获取近期成交记录
+    /// </summary>
+    public async Task<List<SanhuTrade>> GetRecentTradesAsync(string? code = null)
+    {
+        try
+        {
+            var url = $"{_baseUrl}/v1/jycx_cjjl?token={_token}";
+            if (!string.IsNullOrEmpty(code))
+                url += $"&code={code}";
+
+            var response = await SendRequestAsync(url);
+
+            if (response == null)
+                return new List<SanhuTrade>();
+
+            var jsonDoc = JsonDocument.Parse(response);
+            var root = jsonDoc.RootElement;
+
+            if (root.GetProperty("ret").GetInt32() != 200)
+                return new List<SanhuTrade>();
+
+            return ParseTrades(root.GetProperty("data"));
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to get recent trades");
+            return new List<SanhuTrade>();
+        }
+    }
+
+    private List<SanhuTrade> ParseTrades(JsonElement data)
+    {
+        var result = new List<SanhuTrade>();
+
+        foreach (var item in data.EnumerateArray())
+        {
+            result.Add(new SanhuTrade
+            {
+                AgreeId = item.TryGetProperty("agreeid", out var aid) ? aid.GetInt64() : 0,
+                Time = item.TryGetProperty("time", out var time) ? time.GetString() : null,
+                Code = item.TryGetProperty("code", out var c) ? c.GetString() ?? "" : "",
+                Name = item.TryGetProperty("name", out var n) ? n.GetString() ?? "" : "",
+                Type = item.TryGetProperty("type", out var t) ? t.GetString() ?? "" : "",
+                Price = item.TryGetProperty("price", out var p) ? p.GetInt64() / 1000m : 0,
+                Volume = item.TryGetProperty("volume", out var v) ? v.GetInt64() : 0
+            });
+        }
+
+        return result;
+    }
+}
+
+/// <summary>
+/// 散户量化订单结果
+/// </summary>
+public class SanhuOrderResult
+{
+    public int Ret { get; set; }
+    public string Msg { get; set; } = "";
+    public long OrderId { get; set; }
+    public long AgreeId { get; set; }
+    public string? Time { get; set; }
+    public string? Type { get; set; }
+    public string? Code { get; set; }
+    public int Price { get; set; }
+    public int Hands { get; set; }
+    public string? Policy { get; set; }
+
+    public bool IsAccepted => Ret == 100;
+    public bool IsCompleted => Ret == 212;
+    public bool IsFailed => Ret >= 300 || Ret == 201 || Ret == 213;
+    public bool IsPending => Ret is >= 100 and < 200;
+}
+
+/// <summary>
+/// 散户量化委托
+/// </summary>
+public class SanhuEntrustment
+{
+    public long AgreeId { get; set; }
+    public string Code { get; set; } = "";
+    public string Name { get; set; } = "";
+    public string Type { get; set; } = "";
+    public decimal Price { get; set; }
+    public long Volume { get; set; }
+}
+
+/// <summary>
+/// 散户量化成交
+/// </summary>
+public class SanhuTrade
+{
+    public long AgreeId { get; set; }
+    public string? Time { get; set; }
+    public string Code { get; set; } = "";
+    public string Name { get; set; } = "";
+    public string Type { get; set; } = "";
+    public decimal Price { get; set; }
+    public long Volume { get; set; }
 }
