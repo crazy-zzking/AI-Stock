@@ -413,7 +413,7 @@ public class SanhuProvider : BaseProvider
     /// <summary>
     /// 查询订单状态
     /// </summary>
-    public async Task<SanhuOrderResult?> QueryOrderAsync(long orderId)
+    public async Task<SanhuOrderResult?> QueryOrderSanhuAsync(long orderId)
     {
         try
         {
@@ -493,7 +493,7 @@ public class SanhuProvider : BaseProvider
     /// <summary>
     /// 获取今日成交记录
     /// </summary>
-    public async Task<List<SanhuTrade>> GetTodayTradesAsync()
+    public async Task<List<SanhuTrade>> GetTodayTradesSanhuAsync()
     {
         try
         {
@@ -571,7 +571,7 @@ public class SanhuProvider : BaseProvider
     }
 
     // IDataProvider 交易接口实现
-    public new async Task<TradingOrderResult> PlaceBuyOrderAsync(string code, decimal price, int volume)
+    public override async Task<TradingOrderResult> PlaceBuyOrderAsync(string code, decimal price, int volume)
     {
         var hands = volume / 100;
         if (hands <= 0) hands = 1;
@@ -586,7 +586,7 @@ public class SanhuProvider : BaseProvider
         };
     }
 
-    public new async Task<TradingOrderResult> PlaceSellOrderAsync(string code, decimal price, int volume)
+    public override async Task<TradingOrderResult> PlaceSellOrderAsync(string code, decimal price, int volume)
     {
         var hands = volume / 100;
         if (hands <= 0) hands = 1;
@@ -599,6 +599,32 @@ public class SanhuProvider : BaseProvider
             IsFailed = result.IsFailed,
             Msg = result.Msg
         };
+    }
+
+    public override async Task<TradingOrderStatus?> QueryOrderAsync(long orderId)
+    {
+        var result = await QueryOrderSanhuAsync(orderId);
+        if (result == null) return null;
+        return new TradingOrderStatus
+        {
+            OrderId = result.OrderId,
+            IsPending = result.IsAccepted,
+            IsCompleted = result.IsCompleted,
+            IsFailed = result.IsFailed
+        };
+    }
+
+    public override async Task<List<TradingTradeInfo>> GetTodayTradesAsync()
+    {
+        var trades = await GetTodayTradesSanhuAsync();
+        return trades.Select(t => new TradingTradeInfo
+        {
+            AgreeId = t.AgreeId,
+            Code = t.Code,
+            Type = t.Type,
+            Price = t.Price,
+            Volume = (int)t.Volume
+        }).ToList();
     }
 }
 

@@ -150,6 +150,30 @@ public abstract class BaseProvider : IDataProvider
     public abstract Task<bool> IsHealthyAsync();
 
     /// <summary>
+    /// 买入下单（子类可重写）
+    /// </summary>
+    public virtual Task<TradingOrderResult> PlaceBuyOrderAsync(string code, decimal price, int volume)
+        => throw new NotSupportedException($"Provider {ProviderId} does not support trading");
+
+    /// <summary>
+    /// 卖出下单（子类可重写）
+    /// </summary>
+    public virtual Task<TradingOrderResult> PlaceSellOrderAsync(string code, decimal price, int volume)
+        => throw new NotSupportedException($"Provider {ProviderId} does not support trading");
+
+    /// <summary>
+    /// 查询订单（子类可重写）
+    /// </summary>
+    public virtual Task<TradingOrderStatus?> QueryOrderAsync(long orderId)
+        => throw new NotSupportedException($"Provider {ProviderId} does not support trading");
+
+    /// <summary>
+    /// 获取今日成交（子类可重写）
+    /// </summary>
+    public virtual Task<List<TradingTradeInfo>> GetTodayTradesAsync()
+        => throw new NotSupportedException($"Provider {ProviderId} does not support trading");
+
+    /// <summary>
     /// 获取账户信息
     /// </summary>
     public virtual Task<AccountInfo> GetAccountInfoAsync()

@@ -74,11 +74,11 @@ public class AutonomousDecisionSystem
                     // Step 4: 风控通过后自动下单
                     if (riskResult.Success && IsRiskPassed(riskResult))
                     {
-                        var orderResult = await PlaceOrderAsync(signal);
+                        var orderResult = await PlaceOrderAsync(signal, request.TotalCapital);
                         orders.Add(orderResult);
                         _logger.LogInformation(
                             "Auto order placed for {Code}: {Side} {Volume}@{Price}, OrderId={OrderId}",
-                            signal.Code, signal.SignalType, signal.Volume, signal.Price, orderResult.OrderId);
+                            signal.Code, signal.SignalType, signal.Volume > 0 ? signal.Volume : (long)(request.TotalCapital * 0.1m / signal.Price / 100) * 100, signal.Price, orderResult.OrderId);
                     }
                 }
             }
@@ -177,15 +177,31 @@ public class AutonomousDecisionSystem
         return await agent.ExecuteAsync(task);
     }
 
-    private async Task<OrderResult> PlaceOrderAsync(TradeSignal signal)
+    private async Task<OrderResult> PlaceOrderAsync(TradeSignal signal, decimal totalCapital)
     {
+        // 计算下单量：默认单票仓位不超过总资金的10%
+        var maxPositionValue = totalCapital * 0.1m;
+        var volume = signal.Volume > 0
+            ? signal.Volume
+            : (long)(maxPositionValue / signal.Price / 100) * 100; // 按手取整
+
+        if (volume <= 0)
+        {
+            _logger.LogWarning("Calculated volume is 0 for {Code} at price {Price}, skipping order", signal.Code, signal.Price);
+            return new OrderResult
+            {
+                Success = false,
+                Message = "Volume is 0, order skipped"
+            };
+        }
+
         var orderRequest = new OrderRequest
         {
             Code = signal.Code,
             Side = signal.SignalType.ToString().ToLower(),
             OrderType = Core.Enums.OrderType.Limit,
             Price = signal.Price,
-            Volume = signal.Volume,
+            Volume = volume,
             StrategyName = signal.StrategyName,
             SignalId = signal.SignalId
         };
