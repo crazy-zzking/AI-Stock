@@ -35,17 +35,22 @@ public class EssayAnalyzerService : IEssayAnalyzer
             ContentType = "text"
         };
 
+        // 记录输入数据源
+        result.AddDataSource("input", "文本内容", $"文本长度：{text.Length}", 1);
+
         try
         {
             // 1. 提取关联公司和概念
             var extractionResult = await ExtractEntitiesAsync(text, cancellationToken);
             result.RelatedCompanies = extractionResult.companies;
             result.RelatedConcepts = extractionResult.concepts;
+            result.AddDataSource("llm", "LLM实体提取", $"提取{extractionResult.companies.Count}个公司，{extractionResult.concepts.Count}个概念", 1);
 
             // 2. 情绪分析
             var sentiment = await _sentimentAnalyzer.AnalyzeAsync(text, cancellationToken);
             result.Sentiment = sentiment.Sentiment;
             result.SentimentScore = sentiment.Score;
+            result.AddDataSource("llm", "LLM情绪分析", $"情绪：{sentiment.Sentiment}，分数：{sentiment.Score}", 1);
 
             // 3. 可信度分析
             var eventData = new EventData
@@ -60,9 +65,11 @@ public class EssayAnalyzerService : IEssayAnalyzer
             var credibility = await _credibilityAnalyzer.AnalyzeAsync(eventData, cancellationToken);
             result.CredibilityScore = credibility.CredibilityScore;
             result.RiskWarnings = credibility.RiskWarnings;
+            result.DataSources.AddRange(credibility.DataSources);
 
             // 4. 生成摘要
             result.Summary = await GenerateSummaryAsync(text, cancellationToken);
+            result.AddDataSource("llm", "LLM摘要生成", "生成文本摘要", 1);
 
             // 5. 生成结论
             result.Conclusion = GenerateConclusion(result);

@@ -3,7 +3,7 @@ namespace AIStock.Core.Models;
 /// <summary>
 /// 小作文分析结果
 /// </summary>
-public class EssayAnalysisResult
+public class EssayAnalysisResult : AnalysisResultBase
 {
     /// <summary>
     /// 原始内容

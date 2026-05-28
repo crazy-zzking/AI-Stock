@@ -27,11 +27,16 @@ public class SpreadAnalyzerService : ISpreadAnalyzer
     {
         var result = new SpreadAnalysisResult();
 
+        // 记录输入数据源
+        result.AddDataSource("input", "关键词", keyword, 1);
+
         // 从事件记录中查找相关事件
         var events = await _dbContext.EventRecord
             .Where(e => e.Title.Contains(keyword) || e.Content!.Contains(keyword))
             .OrderBy(e => e.EventTime)
             .ToListAsync(cancellationToken);
+
+        result.AddDataSource("database", "事件记录表", $"查询关键词：{keyword}，找到{events.Count}条相关事件", events.Count);
 
         if (!events.Any())
         {

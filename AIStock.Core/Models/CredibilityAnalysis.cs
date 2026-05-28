@@ -3,7 +3,7 @@ namespace AIStock.Core.Models;
 /// <summary>
 /// 真假识别结果
 /// </summary>
-public class CredibilityResult
+public class CredibilityResult : AnalysisResultBase
 {
     /// <summary>
     /// 可信度评分（0-100）
@@ -59,7 +59,7 @@ public class CredibilityResult
 /// <summary>
 /// 传播链分析结果
 /// </summary>
-public class SpreadAnalysisResult
+public class SpreadAnalysisResult : AnalysisResultBase
 {
     /// <summary>
     /// 首发源

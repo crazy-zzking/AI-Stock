@@ -29,20 +29,26 @@ public class CredibilityAnalyzerService : ICredibilityAnalyzer
     {
         var result = new CredibilityResult();
 
+        // 记录输入数据源
+        result.AddDataSource("input", "事件数据", $"标题：{eventData.Title}", 1);
+
         // 1. 检查历史重复
         var duplicates = await CheckHistoricalDuplicatesAsync(eventData.Title, eventData.Content ?? "", cancellationToken);
         result.HasHistoricalDuplicate = duplicates.Any();
         result.DuplicateEvents = duplicates;
+        result.AddDataSource("database", "事件记录表", $"查询近1000条事件，找到{duplicates.Count}条相似", duplicates.Count);
 
         // 2. 逻辑闭环分析
         var logicAnalysis = await AnalyzeLogicAsync(eventData, cancellationToken);
         result.LogicScore = logicAnalysis.score;
         result.LogicAnalysis = logicAnalysis.analysis;
+        result.AddDataSource("llm", "LLM逻辑分析", "使用LLM分析事件逻辑合理性", 1);
 
         // 3. 资金配合分析（简化版，实际需要接入行情数据）
         var capitalAnalysis = await AnalyzeCapitalAsync(eventData, cancellationToken);
         result.CapitalScore = capitalAnalysis.score;
         result.CapitalAnalysis = capitalAnalysis.analysis;
+        result.AddDataSource("database", "K线数据", $"分析{eventData.RelatedCompanies.Count}只关联股票的资金流动", eventData.RelatedCompanies.Count);
 
         // 4. 计算综合可信度
         result.CredibilityScore = CalculateCredibilityScore(result);
