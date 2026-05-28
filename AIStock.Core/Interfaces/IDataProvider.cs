@@ -96,7 +96,33 @@ public interface IDataProvider
     /// <summary>
     /// 获取账户持仓
     /// </summary>
-    Task<List<AccountPosition>> GetAccountPositionsAsync();
+    Task<AccountInfo> GetAccountInfoAsync();
+}
+
+/// <summary>
+/// 账户信息
+/// </summary>
+public class AccountInfo
+{
+    /// <summary>
+    /// 总资产
+    /// </summary>
+    public decimal TotalAssets { get; set; }
+
+    /// <summary>
+    /// 可用资金
+    /// </summary>
+    public decimal AvailableBalance { get; set; }
+
+    /// <summary>
+    /// 总盈亏
+    /// </summary>
+    public decimal TotalProfit { get; set; }
+
+    /// <summary>
+    /// 持仓列表
+    /// </summary>
+    public List<AccountPosition> Positions { get; set; } = new();
 }
 
 /// <summary>

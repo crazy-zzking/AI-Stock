@@ -266,50 +266,65 @@ public class SanhuProvider : BaseProvider
     }
 
     /// <summary>
-    /// 获取账户持仓（包含资金）
+    /// 获取账户信息（持仓+资金）
     /// </summary>
-    public override async Task<List<AccountPosition>> GetAccountPositionsAsync()
+    public override async Task<AccountInfo> GetAccountInfoAsync()
     {
         try
         {
             var url = $"{_baseUrl}/v1/jycx_chicang?token={_token}";
+            Logger.LogInformation("Requesting account info from: {Url}", url);
             var response = await SendRequestAsync(url);
 
             if (response == null)
-                return new List<AccountPosition>();
+                return new AccountInfo();
 
             var jsonDoc = JsonDocument.Parse(response);
             var root = jsonDoc.RootElement;
 
             if (root.GetProperty("ret").GetInt32() != 200)
-                return new List<AccountPosition>();
+                return new AccountInfo();
 
-            var data = root.GetProperty("data");
-            var result = new List<AccountPosition>();
+            var result = new AccountInfo();
 
-            foreach (var item in data.EnumerateArray())
+            // 提取 base 字段的资金信息
+            if (root.TryGetProperty("base", out var baseData))
             {
-                var position = new AccountPosition
-                {
-                    Code = item.GetProperty("code").GetString() ?? "",
-                    Name = item.GetProperty("name").GetString() ?? "",
-                    Volume = item.GetProperty("GuShu").GetInt64(),
-                    AvailableVolume = item.GetProperty("KeMai").GetInt64(),
-                    CostPrice = item.GetProperty("ChengBen").GetInt64() / 1000m,
-                    CurrentPrice = item.GetProperty("JiaGe").GetInt64() / 1000m,
-                    Profit = item.GetProperty("YingKui").GetInt64() / 1000m,
-                    ProfitRate = item.GetProperty("LiRunLv").GetInt64() / 1000m
-                };
-                position.MarketValue = position.Volume * position.CurrentPrice;
-                result.Add(position);
+                result.TotalAssets = baseData.TryGetProperty("ZongZhi", out var zongzhi) ? zongzhi.GetDecimal() : 0;
+                result.TotalProfit = baseData.TryGetProperty("YingLi", out var yingli) ? yingli.GetDecimal() : 0;
+                result.AvailableBalance = baseData.TryGetProperty("ZiJin", out var zijin) ? zijin.GetDecimal() : 0;
             }
+
+            // 提取 data 字段的持仓信息（可能为空或不存在）
+            if (root.TryGetProperty("data", out var data) && data.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var item in data.EnumerateArray())
+                {
+                    var position = new AccountPosition
+                    {
+                        Code = item.TryGetProperty("code", out var code) ? code.GetString() ?? "" : "",
+                        Name = item.TryGetProperty("name", out var name) ? name.GetString() ?? "" : "",
+                        Volume = item.TryGetProperty("GuShu", out var gushu) ? gushu.GetInt64() : 0,
+                        AvailableVolume = item.TryGetProperty("KeMai", out var kemai) ? kemai.GetInt64() : 0,
+                        CostPrice = item.TryGetProperty("ChengBen", out var chengben) ? chengben.GetInt64() / 1000m : 0,
+                        CurrentPrice = item.TryGetProperty("JiaGe", out var jiage) ? jiage.GetInt64() / 1000m : 0,
+                        Profit = item.TryGetProperty("YingKui", out var yingkui) ? yingkui.GetInt64() / 1000m : 0,
+                        ProfitRate = item.TryGetProperty("LiRunLv", out var lirunlv) ? lirunlv.GetInt64() / 1000m : 0
+                    };
+                    position.MarketValue = position.Volume * position.CurrentPrice;
+                    result.Positions.Add(position);
+                }
+            }
+
+            Logger.LogInformation("Got account info: TotalAssets={TotalAssets}, Positions={Count}", 
+                result.TotalAssets, result.Positions.Count);
 
             return result;
         }
         catch (Exception ex)
         {
-            Logger.LogError(ex, "Failed to get account positions");
-            return new List<AccountPosition>();
+            Logger.LogError(ex, "Failed to get account info");
+            return new AccountInfo();
         }
     }
 

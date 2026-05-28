@@ -33,11 +33,9 @@ public class PositionManagerService : IPositionManager
                 return new PositionSummary();
             }
 
-            _logger.LogInformation("Calling GetAccountPositionsAsync on Sanhu provider");
-            var positions = await provider.GetAccountPositionsAsync();
-            _logger.LogInformation("Got {Count} positions from Sanhu", positions.Count);
+            var accountInfo = await provider.GetAccountInfoAsync();
 
-            var portfolioPositions = positions.Select(p => new PortfolioPosition
+            var portfolioPositions = accountInfo.Positions.Select(p => new PortfolioPosition
             {
                 Code = p.Code,
                 Name = p.Name,
@@ -49,15 +47,13 @@ public class PositionManagerService : IPositionManager
                 ProfitRate = p.ProfitRate
             }).ToList();
 
-            var totalProfit = portfolioPositions.Sum(p => p.Profit);
-            var totalMarketValue = portfolioPositions.Sum(p => p.MarketValue);
-
             return new PositionSummary
             {
-                TotalAssets = totalMarketValue,
-                PositionValue = totalMarketValue,
-                TotalProfit = totalProfit,
-                TotalProfitRate = totalMarketValue > 0 ? totalProfit / totalMarketValue * 100 : 0,
+                TotalAssets = accountInfo.TotalAssets,
+                AvailableBalance = accountInfo.AvailableBalance,
+                PositionValue = portfolioPositions.Sum(p => p.MarketValue),
+                TotalProfit = accountInfo.TotalProfit,
+                TotalProfitRate = accountInfo.TotalAssets > 0 ? accountInfo.TotalProfit / accountInfo.TotalAssets * 100 : 0,
                 PositionCount = portfolioPositions.Count,
                 ProfitCount = portfolioPositions.Count(p => p.Profit > 0),
                 LossCount = portfolioPositions.Count(p => p.Profit < 0),

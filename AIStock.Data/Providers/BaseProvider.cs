@@ -150,11 +150,11 @@ public abstract class BaseProvider : IDataProvider
     public abstract Task<bool> IsHealthyAsync();
 
     /// <summary>
-    /// 获取账户持仓
+    /// 获取账户信息
     /// </summary>
-    public virtual Task<List<AccountPosition>> GetAccountPositionsAsync()
+    public virtual Task<AccountInfo> GetAccountInfoAsync()
     {
-        throw new NotSupportedException($"Provider {ProviderId} does not support account positions");
+        throw new NotSupportedException($"Provider {ProviderId} does not support account info");
     }
 
     /// <summary>
