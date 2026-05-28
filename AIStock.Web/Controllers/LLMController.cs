@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using AIStock.Core.Interfaces;
 using AIStock.Core.Models;
 using Microsoft.AspNetCore.Mvc;
@@ -99,10 +100,12 @@ public class LLMCompareRequest
     /// <summary>
     /// 用户提示词
     /// </summary>
+    [Required(ErrorMessage = "提示词不能为空")]
     public string Prompt { get; set; } = string.Empty;
 
     /// <summary>
     /// 对比模型数量
     /// </summary>
+    [Range(1, 10, ErrorMessage = "对比模型数量必须在1-10之间")]
     public int ModelCount { get; set; } = 3;
 }

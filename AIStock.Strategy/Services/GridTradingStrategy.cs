@@ -39,7 +39,7 @@ public class GridTradingStrategy : IStrategy
             return new TradeSignal
             {
                 Code = code,
-                SignalType = SignalType.Buy.ToString().ToLower(),
+                SignalType = SignalType.Buy,
                 Strength = 60,
                 Price = currentPrice,
                 StrategyName = Name,
@@ -54,7 +54,7 @@ public class GridTradingStrategy : IStrategy
             return new TradeSignal
             {
                 Code = code,
-                SignalType = SignalType.Sell.ToString().ToLower(),
+                SignalType = SignalType.Sell,
                 Strength = 60,
                 Price = currentPrice,
                 StrategyName = Name,

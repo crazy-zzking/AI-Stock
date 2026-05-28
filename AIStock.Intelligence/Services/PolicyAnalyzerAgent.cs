@@ -94,17 +94,7 @@ public class PolicyAnalyzerAgent : IPolicyAnalyzer
 
     private static List<string> GetStringList(JsonElement root, string propertyName)
     {
-        if (!root.TryGetProperty(propertyName, out var array))
-            return new List<string>();
-
-        var result = new List<string>();
-        foreach (var item in array.EnumerateArray())
-        {
-            var value = item.GetString();
-            if (!string.IsNullOrEmpty(value))
-                result.Add(value);
-        }
-        return result;
+        return Common.LLMResponseParser.GetStringList(root, propertyName);
     }
 
     private static ReportAnalysis GenerateFallbackAnalysis(string policyTitle, string policyContent)

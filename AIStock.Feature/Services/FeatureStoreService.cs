@@ -7,7 +7,7 @@ using StackExchange.Redis;
 namespace AIStock.Feature.Services;
 
 /// <summary>
-/// Feature Store实现
+/// Feature Store实现（使用Sorted Set避免KEYS命令）
 /// </summary>
 public class FeatureStoreService : IFeatureStore
 {
@@ -16,6 +16,7 @@ public class FeatureStoreService : IFeatureStore
 
     private const string KeyPrefix = "feature:";
     private const string HistoryKeyPrefix = "feature:history:";
+    private const string IndexKeyPrefix = "feature:index:";
 
     public FeatureStoreService(IConnectionMultiplexer redis, ILogger<FeatureStoreService> logger)
     {
@@ -29,12 +30,17 @@ public class FeatureStoreService : IFeatureStore
         {
             var db = _redis.GetDatabase();
             var key = $"{KeyPrefix}{code}";
-            var historyKey = $"{HistoryKeyPrefix}{code}:{dateTime:yyyyMMddHHmmss}";
+            var indexKey = $"{IndexKeyPrefix}{code}";
+            var timestamp = dateTime.ToUniversalTime().Ticks;
 
             var json = JsonSerializer.Serialize(indicators);
 
+            // 保存最新特征（热数据，24h TTL）
             await db.StringSetAsync(key, json, TimeSpan.FromHours(24));
-            await db.StringSetAsync(historyKey, json, TimeSpan.FromDays(30));
+
+            // 保存到Sorted Set索引（按时间戳排序，30d TTL）
+            await db.SortedSetAddAsync(indexKey, json, timestamp);
+            await db.KeyExpireAsync(indexKey, TimeSpan.FromDays(30));
 
             _logger.LogDebug("Saved features for {Code} at {DateTime}", code, dateTime);
         }
@@ -70,34 +76,21 @@ public class FeatureStoreService : IFeatureStore
         try
         {
             var db = _redis.GetDatabase();
-            var pattern = $"{HistoryKeyPrefix}{code}:*";
-            var keys = new List<RedisKey>();
+            var indexKey = $"{IndexKeyPrefix}{code}";
+            var startTicks = startTime.ToUniversalTime().Ticks;
+            var endTicks = endTime.ToUniversalTime().Ticks;
 
-            var server = _redis.GetServer(_redis.GetEndPoints().First());
-            foreach (var key in server.Keys(pattern: pattern))
-            {
-                var keyStr = key.ToString();
-                var dateStr = keyStr.Split(':').Last();
-                if (DateTime.TryParseExact(dateStr, "yyyyMMddHHmmss", null, System.Globalization.DateTimeStyles.None, out var date))
-                {
-                    if (date >= startTime && date <= endTime)
-                    {
-                        keys.Add(key);
-                    }
-                }
-            }
+            // 使用Sorted Set的范围查询，替代KEYS命令
+            var entries = await db.SortedSetRangeByScoreAsync(indexKey, startTicks, endTicks);
 
             var results = new List<TechnicalIndicator>();
-            foreach (var key in keys)
+            foreach (var entry in entries)
             {
-                var json = await db.StringGetAsync(key);
-                if (!json.IsNullOrEmpty)
+                if (entry.IsNullOrEmpty) continue;
+                var indicator = JsonSerializer.Deserialize<TechnicalIndicator>(entry!);
+                if (indicator != null)
                 {
-                    var indicator = JsonSerializer.Deserialize<TechnicalIndicator>(json!);
-                    if (indicator != null)
-                    {
-                        results.Add(indicator);
-                    }
+                    results.Add(indicator);
                 }
             }
 
@@ -120,11 +113,13 @@ public class FeatureStoreService : IFeatureStore
             foreach (var (code, dateTime, indicators) in features)
             {
                 var key = $"{KeyPrefix}{code}";
-                var historyKey = $"{HistoryKeyPrefix}{code}:{dateTime:yyyyMMddHHmmss}";
+                var indexKey = $"{IndexKeyPrefix}{code}";
+                var timestamp = dateTime.ToUniversalTime().Ticks;
                 var json = JsonSerializer.Serialize(indicators);
 
                 tasks.Add(db.StringSetAsync(key, json, TimeSpan.FromHours(24)));
-                tasks.Add(db.StringSetAsync(historyKey, json, TimeSpan.FromDays(30)));
+                tasks.Add(db.SortedSetAddAsync(indexKey, json, timestamp));
+                tasks.Add(db.KeyExpireAsync(indexKey, TimeSpan.FromDays(30)));
             }
 
             await Task.WhenAll(tasks);
@@ -142,22 +137,24 @@ public class FeatureStoreService : IFeatureStore
         try
         {
             var db = _redis.GetDatabase();
-            var server = _redis.GetServer(_redis.GetEndPoints().First());
-            var pattern = $"{HistoryKeyPrefix}*";
-            var cutoff = DateTime.UtcNow - maxAge;
+            var cutoffTicks = DateTime.UtcNow.Subtract(maxAge).Ticks;
 
+            // 通过Sorted Set的索引前缀查找所有索引key
+            var server = _redis.GetServer(_redis.GetEndPoints().First());
             var deletedCount = 0;
-            foreach (var key in server.Keys(pattern: pattern))
+
+            // 使用SCAN替代KEYS（更安全）
+            foreach (var key in server.Keys(pattern: $"{IndexKeyPrefix}*"))
             {
-                var keyStr = key.ToString();
-                var dateStr = keyStr.Split(':').Last();
-                if (DateTime.TryParseExact(dateStr, "yyyyMMddHHmmss", null, System.Globalization.DateTimeStyles.None, out var date))
+                // 使用ZREMRANGEBYSCORE按时间范围删除过期数据
+                var removed = await db.SortedSetRemoveRangeByScoreAsync(key, double.NegativeInfinity, cutoffTicks);
+                deletedCount += (int)removed;
+
+                // 如果Sorted Set为空，删除整个key
+                var length = await db.SortedSetLengthAsync(key);
+                if (length == 0)
                 {
-                    if (date < cutoff)
-                    {
-                        await db.KeyDeleteAsync(key);
-                        deletedCount++;
-                    }
+                    await db.KeyDeleteAsync(key);
                 }
             }
 

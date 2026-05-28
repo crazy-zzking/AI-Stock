@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using AIStock.Core.Interfaces;
 using AIStock.Orchestrator;
 using AIStock.Orchestrator.Agents;
@@ -32,12 +33,9 @@ public class OrchestratorController : ControllerBase
         _alphaAgent = alphaAgent;
         _riskAgent = riskAgent;
         _decisionSystem = decisionSystem;
-
-        _orchestrator.RegisterAgent(_researchAgent);
-        _orchestrator.RegisterAgent(_alphaAgent);
-        _orchestrator.RegisterAgent(_riskAgent);
-
         _logger = logger;
+
+        // Agent注册已移至AgentOrchestrator构造函数，通过DI自动完成
     }
 
     /// <summary>
@@ -127,6 +125,8 @@ public class AnalyzeRequest
     /// <summary>
     /// 股票代码
     /// </summary>
+    [Required(ErrorMessage = "股票代码不能为空")]
+    [StringLength(10, MinimumLength = 5, ErrorMessage = "股票代码长度必须在5-10之间")]
     public string Code { get; set; } = string.Empty;
 }
 
@@ -138,10 +138,13 @@ public class BatchDecisionRequest
     /// <summary>
     /// 股票代码列表
     /// </summary>
+    [Required(ErrorMessage = "股票代码列表不能为空")]
+    [MinLength(1, ErrorMessage = "至少需要一个股票代码")]
     public List<string> Codes { get; set; } = new();
 
     /// <summary>
     /// 总资金
     /// </summary>
+    [Range(1, double.MaxValue, ErrorMessage = "总资金必须大于0")]
     public decimal TotalCapital { get; set; }
 }

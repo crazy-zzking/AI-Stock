@@ -97,6 +97,67 @@ public interface IDataProvider
     /// 获取账户持仓
     /// </summary>
     Task<AccountInfo> GetAccountInfoAsync();
+
+    /// <summary>
+    /// 买入下单
+    /// </summary>
+    Task<TradingOrderResult> PlaceBuyOrderAsync(string code, decimal price, int volume) =>
+        throw new NotSupportedException("This provider does not support trading");
+
+    /// <summary>
+    /// 卖出下单
+    /// </summary>
+    Task<TradingOrderResult> PlaceSellOrderAsync(string code, decimal price, int volume) =>
+        throw new NotSupportedException("This provider does not support trading");
+
+    /// <summary>
+    /// 查询订单状态
+    /// </summary>
+    Task<TradingOrderStatus?> QueryOrderAsync(long orderId) =>
+        throw new NotSupportedException("This provider does not support trading");
+
+    /// <summary>
+    /// 获取今日成交
+    /// </summary>
+    Task<List<TradingTradeInfo>> GetTodayTradesAsync() =>
+        throw new NotSupportedException("This provider does not support trading");
+}
+
+/// <summary>
+/// 交易订单结果
+/// </summary>
+public record TradingOrderResult
+{
+    public long OrderId { get; init; }
+    public bool IsAccepted { get; init; }
+    public bool IsCompleted { get; init; }
+    public bool IsFailed { get; init; }
+    public string Msg { get; init; } = string.Empty;
+}
+
+/// <summary>
+/// 交易订单状态
+/// </summary>
+public record TradingOrderStatus
+{
+    public long OrderId { get; init; }
+    public bool IsPending { get; init; }
+    public bool IsCompleted { get; init; }
+    public bool IsFailed { get; init; }
+    public string Status { get; init; } = string.Empty;
+}
+
+/// <summary>
+/// 交易成交信息
+/// </summary>
+public record TradingTradeInfo
+{
+    public long AgreeId { get; init; }
+    public string Code { get; init; } = string.Empty;
+    public string Type { get; init; } = string.Empty;
+    public decimal Price { get; init; }
+    public int Volume { get; init; }
+    public DateTime TradeTime { get; init; }
 }
 
 /// <summary>

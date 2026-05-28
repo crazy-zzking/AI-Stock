@@ -21,7 +21,7 @@ public class IndustryChainGraphService : IIndustryChainGraph
         _logger = logger;
     }
 
-    public async Task<long> AddChainNodeAsync(IndustryChainNode node)
+    public async Task<long> AddChainNodeAsync(IndustryChainNode node, CancellationToken cancellationToken = default)
     {
         var entity = new IndustryChainEntity
         {
@@ -34,11 +34,11 @@ public class IndustryChainGraphService : IIndustryChainGraph
         };
 
         _dbContext.IndustryChain.Add(entity);
-        await _dbContext.SaveChangesAsync();
+        await _dbContext.SaveChangesAsync(cancellationToken);
         return entity.Id;
     }
 
-    public async Task<long> AddCompanyChainRelationAsync(CompanyChainRelation relation)
+    public async Task<long> AddCompanyChainRelationAsync(CompanyChainRelation relation, CancellationToken cancellationToken = default)
     {
         var entity = new CompanyChainRelationEntity
         {
@@ -49,34 +49,38 @@ public class IndustryChainGraphService : IIndustryChainGraph
         };
 
         _dbContext.CompanyChainRelation.Add(entity);
-        await _dbContext.SaveChangesAsync();
+        await _dbContext.SaveChangesAsync(cancellationToken);
         return entity.Id;
     }
 
-    public async Task<List<IndustryChainNode>> GetChainStructureAsync(string chainName)
+    public async Task<List<IndustryChainNode>> GetChainStructureAsync(string chainName, CancellationToken cancellationToken = default)
     {
         var entities = await _dbContext.IndustryChain
             .Where(e => e.ChainName == chainName)
             .OrderBy(e => e.Level)
-            .ToListAsync();
+            .ToListAsync(cancellationToken);
 
         return entities.Select(MapToModel).ToList();
     }
 
-    public async Task<List<CompanyChainRelation>> GetCompanyChainPositionsAsync(string companyCode)
+    public async Task<List<CompanyChainRelation>> GetCompanyChainPositionsAsync(string companyCode, CancellationToken cancellationToken = default)
     {
         var entities = await _dbContext.CompanyChainRelation
             .Where(e => e.CompanyCode == companyCode)
-            .ToListAsync();
+            .ToListAsync(cancellationToken);
+
+        var chainIds = entities.Select(e => e.ChainId).Distinct().ToList();
+        var chains = await _dbContext.IndustryChain
+            .Where(c => chainIds.Contains(c.Id))
+            .ToDictionaryAsync(c => c.Id, c => c.ChainName, cancellationToken);
 
         var result = new List<CompanyChainRelation>();
         foreach (var entity in entities)
         {
             var model = MapToModel(entity);
-            var chain = await _dbContext.IndustryChain.FindAsync(entity.ChainId);
-            if (chain != null)
+            if (chains.TryGetValue(entity.ChainId, out var chainName))
             {
-                model.ChainName = chain.ChainName;
+                model.ChainName = chainName;
             }
             result.Add(model);
         }
@@ -84,12 +88,12 @@ public class IndustryChainGraphService : IIndustryChainGraph
         return result;
     }
 
-    public async Task<List<CompanyChainRelation>> GetChainCompaniesAsync(string chainName, string? role = null)
+    public async Task<List<CompanyChainRelation>> GetChainCompaniesAsync(string chainName, string? role = null, CancellationToken cancellationToken = default)
     {
         var chainIds = await _dbContext.IndustryChain
             .Where(e => e.ChainName == chainName)
             .Select(e => e.Id)
-            .ToListAsync();
+            .ToListAsync(cancellationToken);
 
         var query = _dbContext.CompanyChainRelation
             .Where(e => chainIds.Contains(e.ChainId));
@@ -99,65 +103,66 @@ public class IndustryChainGraphService : IIndustryChainGraph
             query = query.Where(e => e.Role == role);
         }
 
-        var entities = await query.ToListAsync();
+        var entities = await query.ToListAsync(cancellationToken);
         return entities.Select(MapToModel).ToList();
     }
 
-    public async Task<List<string>> GetAllChainNamesAsync()
+    public async Task<List<string>> GetAllChainNamesAsync(CancellationToken cancellationToken = default)
     {
         return await _dbContext.IndustryChain
             .Select(e => e.ChainName)
             .Distinct()
-            .ToListAsync();
+            .ToListAsync(cancellationToken);
     }
 
-    public async Task<ConceptDiffusionResult> DiffuseConceptAsync(string coreEvent, List<string> relatedConcepts)
+    public async Task<ConceptDiffusionResult> DiffuseConceptAsync(string coreEvent, List<string> relatedConcepts, CancellationToken cancellationToken = default)
     {
         var result = new ConceptDiffusionResult
         {
             CoreEvent = coreEvent
         };
 
-        // 查找关联产业链（先获取所有，再在内存中过滤）
-        var allChains = await _dbContext.IndustryChain.ToListAsync();
-        var chains = allChains
+        var chains = await _dbContext.IndustryChain
             .Where(e => relatedConcepts.Any(c => e.ChainName.Contains(c) || (e.Description != null && e.Description.Contains(c))))
             .Select(e => e.ChainName)
             .Distinct()
-            .ToList();
+            .ToListAsync(cancellationToken);
 
         result.RelatedChains = chains;
 
-        // 查找产业链中的公司
-        foreach (var chainName in chains)
+        var chainNames = chains.ToList();
+        var allChainEntities = await _dbContext.IndustryChain
+            .Where(e => chainNames.Contains(e.ChainName))
+            .ToListAsync(cancellationToken);
+
+        var allChainIds = allChainEntities.Select(e => e.Id).ToList();
+        var allCompanies = await _dbContext.CompanyChainRelation
+            .Where(e => allChainIds.Contains(e.ChainId))
+            .ToListAsync(cancellationToken);
+
+        var companyCodes = allCompanies.Select(c => c.CompanyCode).Distinct().ToList();
+        var stockInfos = await _dbContext.StockBase
+            .Where(s => companyCodes.Contains(s.Code))
+            .ToDictionaryAsync(s => s.Code, s => s.Name, cancellationToken);
+
+        foreach (var company in allCompanies)
         {
-            var chainIds = allChains
-                .Where(e => e.ChainName == chainName)
-                .Select(e => e.Id)
-                .ToList();
-
-            var companies = await _dbContext.CompanyChainRelation
-                .Where(e => chainIds.Contains(e.ChainId))
-                .ToListAsync();
-
-            foreach (var company in companies)
+            if (!result.BenefitCompanies.Any(b => b.Code == company.CompanyCode))
             {
-                if (!result.BenefitCompanies.Any(b => b.Code == company.CompanyCode))
+                var chainName = allChainEntities.FirstOrDefault(c => c.Id == company.ChainId)?.ChainName ?? "";
+                stockInfos.TryGetValue(company.CompanyCode, out var stockName);
+
+                result.BenefitCompanies.Add(new BenefitCompany
                 {
-                    var stockInfo = await _dbContext.StockBase.FindAsync(company.CompanyCode);
-                    result.BenefitCompanies.Add(new BenefitCompany
-                    {
-                        Code = company.CompanyCode,
-                        Name = stockInfo?.Name ?? company.CompanyCode,
-                        Reason = $"位于{chainName}产业链的{company.Role}环节",
-                        BenefitLevel = CalculateBenefitLevel(company.Role),
-                        ChainRole = company.Role
-                    });
-                }
+                    Code = company.CompanyCode,
+                    Name = stockName ?? company.CompanyCode,
+                    Reason = $"位于{chainName}产业链的{company.Role}环节",
+                    BenefitLevel = CalculateBenefitLevel(company.Role),
+                    ChainRole = company.Role
+                });
             }
         }
 
-        // 按受益程度排序
         result.BenefitCompanies = result.BenefitCompanies
             .OrderByDescending(b => b.BenefitLevel)
             .Take(20)

@@ -93,7 +93,7 @@ public class AlphaAgent : IAgent
             signals.Add(new TradeSignal
             {
                 Code = code,
-                SignalType = "buy",
+                SignalType = Core.Enums.SignalType.Buy,
                 Strength = 70,
                 Price = currentPrice,
                 StrategyName = "MASignal",
@@ -106,7 +106,7 @@ public class AlphaAgent : IAgent
             signals.Add(new TradeSignal
             {
                 Code = code,
-                SignalType = "buy",
+                SignalType = Core.Enums.SignalType.Buy,
                 Strength = 65,
                 Price = currentPrice,
                 StrategyName = "RSISignal",

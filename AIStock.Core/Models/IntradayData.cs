@@ -13,7 +13,7 @@ public class IntradayData
     /// <summary>
     /// 时间
     /// </summary>
-    public string Time { get; set; } = string.Empty;
+    public DateTime Time { get; set; }
 
     /// <summary>
     /// 价格（元）

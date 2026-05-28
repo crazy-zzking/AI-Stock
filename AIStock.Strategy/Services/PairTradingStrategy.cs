@@ -62,7 +62,7 @@ public class PairTradingStrategy : IStrategy
             return new TradeSignal
             {
                 Code = code1,
-                SignalType = SignalType.Sell.ToString().ToLower(),
+                SignalType = SignalType.Sell,
                 Strength = 70,
                 Price = klines1.Last().Close,
                 StrategyName = Name,
@@ -77,7 +77,7 @@ public class PairTradingStrategy : IStrategy
             return new TradeSignal
             {
                 Code = code1,
-                SignalType = SignalType.Buy.ToString().ToLower(),
+                SignalType = SignalType.Buy,
                 Strength = 70,
                 Price = klines1.Last().Close,
                 StrategyName = Name,

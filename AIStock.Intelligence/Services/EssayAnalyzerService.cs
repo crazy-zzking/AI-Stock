@@ -244,10 +244,6 @@ public class EssayAnalyzerService : IEssayAnalyzer
 
     private string CleanJsonResponse(string response)
     {
-        var json = response.Trim();
-        if (json.StartsWith("```json")) json = json.Substring(7);
-        if (json.StartsWith("```")) json = json.Substring(3);
-        if (json.EndsWith("```")) json = json.Substring(0, json.Length - 3);
-        return json.Trim();
+        return Common.LLMResponseParser.CleanJsonResponse(response);
     }
 }

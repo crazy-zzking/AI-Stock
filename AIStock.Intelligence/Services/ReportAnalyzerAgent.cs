@@ -1,6 +1,7 @@
 using System.Text.Json;
 using AIStock.Core.Interfaces;
 using AIStock.Core.Models;
+using AIStock.Intelligence.Common;
 using Microsoft.Extensions.Logging;
 
 namespace AIStock.Intelligence.Services;
@@ -103,35 +104,20 @@ public class ReportAnalyzerAgent : IReportAnalyzer
     {
         try
         {
-            // 处理 markdown 格式的 JSON
-            var jsonContent = response.Trim();
-            if (jsonContent.StartsWith("```json"))
-            {
-                jsonContent = jsonContent.Substring(7);
-            }
-            if (jsonContent.StartsWith("```"))
-            {
-                jsonContent = jsonContent.Substring(3);
-            }
-            if (jsonContent.EndsWith("```"))
-            {
-                jsonContent = jsonContent.Substring(0, jsonContent.Length - 3);
-            }
-            jsonContent = jsonContent.Trim();
-
+            var jsonContent = LLMResponseParser.CleanJsonResponse(response);
             var jsonDoc = JsonDocument.Parse(jsonContent);
             var root = jsonDoc.RootElement;
 
             return new ReportAnalysis
             {
                 Summary = root.GetProperty("summary").GetString() ?? "",
-                ExceedExpectations = GetStringList(root, "exceedExpectations"),
-                BelowExpectations = GetStringList(root, "belowExpectations"),
-                IndustryDirections = GetStringList(root, "industryDirections"),
-                RelatedConcepts = GetStringList(root, "relatedConcepts"),
-                CoreView = root.TryGetProperty("coreView", out var coreView) ? coreView.GetString() : null,
-                Risks = GetStringList(root, "risks"),
-                InvestmentAdvice = root.TryGetProperty("investmentAdvice", out var advice) ? advice.GetString() : null
+                ExceedExpectations = LLMResponseParser.GetStringList(root, "exceedExpectations"),
+                BelowExpectations = LLMResponseParser.GetStringList(root, "belowExpectations"),
+                IndustryDirections = LLMResponseParser.GetStringList(root, "industryDirections"),
+                RelatedConcepts = LLMResponseParser.GetStringList(root, "relatedConcepts"),
+                CoreView = LLMResponseParser.GetString(root, "coreView"),
+                Risks = LLMResponseParser.GetStringList(root, "risks"),
+                InvestmentAdvice = LLMResponseParser.GetString(root, "investmentAdvice")
             };
         }
         catch (Exception ex)
@@ -143,17 +129,7 @@ public class ReportAnalyzerAgent : IReportAnalyzer
 
     private static List<string> GetStringList(JsonElement root, string propertyName)
     {
-        if (!root.TryGetProperty(propertyName, out var array))
-            return new List<string>();
-
-        var result = new List<string>();
-        foreach (var item in array.EnumerateArray())
-        {
-            var value = item.GetString();
-            if (!string.IsNullOrEmpty(value))
-                result.Add(value);
-        }
-        return result;
+        return LLMResponseParser.GetStringList(root, propertyName);
     }
 
     private static ReportAnalysis GenerateFallbackAnalysis(ReportData report)

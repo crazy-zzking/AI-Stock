@@ -57,17 +57,17 @@ public class TencentProvider : BaseProvider
             {
                 Code = code,
                 Name = parts[1],
-                Price = decimal.Parse(parts[3]),
-                PreClose = decimal.Parse(parts[4]),
-                Open = decimal.Parse(parts[5]),
-                Volume = long.Parse(parts[6]) * 100,
-                OuterVolume = long.Parse(parts[7]) * 100,
-                InnerVolume = long.Parse(parts[8]) * 100,
-                High = decimal.Parse(parts[33]),
-                Low = decimal.Parse(parts[34]),
-                ChangePercent = decimal.Parse(parts[32]),
-                ChangeAmount = decimal.Parse(parts[31]),
-                Amount = decimal.Parse(parts[37]),
+                Price = decimal.TryParse(parts[3], out var price) ? price : 0,
+                PreClose = decimal.TryParse(parts[4], out var preClose) ? preClose : 0,
+                Open = decimal.TryParse(parts[5], out var open) ? open : 0,
+                Volume = long.TryParse(parts[6], out var vol) ? vol * 100 : 0,
+                OuterVolume = long.TryParse(parts[7], out var outerVol) ? outerVol * 100 : 0,
+                InnerVolume = long.TryParse(parts[8], out var innerVol) ? innerVol * 100 : 0,
+                High = decimal.TryParse(parts[33], out var high) ? high : 0,
+                Low = decimal.TryParse(parts[34], out var low) ? low : 0,
+                ChangePercent = decimal.TryParse(parts[32], out var changePct) ? changePct : 0,
+                ChangeAmount = decimal.TryParse(parts[31], out var changeAmt) ? changeAmt : 0,
+                Amount = decimal.TryParse(parts[37], out var amount) ? amount : 0,
                 Timestamp = DateTime.UtcNow,
                 Source = ProviderId
             };
@@ -108,17 +108,17 @@ public class TencentProvider : BaseProvider
                 {
                     Code = codeList[i],
                     Name = parts[1],
-                    Price = decimal.Parse(parts[3]),
-                    PreClose = decimal.Parse(parts[4]),
-                    Open = decimal.Parse(parts[5]),
-                    Volume = long.Parse(parts[6]) * 100,
-                    OuterVolume = long.Parse(parts[7]) * 100,
-                    InnerVolume = long.Parse(parts[8]) * 100,
-                    High = decimal.Parse(parts[33]),
-                    Low = decimal.Parse(parts[34]),
-                    ChangePercent = decimal.Parse(parts[32]),
-                    ChangeAmount = decimal.Parse(parts[31]),
-                    Amount = decimal.Parse(parts[37]),
+                    Price = decimal.TryParse(parts[3], out var price) ? price : 0,
+                    PreClose = decimal.TryParse(parts[4], out var preClose) ? preClose : 0,
+                    Open = decimal.TryParse(parts[5], out var open) ? open : 0,
+                    Volume = long.TryParse(parts[6], out var vol) ? vol * 100 : 0,
+                    OuterVolume = long.TryParse(parts[7], out var outerVol) ? outerVol * 100 : 0,
+                    InnerVolume = long.TryParse(parts[8], out var innerVol) ? innerVol * 100 : 0,
+                    High = decimal.TryParse(parts[33], out var high) ? high : 0,
+                    Low = decimal.TryParse(parts[34], out var low) ? low : 0,
+                    ChangePercent = decimal.TryParse(parts[32], out var changePct) ? changePct : 0,
+                    ChangeAmount = decimal.TryParse(parts[31], out var changeAmt) ? changeAmt : 0,
+                    Amount = decimal.TryParse(parts[37], out var amount) ? amount : 0,
                     Timestamp = DateTime.UtcNow,
                     Source = ProviderId
                 };
@@ -178,16 +178,34 @@ public class TencentProvider : BaseProvider
             foreach (var item in klines.EnumerateArray())
             {
                 if (item.GetArrayLength() < 6) continue;
-                
+
+                var dateStr = item[0].GetString();
+                var openStr = item[1].GetString();
+                var closeStr = item[2].GetString();
+                var highStr = item[3].GetString();
+                var lowStr = item[4].GetString();
+                var volumeStr = item[5].GetString();
+
+                if (!DateTime.TryParse(dateStr, out var dateTime) ||
+                    !decimal.TryParse(openStr, out var open) ||
+                    !decimal.TryParse(closeStr, out var close) ||
+                    !decimal.TryParse(highStr, out var high) ||
+                    !decimal.TryParse(lowStr, out var low) ||
+                    !decimal.TryParse(volumeStr, out var volume))
+                {
+                    Logger.LogWarning("Failed to parse kline data: {Item}", item);
+                    continue;
+                }
+
                 var kline = new KlineData
                 {
                     Code = code,
-                    DateTime = DateTime.Parse(item[0].GetString()!),
-                    Open = decimal.Parse(item[1].GetString()!),
-                    Close = decimal.Parse(item[2].GetString()!),
-                    High = decimal.Parse(item[3].GetString()!),
-                    Low = decimal.Parse(item[4].GetString()!),
-                    Volume = (long)(decimal.Parse(item[5].GetString()!) * 100),
+                    DateTime = dateTime,
+                    Open = open,
+                    Close = close,
+                    High = high,
+                    Low = low,
+                    Volume = (long)(volume * 100),
                     Source = ProviderId
                 };
                 result.Add(kline);

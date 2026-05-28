@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using AIStock.Core.Enums;
 using AIStock.Core.Interfaces;
 using AIStock.Core.Models;
@@ -157,6 +158,7 @@ public class RiskCheckRequest
     /// <summary>
     /// 交易信号
     /// </summary>
+    [Required(ErrorMessage = "交易信号不能为空")]
     public TradeSignal Signal { get; set; } = new();
 
     /// <summary>
@@ -167,116 +169,66 @@ public class RiskCheckRequest
     /// <summary>
     /// 总资金
     /// </summary>
+    [Range(1, double.MaxValue, ErrorMessage = "总资金必须大于0")]
     public decimal TotalCapital { get; set; }
 }
 
-/// <summary>
-/// 仓位计算请求
-/// </summary>
 public class PositionSizeRequest
 {
-    /// <summary>
-    /// 交易信号
-    /// </summary>
+    [Required(ErrorMessage = "交易信号不能为空")]
     public TradeSignal Signal { get; set; } = new();
 
-    /// <summary>
-    /// 总资金
-    /// </summary>
+    [Range(1, double.MaxValue, ErrorMessage = "总资金必须大于0")]
     public decimal TotalCapital { get; set; }
 
-    /// <summary>
-    /// 仓位管理模式
-    /// </summary>
     public PositionSizeMode Mode { get; set; } = PositionSizeMode.EqualWeight;
 }
 
-/// <summary>
-/// Kelly公式请求
-/// </summary>
 public class KellyRequest
 {
-    /// <summary>
-    /// 胜率
-    /// </summary>
+    [Range(0.01, 0.99, ErrorMessage = "胜率必须在0.01-0.99之间")]
     public decimal WinRate { get; set; }
 
-    /// <summary>
-    /// 盈亏比
-    /// </summary>
+    [Range(0.01, 100, ErrorMessage = "盈亏比必须大于0")]
     public decimal ProfitLossRatio { get; set; }
 }
 
-/// <summary>
-/// 止损请求
-/// </summary>
 public class StopLossRequest
 {
-    /// <summary>
-    /// 交易信号
-    /// </summary>
+    [Required(ErrorMessage = "交易信号不能为空")]
     public TradeSignal Signal { get; set; } = new();
 
-    /// <summary>
-    /// K线数据
-    /// </summary>
     public List<KlineData> Klines { get; set; } = new();
 
-    /// <summary>
-    /// 止损模式
-    /// </summary>
     public StopLossMode Mode { get; set; } = StopLossMode.ATR;
 }
 
-/// <summary>
-/// ATR止损请求
-/// </summary>
 public class ATRStopLossRequest
 {
-    /// <summary>
-    /// 入场价格
-    /// </summary>
+    [Range(0.01, double.MaxValue, ErrorMessage = "入场价格必须大于0")]
     public decimal EntryPrice { get; set; }
 
-    /// <summary>
-    /// ATR值
-    /// </summary>
+    [Range(0.01, double.MaxValue, ErrorMessage = "ATR值必须大于0")]
     public decimal ATR { get; set; }
 
-    /// <summary>
-    /// 倍数
-    /// </summary>
+    [Range(0.1, 10, ErrorMessage = "倍数必须在0.1-10之间")]
     public decimal Multiplier { get; set; } = 2;
 }
 
-/// <summary>
-/// 固定止损请求
-/// </summary>
 public class FixedStopLossRequest
 {
-    /// <summary>
-    /// 入场价格
-    /// </summary>
+    [Range(0.01, double.MaxValue, ErrorMessage = "入场价格必须大于0")]
     public decimal EntryPrice { get; set; }
 
-    /// <summary>
-    /// 止损百分比
-    /// </summary>
+    [Range(0.01, 99.99, ErrorMessage = "止损百分比必须在0.01-99.99之间")]
     public decimal StopPercent { get; set; }
 }
 
-/// <summary>
-/// 动态止盈请求
-/// </summary>
 public class TrailingStopRequest
 {
-    /// <summary>
-    /// 最高价格
-    /// </summary>
+    [Range(0.01, double.MaxValue, ErrorMessage = "最高价格必须大于0")]
     public decimal HighestPrice { get; set; }
 
-    /// <summary>
-    /// 动态百分比
-    /// </summary>
+    [Range(0.01, 99.99, ErrorMessage = "动态百分比必须在0.01-99.99之间")]
     public decimal TrailingPercent { get; set; }
 }

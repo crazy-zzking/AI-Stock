@@ -21,7 +21,7 @@ public class CompanyRelationGraphService : ICompanyRelationGraph
         _logger = logger;
     }
 
-    public async Task<long> AddRelationAsync(CompanyRelation relation)
+    public async Task<long> AddRelationAsync(CompanyRelation relation, CancellationToken cancellationToken = default)
     {
         var entity = new CompanyRelationEntity
         {
@@ -33,8 +33,137 @@ public class CompanyRelationGraphService : ICompanyRelationGraph
         };
 
         _dbContext.CompanyRelation.Add(entity);
-        await _dbContext.SaveChangesAsync();
+        await _dbContext.SaveChangesAsync(cancellationToken);
         return entity.Id;
+    }
+
+    public async Task<int> AddRelationsAsync(IEnumerable<CompanyRelation> relations, CancellationToken cancellationToken = default)
+    {
+        var entities = relations.Select(r => new CompanyRelationEntity
+        {
+            SourceCompany = r.SourceCompany,
+            TargetCompany = r.TargetCompany,
+            RelationType = r.RelationType,
+            Weight = r.Weight,
+            Description = r.Description
+        }).ToList();
+
+        _dbContext.CompanyRelation.AddRange(entities);
+        return await _dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task<List<CompanyRelation>> GetCompanyRelationsAsync(string companyCode, CancellationToken cancellationToken = default)
+    {
+        var entities = await _dbContext.CompanyRelation
+            .Where(e => e.SourceCompany == companyCode || e.TargetCompany == companyCode)
+            .ToListAsync(cancellationToken);
+
+        return entities.Select(MapToModel).ToList();
+    }
+
+    public async Task<List<CompanyRelation>> GetSuppliersAsync(string companyCode, CancellationToken cancellationToken = default)
+    {
+        var entities = await _dbContext.CompanyRelation
+            .Where(e => e.TargetCompany == companyCode && e.RelationType == "supplier")
+            .ToListAsync(cancellationToken);
+
+        return entities.Select(MapToModel).ToList();
+    }
+
+    public async Task<List<CompanyRelation>> GetCustomersAsync(string companyCode, CancellationToken cancellationToken = default)
+    {
+        var entities = await _dbContext.CompanyRelation
+            .Where(e => e.SourceCompany == companyCode && e.RelationType == "customer")
+            .ToListAsync(cancellationToken);
+
+        return entities.Select(MapToModel).ToList();
+    }
+
+    public async Task<List<CompanyRelation>> GetInvestmentsAsync(string companyCode, CancellationToken cancellationToken = default)
+    {
+        var entities = await _dbContext.CompanyRelation
+            .Where(e => (e.SourceCompany == companyCode || e.TargetCompany == companyCode) && e.RelationType == "invest")
+            .ToListAsync(cancellationToken);
+
+        return entities.Select(MapToModel).ToList();
+    }
+
+    public async Task<List<CompanyRelation>> GetControllingAsync(string companyCode, CancellationToken cancellationToken = default)
+    {
+        var entities = await _dbContext.CompanyRelation
+            .Where(e => (e.SourceCompany == companyCode || e.TargetCompany == companyCode) && e.RelationType == "control")
+            .ToListAsync(cancellationToken);
+
+        return entities.Select(MapToModel).ToList();
+    }
+
+    public async Task<List<List<CompanyRelation>>> FindRelationPathAsync(string fromCode, string toCode, int maxDepth = 3, CancellationToken cancellationToken = default)
+    {
+        // 预加载全量邻接表到内存，避免DFS递归中的N+1查询
+        var allRelations = await _dbContext.CompanyRelation.ToListAsync(cancellationToken);
+        var adjacencyList = BuildAdjacencyList(allRelations);
+
+        var paths = new List<List<CompanyRelation>>();
+        var visited = new HashSet<string>();
+        var currentPath = new List<CompanyRelation>();
+
+        FindPathsInMemory(fromCode, toCode, maxDepth, visited, currentPath, paths, adjacencyList);
+
+        return paths;
+    }
+
+    private static Dictionary<string, List<CompanyRelationEntity>> BuildAdjacencyList(List<CompanyRelationEntity> allRelations)
+    {
+        var adjacency = new Dictionary<string, List<CompanyRelationEntity>>();
+        foreach (var relation in allRelations)
+        {
+            if (!adjacency.ContainsKey(relation.SourceCompany))
+                adjacency[relation.SourceCompany] = new List<CompanyRelationEntity>();
+            if (!adjacency.ContainsKey(relation.TargetCompany))
+                adjacency[relation.TargetCompany] = new List<CompanyRelationEntity>();
+
+            adjacency[relation.SourceCompany].Add(relation);
+            adjacency[relation.TargetCompany].Add(relation);
+        }
+        return adjacency;
+    }
+
+    private void FindPathsInMemory(string current, string target, int depth, HashSet<string> visited, List<CompanyRelation> currentPath, List<List<CompanyRelation>> paths, Dictionary<string, List<CompanyRelationEntity>> adjacency)
+    {
+        if (depth <= 0) return;
+        if (current == target)
+        {
+            paths.Add(new List<CompanyRelation>(currentPath));
+            return;
+        }
+
+        visited.Add(current);
+
+        if (adjacency.TryGetValue(current, out var relations))
+        {
+            foreach (var relation in relations)
+            {
+                var nextCompany = relation.SourceCompany == current ? relation.TargetCompany : relation.SourceCompany;
+                if (!visited.Contains(nextCompany))
+                {
+                    currentPath.Add(MapToModel(relation));
+                    FindPathsInMemory(nextCompany, target, depth - 1, visited, currentPath, paths, adjacency);
+                    currentPath.RemoveAt(currentPath.Count - 1);
+                }
+            }
+        }
+
+        visited.Remove(current);
+    }
+
+    public async Task<bool> DeleteRelationAsync(long id, CancellationToken cancellationToken = default)
+    {
+        var entity = await _dbContext.CompanyRelation.FindAsync(new object[] { id }, cancellationToken);
+        if (entity == null) return false;
+
+        _dbContext.CompanyRelation.Remove(entity);
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return true;
     }
 
     public async Task<int> AddRelationsAsync(IEnumerable<CompanyRelation> relations)
@@ -91,7 +220,7 @@ public class CompanyRelationGraphService : ICompanyRelationGraph
     public async Task<List<CompanyRelation>> GetControllingAsync(string companyCode)
     {
         var entities = await _dbContext.CompanyRelation
-            .Where(e => (e.SourceCompany == companyCode || e.TargetCompany == companyCode) && e.RelationType == "controll")
+            .Where(e => (e.SourceCompany == companyCode || e.TargetCompany == companyCode) && e.RelationType == "control")
             .ToListAsync();
 
         return entities.Select(MapToModel).ToList();
@@ -99,42 +228,7 @@ public class CompanyRelationGraphService : ICompanyRelationGraph
 
     public async Task<List<List<CompanyRelation>>> FindRelationPathAsync(string fromCode, string toCode, int maxDepth = 3)
     {
-        var paths = new List<List<CompanyRelation>>();
-        var visited = new HashSet<string>();
-        var currentPath = new List<CompanyRelation>();
-
-        await FindPathsDFS(fromCode, toCode, maxDepth, visited, currentPath, paths);
-
-        return paths;
-    }
-
-    private async Task FindPathsDFS(string current, string target, int depth, HashSet<string> visited, List<CompanyRelation> currentPath, List<List<CompanyRelation>> paths)
-    {
-        if (depth <= 0) return;
-        if (current == target)
-        {
-            paths.Add(new List<CompanyRelation>(currentPath));
-            return;
-        }
-
-        visited.Add(current);
-
-        var relations = await _dbContext.CompanyRelation
-            .Where(e => e.SourceCompany == current || e.TargetCompany == current)
-            .ToListAsync();
-
-        foreach (var relation in relations)
-        {
-            var nextCompany = relation.SourceCompany == current ? relation.TargetCompany : relation.SourceCompany;
-            if (!visited.Contains(nextCompany))
-            {
-                currentPath.Add(MapToModel(relation));
-                await FindPathsDFS(nextCompany, target, depth - 1, visited, currentPath, paths);
-                currentPath.RemoveAt(currentPath.Count - 1);
-            }
-        }
-
-        visited.Remove(current);
+        return await FindRelationPathAsync(fromCode, toCode, maxDepth, CancellationToken.None);
     }
 
     public async Task<bool> DeleteRelationAsync(long id)

@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using AIStock.Core.Interfaces;
 using AIStock.Core.Models;
 using AIStock.EventEngine.Services;
@@ -230,11 +231,14 @@ public class PolicyAnalysisRequest
     /// <summary>
     /// 政策标题
     /// </summary>
+    [Required(ErrorMessage = "政策标题不能为空")]
+    [StringLength(500, ErrorMessage = "标题长度不能超过500")]
     public string Title { get; set; } = string.Empty;
 
     /// <summary>
     /// 政策内容
     /// </summary>
+    [Required(ErrorMessage = "政策内容不能为空")]
     public string Content { get; set; } = string.Empty;
 
     /// <summary>
@@ -243,35 +247,31 @@ public class PolicyAnalysisRequest
     public string? Source { get; set; }
 }
 
-/// <summary>
-/// 小作文分析请求
-/// </summary>
 public class EssayAnalysisRequest
 {
     /// <summary>
     /// 文本内容
     /// </summary>
+    [Required(ErrorMessage = "文本内容不能为空")]
     public string Text { get; set; } = string.Empty;
 }
 
-/// <summary>
-/// 小作文图片分析请求
-/// </summary>
 public class EssayImageAnalysisRequest
 {
     /// <summary>
     /// 图片URL
     /// </summary>
+    [Required(ErrorMessage = "图片URL不能为空")]
+    [Url(ErrorMessage = "请输入有效的URL")]
     public string ImageUrl { get; set; } = string.Empty;
 }
 
-/// <summary>
-/// 小作文音频分析请求
-/// </summary>
 public class EssayAudioAnalysisRequest
 {
     /// <summary>
     /// 音频URL
     /// </summary>
+    [Required(ErrorMessage = "音频URL不能为空")]
+    [Url(ErrorMessage = "请输入有效的URL")]
     public string AudioUrl { get; set; } = string.Empty;
 }

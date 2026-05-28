@@ -38,7 +38,8 @@ public class SanhuProvider : BaseProvider
     {
         DataCapability.Intraday,
         DataCapability.TradingCalendar,
-        DataCapability.StockUniverse
+        DataCapability.StockUniverse,
+        DataCapability.Trading
     };
 
     /// <summary>
@@ -144,10 +145,11 @@ public class SanhuProvider : BaseProvider
                     decimal GetDecimal(string name) => item.TryGetProperty(name, out var p) && p.ValueKind == JsonValueKind.Number ? p.GetInt64() / 1000m : 0;
                     string GetString(string name) => item.TryGetProperty(name, out var p) ? p.GetString() ?? "" : "";
 
+                    var timeStr = GetString("ShiJian");
                     var intraday = new IntradayData
                     {
                         Code = code,
-                        Time = GetString("ShiJian"),
+                        Time = DateTime.TryParse(timeStr, out var time) ? time : DateTime.MinValue,
                         Price = GetDecimal("JiaGe"),
                         CumulativeVolume = GetLong("ZongLiang") * 100,
                         CumulativeAmount = GetLong("JinE"),
@@ -566,6 +568,37 @@ public class SanhuProvider : BaseProvider
         }
 
         return result;
+    }
+
+    // IDataProvider 交易接口实现
+    public new async Task<TradingOrderResult> PlaceBuyOrderAsync(string code, decimal price, int volume)
+    {
+        var hands = volume / 100;
+        if (hands <= 0) hands = 1;
+        var result = await PlaceBuyOrderAsync(code, price, hands);
+        return new TradingOrderResult
+        {
+            OrderId = result.OrderId,
+            IsAccepted = result.IsAccepted,
+            IsCompleted = result.IsCompleted,
+            IsFailed = result.IsFailed,
+            Msg = result.Msg
+        };
+    }
+
+    public new async Task<TradingOrderResult> PlaceSellOrderAsync(string code, decimal price, int volume)
+    {
+        var hands = volume / 100;
+        if (hands <= 0) hands = 1;
+        var result = await PlaceSellOrderAsync(code, price, hands);
+        return new TradingOrderResult
+        {
+            OrderId = result.OrderId,
+            IsAccepted = result.IsAccepted,
+            IsCompleted = result.IsCompleted,
+            IsFailed = result.IsFailed,
+            Msg = result.Msg
+        };
     }
 }
 

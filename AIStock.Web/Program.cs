@@ -43,7 +43,7 @@ builder.Services.AddMemoryCache();
 // 配置MySQL
 var connectionString = builder.Configuration.GetConnectionString("MySQL");
 builder.Services.AddDbContext<AIStockDbContext>(options =>
-    options.UseMySQL(connectionString!));
+    options.UseMySql(connectionString!, ServerVersion.AutoDetect(connectionString!)));
 
 // 配置Redis
 var redisConnection = builder.Configuration.GetConnectionString("Redis");
@@ -83,8 +83,18 @@ builder.Services.AddOrchestratorServices();
 // 注册数据源Provider
 builder.Services.AddSingleton<IDataProviderResolver, DataProviderResolver>();
 
-// 注册HttpClient
-builder.Services.AddHttpClient();
+// 注册HttpClient（带重试策略）
+builder.Services.AddHttpClient("default")
+    .AddStandardResilienceHandler(options =>
+    {
+        options.Retry.MaxRetryAttempts = 3;
+        options.Retry.BackoffType = Polly.DelayBackoffType.Exponential;
+        options.Retry.Delay = TimeSpan.FromSeconds(1);
+        options.AttemptTimeout.Timeout = TimeSpan.FromSeconds(30);
+        options.CircuitBreaker.SamplingDuration = TimeSpan.FromMinutes(1);
+        options.CircuitBreaker.FailureRatio = 0.5;
+        options.CircuitBreaker.MinimumThroughput = 10;
+    });
 
 // 注册各数据源Provider
 builder.Services.AddSingleton<IDataProvider>(sp =>
@@ -164,17 +174,38 @@ if (app.Environment.IsDevelopment())
     app.MapOpenApi();
 }
 
+// 全局异常处理
+app.UseExceptionHandler(error =>
+{
+    error.Run(async context =>
+    {
+        var exception = context.Features.Get<Microsoft.AspNetCore.Diagnostics.IExceptionHandlerFeature>()?.Error;
+        context.Response.ContentType = "application/problem+json";
+        context.Response.StatusCode = StatusCodes.Status500InternalServerError;
+
+        var problemDetails = new Microsoft.AspNetCore.Mvc.ProblemDetails
+        {
+            Status = context.Response.StatusCode,
+            Title = exception?.Message ?? "Internal Server Error",
+            Detail = app.Environment.IsDevelopment() ? exception?.StackTrace : null,
+            Instance = context.Request.Path
+        };
+
+        await context.Response.WriteAsJsonAsync(problemDetails);
+    });
+});
+
 // 不使用HTTPS重定向（内部API服务）
 // app.UseHttpsRedirection();
 app.UseCors();
 app.UseAuthorization();
 app.MapControllers();
 
-// 初始化数据库
+// 初始化数据库（使用Migration）
 using (var scope = app.Services.CreateScope())
 {
     var dbContext = scope.ServiceProvider.GetRequiredService<AIStockDbContext>();
-    dbContext.Database.EnsureCreated();
+    await dbContext.Database.MigrateAsync();
 }
 
 // 注册Provider到Resolver

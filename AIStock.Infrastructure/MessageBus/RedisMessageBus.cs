@@ -6,13 +6,14 @@ using StackExchange.Redis;
 namespace AIStock.Infrastructure.MessageBus;
 
 /// <summary>
-/// Redis Stream消息总线实现
+/// Redis Stream消息总线实现（支持Dead Letter Queue）
 /// </summary>
 public class RedisMessageBus : IMessageBus, IDisposable
 {
     private readonly IConnectionMultiplexer _redis;
     private readonly ILogger<RedisMessageBus> _logger;
     private readonly JsonSerializerOptions _jsonOptions;
+    private const int MaxRetryCount = 3;
     private bool _disposed;
 
     public RedisMessageBus(IConnectionMultiplexer redis, ILogger<RedisMessageBus> logger)
@@ -94,6 +95,19 @@ public class RedisMessageBus : IMessageBus, IDisposable
                     catch (Exception ex)
                     {
                         _logger.LogError(ex, "Failed to process message {Id} from stream {Stream}", entry.Id, stream);
+                        
+                        // 检查重试次数，超过阈值移入Dead Letter Queue
+                        var retryCount = await GetRetryCountAsync(stream, entry.Id);
+                        if (retryCount >= MaxRetryCount)
+                        {
+                            await MoveToDeadLetterAsync(stream, entry.Id, entry, ex.Message);
+                            await db.StreamAcknowledgeAsync(stream, group, entry.Id);
+                            _logger.LogWarning("Message {Id} moved to dead letter queue after {RetryCount} retries", entry.Id, retryCount);
+                        }
+                        else
+                        {
+                            await IncrementRetryCountAsync(stream, entry.Id);
+                        }
                     }
                 }
             }
@@ -234,6 +248,66 @@ public class RedisMessageBus : IMessageBus, IDisposable
         if (!_disposed)
         {
             _disposed = true;
+        }
+    }
+
+    private async Task<int> GetRetryCountAsync(string stream, RedisValue messageId)
+    {
+        try
+        {
+            var db = _redis.GetDatabase();
+            var retryKey = $"{stream}:retry:{messageId}";
+            var count = await db.StringGetAsync(retryKey);
+            return count.HasValue ? (int)count : 0;
+        }
+        catch
+        {
+            return 0;
+        }
+    }
+
+    private async Task IncrementRetryCountAsync(string stream, RedisValue messageId)
+    {
+        try
+        {
+            var db = _redis.GetDatabase();
+            var retryKey = $"{stream}:retry:{messageId}";
+            await db.StringIncrementAsync(retryKey);
+            await db.KeyExpireAsync(retryKey, TimeSpan.FromHours(24));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to increment retry count for message {Id}", messageId);
+        }
+    }
+
+    private async Task MoveToDeadLetterAsync(string stream, RedisValue messageId, StreamEntry originalEntry, string error)
+    {
+        try
+        {
+            var db = _redis.GetDatabase();
+            var deadLetterStream = $"{stream}:dead-letter";
+
+            var entries = new NameValueEntry[]
+            {
+                new NameValueEntry("originalId", messageId.ToString()),
+                new NameValueEntry("data", originalEntry["data"].ToString()),
+                new NameValueEntry("type", originalEntry["type"].ToString()),
+                new NameValueEntry("error", error),
+                new NameValueEntry("movedAt", DateTime.UtcNow.ToString("O"))
+            };
+
+            await db.StreamAddAsync(deadLetterStream, entries);
+            
+            // 清理重试计数
+            var retryKey = $"{stream}:retry:{messageId}";
+            await db.KeyDeleteAsync(retryKey);
+
+            _logger.LogInformation("Moved message {Id} to dead letter queue {DeadLetterStream}", messageId, deadLetterStream);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to move message {Id} to dead letter queue", messageId);
         }
     }
 }

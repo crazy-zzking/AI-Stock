@@ -24,15 +24,15 @@ public class AlphaEngineService : IAlphaEngine
             return new TradeSignal
             {
                 Code = code,
-                SignalType = SignalType.Hold.ToString().ToLower(),
+                    SignalType = SignalType.Hold,
                 Strength = 0,
                 StrategyName = "AlphaEngine",
                 Reason = "无有效信号"
             };
         }
 
-        var buySignals = signals.Where(s => s.SignalType == "buy" || s.SignalType == "strongbuy").ToList();
-        var sellSignals = signals.Where(s => s.SignalType == "sell" || s.SignalType == "strongsell").ToList();
+            var buySignals = signals.Where(s => s.SignalType == SignalType.Buy || s.SignalType == SignalType.StrongBuy).ToList();
+            var sellSignals = signals.Where(s => s.SignalType == SignalType.Sell || s.SignalType == SignalType.StrongSell).ToList();
 
         var buyStrength = buySignals.Sum(s => s.Strength);
         var sellStrength = sellSignals.Sum(s => s.Strength);
@@ -46,7 +46,7 @@ public class AlphaEngineService : IAlphaEngine
 
         if (buyStrength > sellStrength && buySignals.Count > 0)
         {
-            signal.SignalType = buyStrength > 150 ? SignalType.StrongBuy.ToString().ToLower() : SignalType.Buy.ToString().ToLower();
+                signal.SignalType = SignalType.StrongBuy;
             signal.Strength = Math.Min(100, buyStrength / buySignals.Count);
             signal.Price = buySignals.First().Price;
             signal.Reason = $"多头信号融合: {buySignals.Count}个买入信号，总强度: {buyStrength}";
@@ -55,7 +55,7 @@ public class AlphaEngineService : IAlphaEngine
         }
         else if (sellStrength > buyStrength && sellSignals.Count > 0)
         {
-            signal.SignalType = sellStrength > 150 ? SignalType.StrongSell.ToString().ToLower() : SignalType.Sell.ToString().ToLower();
+                signal.SignalType = SignalType.StrongSell;
             signal.Strength = Math.Min(100, sellStrength / sellSignals.Count);
             signal.Price = sellSignals.First().Price;
             signal.Reason = $"空头信号融合: {sellSignals.Count}个卖出信号，总强度: {sellStrength}";
@@ -64,7 +64,7 @@ public class AlphaEngineService : IAlphaEngine
         }
         else
         {
-            signal.SignalType = SignalType.Hold.ToString().ToLower();
+            signal.SignalType = SignalType.Hold;
             signal.Strength = 0;
             signal.Price = signals.First().Price;
             signal.Reason = "多空信号平衡，建议观望";
@@ -76,7 +76,7 @@ public class AlphaEngineService : IAlphaEngine
     public async Task<TradeSignal> MergeSignalsAsync(List<TradeSignal> signals)
     {
         if (signals == null || signals.Count == 0)
-            return new TradeSignal { SignalType = SignalType.Hold.ToString().ToLower() };
+            return new TradeSignal { SignalType = SignalType.Hold };
 
         var grouped = signals.GroupBy(s => s.Code);
         var mergedSignals = new List<TradeSignal>();

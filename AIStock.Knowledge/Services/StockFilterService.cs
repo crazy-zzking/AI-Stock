@@ -20,28 +20,33 @@ public class StockFilterService : IStockFilter
         _logger = logger;
     }
 
-    public async Task<List<StockFilterResult>> FilterStocksAsync(StockFilterCriteria criteria)
+    public async Task<List<StockFilterResult>> FilterStocksAsync(StockFilterCriteria criteria, CancellationToken cancellationToken = default)
     {
         var query = _dbContext.StockBase.AsQueryable();
 
-        // 过滤退市股票
         query = query.Where(s => !s.IsDelisted);
 
-        // 根据概念过滤
         if (criteria.RelatedConcepts != null && criteria.RelatedConcepts.Any())
         {
-            var conceptStocks = await GetStocksByConcepts(criteria.RelatedConcepts);
+            var conceptStocks = await GetStocksByConcepts(criteria.RelatedConcepts, cancellationToken);
             var conceptCodes = conceptStocks.Select(s => s.Code).ToList();
             query = query.Where(s => conceptCodes.Contains(s.Code));
         }
 
-        // 根据行业过滤
         if (criteria.RelatedIndustries != null && criteria.RelatedIndustries.Any())
         {
             query = query.Where(s => criteria.RelatedIndustries.Contains(s.Industry!));
         }
 
-        var stocks = await query.ToListAsync();
+        var stocks = await query.ToListAsync(cancellationToken);
+        var stockCodes = stocks.Select(s => s.Code).ToList();
+
+        var latestKlines = await _dbContext.KlineData
+            .Where(k => stockCodes.Contains(k.Code) && k.Interval == "daily")
+            .GroupBy(k => k.Code)
+            .Select(g => new { Code = g.Key, Latest = g.OrderByDescending(k => k.DateTime).FirstOrDefault() })
+            .ToDictionaryAsync(x => x.Code, x => x.Latest, cancellationToken);
+
         var results = new List<StockFilterResult>();
 
         foreach (var stock in stocks)
@@ -52,57 +57,47 @@ public class StockFilterService : IStockFilter
                 Name = stock.Name
             };
 
-            // 获取最新K线数据计算涨幅
-            var latestKline = await _dbContext.KlineData
-                .Where(k => k.Code == stock.Code && k.Interval == "daily")
-                .OrderByDescending(k => k.DateTime)
-                .FirstOrDefaultAsync();
-
-            if (latestKline != null)
+            if (latestKlines.TryGetValue(stock.Code, out var latestKline) && latestKline != null)
             {
                 result.RisePercent = latestKline.ChangePercent ?? 0;
 
-                // 排除已启动股票
                 if (criteria.ExcludeStarted && criteria.MaxRisePercent.HasValue && result.RisePercent > criteria.MaxRisePercent.Value)
                 {
                     continue;
                 }
             }
 
-            // 计算筛选得分
             result.Score = CalculateFilterScore(result, criteria);
             result.Reason = GenerateFilterReason(result, criteria);
 
             results.Add(result);
         }
 
-        // 按得分排序并返回
         return results
             .OrderByDescending(r => r.Score)
             .Take(criteria.Count)
             .ToList();
     }
 
-    public async Task<List<StockFilterResult>> FilterByConceptsAsync(List<string> concepts, int count = 20)
+    public async Task<List<StockFilterResult>> FilterByConceptsAsync(List<string> concepts, int count = 20, CancellationToken cancellationToken = default)
     {
         var criteria = new StockFilterCriteria
         {
             RelatedConcepts = concepts,
             Count = count,
             ExcludeStarted = true,
-            MaxRisePercent = 5 // 排除涨幅超过5%的股票
+            MaxRisePercent = 5
         };
 
-        return await FilterStocksAsync(criteria);
+        return await FilterStocksAsync(criteria, cancellationToken);
     }
 
-    public async Task<List<StockFilterResult>> FilterByChainAsync(string chainName, string? role = null, int count = 20)
+    public async Task<List<StockFilterResult>> FilterByChainAsync(string chainName, string? role = null, int count = 20, CancellationToken cancellationToken = default)
     {
-        // 获取产业链中的公司
         var chainIds = await _dbContext.IndustryChain
             .Where(e => e.ChainName == chainName)
             .Select(e => e.Id)
-            .ToListAsync();
+            .ToListAsync(cancellationToken);
 
         var query = _dbContext.CompanyChainRelation
             .Where(e => chainIds.Contains(e.ChainId));
@@ -112,18 +107,26 @@ public class StockFilterService : IStockFilter
             query = query.Where(e => e.Role == role);
         }
 
-        var companies = await query.ToListAsync();
+        var companies = await query.ToListAsync(cancellationToken);
+        var companyCodes = companies.Select(c => c.CompanyCode).Distinct().ToList();
+
+        var stocks = await _dbContext.StockBase
+            .Where(s => companyCodes.Contains(s.Code) && !s.IsDelisted)
+            .ToDictionaryAsync(s => s.Code, s => s, cancellationToken);
+
+        var latestKlines = await _dbContext.KlineData
+            .Where(k => companyCodes.Contains(k.Code) && k.Interval == "daily")
+            .GroupBy(k => k.Code)
+            .Select(g => new { Code = g.Key, Latest = g.OrderByDescending(k => k.DateTime).FirstOrDefault() })
+            .ToDictionaryAsync(x => x.Code, x => x.Latest, cancellationToken);
+
         var results = new List<StockFilterResult>();
 
         foreach (var company in companies)
         {
-            var stock = await _dbContext.StockBase.FindAsync(company.CompanyCode);
-            if (stock == null || stock.IsDelisted) continue;
+            if (!stocks.TryGetValue(company.CompanyCode, out var stock)) continue;
 
-            var latestKline = await _dbContext.KlineData
-                .Where(k => k.Code == company.CompanyCode && k.Interval == "daily")
-                .OrderByDescending(k => k.DateTime)
-                .FirstOrDefaultAsync();
+            latestKlines.TryGetValue(company.CompanyCode, out var latestKline);
 
             var result = new StockFilterResult
             {
@@ -143,26 +146,24 @@ public class StockFilterService : IStockFilter
             .ToList();
     }
 
-    private async Task<List<StockBase>> GetStocksByConcepts(List<string> concepts)
+    private async Task<List<StockBase>> GetStocksByConcepts(List<string> concepts, CancellationToken cancellationToken = default)
     {
-        // 从产业链中查找关联公司
         var chainIds = await _dbContext.IndustryChain
             .Where(e => concepts.Any(c => e.ChainName.Contains(c) || e.Description!.Contains(c)))
             .Select(e => e.Id)
-            .ToListAsync();
+            .ToListAsync(cancellationToken);
 
         var chainCompanies = await _dbContext.CompanyChainRelation
             .Where(e => chainIds.Contains(e.ChainId))
             .Select(e => e.CompanyCode)
             .Distinct()
-            .ToListAsync();
+            .ToListAsync(cancellationToken);
 
-        // 从公司关系中查找关联公司
         var relatedCompanies = await _dbContext.CompanyRelation
             .Where(e => concepts.Any(c => e.Description!.Contains(c)))
             .Select(e => e.TargetCompany)
             .Distinct()
-            .ToListAsync();
+            .ToListAsync(cancellationToken);
 
         var allCodes = chainCompanies.Union(relatedCompanies).Distinct().ToList();
 
@@ -176,7 +177,7 @@ public class StockFilterService : IStockFilter
                 Industry = s.Industry,
                 IsDelisted = s.IsDelisted
             })
-            .ToListAsync();
+            .ToListAsync(cancellationToken);
     }
 
     private static decimal CalculateFilterScore(StockFilterResult result, StockFilterCriteria criteria)

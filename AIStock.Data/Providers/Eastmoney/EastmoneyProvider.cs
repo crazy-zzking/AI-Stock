@@ -244,7 +244,7 @@ public class EastmoneyProvider : BaseProvider
                 var intraday = new IntradayData
                 {
                     Code = code,
-                    Time = parts[0],
+                    Time = DateTime.TryParse(parts[0], out var time) ? time : DateTime.MinValue,
                     Price = price,
                     CumulativeVolume = long.Parse(parts[2]) * 100,
                     CumulativeAmount = decimal.Parse(parts[3]),

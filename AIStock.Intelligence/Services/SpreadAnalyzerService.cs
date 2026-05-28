@@ -1,3 +1,4 @@
+using AIStock.Core.Enums;
 using AIStock.Core.Interfaces;
 using AIStock.Core.Models;
 using AIStock.Infrastructure.Database.Context;
@@ -151,12 +152,12 @@ public class SpreadAnalyzerService : ISpreadAnalyzer
         return Math.Min(100, heat);
     }
 
-    private string DetermineSpreadSpeed(SpreadAnalysisResult result)
+    private SpreadSpeed DetermineSpreadSpeed(SpreadAnalysisResult result)
     {
-        if (result.HeatSlope > 5) return "viral";
-        if (result.HeatSlope > 2) return "fast";
-        if (result.HeatSlope > 0) return "medium";
-        return "slow";
+        if (result.HeatSlope > 5) return SpreadSpeed.Viral;
+        if (result.HeatSlope > 2) return SpreadSpeed.Fast;
+        if (result.HeatSlope > 0) return SpreadSpeed.Medium;
+        return SpreadSpeed.Slow;
     }
 
     private DateTime? EstimatePeakTime(SpreadAnalysisResult result)
@@ -187,14 +188,14 @@ public class SpreadAnalyzerService : ISpreadAnalyzer
         return string.Join("；", conclusions);
     }
 
-    private string GetSpeedDescription(string speed)
+    private string GetSpeedDescription(SpreadSpeed speed)
     {
         return speed switch
         {
-            "viral" => "病毒式传播",
-            "fast" => "快速传播",
-            "medium" => "正常传播",
-            "slow" => "缓慢传播",
+            SpreadSpeed.Viral => "病毒式传播",
+            SpreadSpeed.Fast => "快速传播",
+            SpreadSpeed.Medium => "正常传播",
+            SpreadSpeed.Slow => "缓慢传播",
             _ => "未知"
         };
     }

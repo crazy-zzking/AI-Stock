@@ -1,3 +1,4 @@
+using AIStock.Core.Enums;
 using AIStock.Core.Interfaces;
 using AIStock.Core.Models;
 using Microsoft.Extensions.Logging;
@@ -10,11 +11,16 @@ namespace AIStock.Strategy.Services;
 public class BacktestEngineService : IBacktestEngine
 {
     private readonly IFeatureCalculator _featureCalculator;
+    private readonly IDataProviderResolver _dataProviderResolver;
     private readonly ILogger<BacktestEngineService> _logger;
 
-    public BacktestEngineService(IFeatureCalculator featureCalculator, ILogger<BacktestEngineService> logger)
+    public BacktestEngineService(
+        IFeatureCalculator featureCalculator,
+        IDataProviderResolver dataProviderResolver,
+        ILogger<BacktestEngineService> logger)
     {
         _featureCalculator = featureCalculator;
+        _dataProviderResolver = dataProviderResolver;
         _logger = logger;
     }
 
@@ -50,7 +56,7 @@ public class BacktestEngineService : IBacktestEngine
                     var signal = await strategy.GenerateSignalAsync(code, historyKlines, indicators);
                     if (signal == null) continue;
 
-                    if (signal.SignalType == "buy" && !positions.ContainsKey(code))
+                    if (signal.SignalType == SignalType.Buy && !positions.ContainsKey(code))
                     {
                         var maxAmount = capital * config.MaxPositionPercent / 100;
                         var volume = (long)(maxAmount / currentKline.Close / 100) * 100;
@@ -75,7 +81,7 @@ public class BacktestEngineService : IBacktestEngine
                             Commission = commission + slippage + impact
                         };
                     }
-                    else if (signal.SignalType == "sell" && positions.ContainsKey(code))
+                    else if (signal.SignalType == SignalType.Sell && positions.ContainsKey(code))
                     {
                         var position = positions[code];
                         var sellPrice = currentKline.Close;
@@ -143,7 +149,42 @@ public class BacktestEngineService : IBacktestEngine
 
     private async Task<List<KlineData>> GetKlinesAsync(string code, DateTime startTime, DateTime endTime)
     {
-        return new List<KlineData>();
+        try
+        {
+            var provider = _dataProviderResolver.GetDefaultProvider();
+            if (provider == null)
+            {
+                _logger.LogWarning("No data provider available for backtest");
+                return new List<KlineData>();
+            }
+
+            var allKlines = new List<KlineData>();
+            var currentEndTime = endTime;
+            const int batchSize = 800;
+
+            // 分批获取K线数据（单次最多800条）
+            while (currentEndTime > startTime)
+            {
+                var klines = await provider.GetKlinesAsync(code, Core.Enums.KlineInterval.Daily, batchSize);
+                if (klines == null || klines.Count == 0)
+                    break;
+
+                var filtered = klines.Where(k => k.DateTime >= startTime && k.DateTime <= currentEndTime).ToList();
+                allKlines.AddRange(filtered);
+
+                if (klines.Count < batchSize || klines.First().DateTime <= startTime)
+                    break;
+
+                currentEndTime = klines.First().DateTime.AddDays(-1);
+            }
+
+            return allKlines.OrderBy(k => k.DateTime).DistinctBy(k => k.DateTime).ToList();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to get klines for {Code}", code);
+            return new List<KlineData>();
+        }
     }
 
     private decimal CalculateAnnualizedReturn(decimal totalReturn, DateTime startTime, DateTime endTime)

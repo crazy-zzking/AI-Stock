@@ -1,3 +1,4 @@
+using AIStock.Core.Enums;
 using AIStock.Core.Interfaces;
 using AIStock.Core.Models;
 using Microsoft.Extensions.Logging;
@@ -5,7 +6,7 @@ using Microsoft.Extensions.Logging;
 namespace AIStock.Execution.Services;
 
 /// <summary>
-/// 持仓管理实现 - 对接散户量化
+/// 持仓管理实现 - 通过IDataProvider接口解耦
 /// </summary>
 public class PositionManagerService : IPositionManager
 {
@@ -24,12 +25,11 @@ public class PositionManagerService : IPositionManager
     {
         try
         {
-            var provider = _dataProviderResolver.GetAllProviders()
-                .FirstOrDefault(p => p.ProviderId == "sanhu");
+            var provider = _dataProviderResolver.GetPrimaryProvider(DataCapability.Trading);
             
             if (provider == null)
             {
-                _logger.LogWarning("Sanhu provider not found");
+                _logger.LogWarning("No trading provider available");
                 return new PositionSummary();
             }
 

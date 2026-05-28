@@ -32,7 +32,7 @@ public class MABreakoutStrategy : IStrategy
             return new TradeSignal
             {
                 Code = code,
-                SignalType = SignalType.Buy.ToString().ToLower(),
+                SignalType = SignalType.Buy,
                 Strength = 80,
                 Price = currentPrice,
                 StrategyName = Name,
@@ -47,7 +47,7 @@ public class MABreakoutStrategy : IStrategy
             return new TradeSignal
             {
                 Code = code,
-                SignalType = SignalType.Sell.ToString().ToLower(),
+                SignalType = SignalType.Sell,
                 Strength = 80,
                 Price = currentPrice,
                 StrategyName = Name,

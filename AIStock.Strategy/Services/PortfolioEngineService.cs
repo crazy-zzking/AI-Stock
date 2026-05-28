@@ -25,7 +25,7 @@ public class PortfolioEngineService : IPortfolioEngine
             return new List<PortfolioPosition>();
 
         var positions = new List<PortfolioPosition>();
-        var buySignals = signals.Where(s => s.SignalType == "buy" || s.SignalType == "strongbuy").ToList();
+        var buySignals = signals.Where(s => s.SignalType == SignalType.Buy || s.SignalType == SignalType.StrongBuy).ToList();
 
         foreach (var signal in buySignals)
         {
@@ -64,7 +64,7 @@ public class PortfolioEngineService : IPortfolioEngine
                 signals.Add(new TradeSignal
                 {
                     Code = target.Code,
-                    SignalType = SignalType.Buy.ToString().ToLower(),
+                    SignalType = SignalType.Buy,
                     Strength = 80,
                     Price = target.CurrentPrice,
                     Volume = target.Volume,
@@ -82,7 +82,7 @@ public class PortfolioEngineService : IPortfolioEngine
                     signals.Add(new TradeSignal
                     {
                         Code = target.Code,
-                        SignalType = SignalType.Buy.ToString().ToLower(),
+                        SignalType = SignalType.Buy,
                         Strength = 60,
                         Price = target.CurrentPrice,
                         Volume = volumeDiff,
@@ -95,7 +95,7 @@ public class PortfolioEngineService : IPortfolioEngine
                     signals.Add(new TradeSignal
                     {
                         Code = target.Code,
-                        SignalType = SignalType.Sell.ToString().ToLower(),
+                        SignalType = SignalType.Sell,
                         Strength = 60,
                         Price = target.CurrentPrice,
                         Volume = Math.Abs(volumeDiff),
@@ -113,7 +113,7 @@ public class PortfolioEngineService : IPortfolioEngine
                 signals.Add(new TradeSignal
                 {
                     Code = current.Code,
-                    SignalType = SignalType.Sell.ToString().ToLower(),
+                    SignalType = SignalType.Sell,
                     Strength = 80,
                     Price = current.CurrentPrice,
                     Volume = current.Volume,
@@ -132,7 +132,7 @@ public class PortfolioEngineService : IPortfolioEngine
             return new Dictionary<string, decimal>();
 
         var weights = new Dictionary<string, decimal>();
-        var buySignals = signals.Where(s => s.SignalType == "buy" || s.SignalType == "strongbuy").ToList();
+        var buySignals = signals.Where(s => s.SignalType == SignalType.Buy || s.SignalType == SignalType.StrongBuy).ToList();
 
         if (buySignals.Count == 0)
             return weights;

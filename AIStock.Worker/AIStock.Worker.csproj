@@ -8,24 +8,13 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.Extensions.Hosting" Version="9.0.16" />
-    <PackageReference Include="Serilog.Extensions.Hosting" Version="9.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" />
+    <PackageReference Include="Serilog.Extensions.Hosting" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\AIStock.Core\AIStock.Core.csproj" />
     <ProjectReference Include="..\AIStock.Infrastructure\AIStock.Infrastructure.csproj" />
-    <ProjectReference Include="..\AIStock.Data\AIStock.Data.csproj" />
-    <ProjectReference Include="..\AIStock.Intelligence\AIStock.Intelligence.csproj" />
-    <ProjectReference Include="..\AIStock.LLM\AIStock.LLM.csproj" />
-    <ProjectReference Include="..\AIStock.EventEngine\AIStock.EventEngine.csproj" />
-    <ProjectReference Include="..\AIStock.Knowledge\AIStock.Knowledge.csproj" />
-    <ProjectReference Include="..\AIStock.Feature\AIStock.Feature.csproj" />
-    <ProjectReference Include="..\AIStock.Strategy\AIStock.Strategy.csproj" />
-    <ProjectReference Include="..\AIStock.Risk\AIStock.Risk.csproj" />
-    <ProjectReference Include="..\AIStock.Execution\AIStock.Execution.csproj" />
-    <ProjectReference Include="..\AIStock.Orchestrator\AIStock.Orchestrator.csproj" />
-    <ProjectReference Include="..\AIStock.Monitor\AIStock.Monitor.csproj" />
   </ItemGroup>
 
 </Project>

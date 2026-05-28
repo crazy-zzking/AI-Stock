@@ -11,9 +11,16 @@ public class AgentOrchestrator : IAgentOrchestrator
     private readonly Dictionary<string, IAgent> _agents = new();
     private readonly ILogger<AgentOrchestrator> _logger;
 
-    public AgentOrchestrator(ILogger<AgentOrchestrator> logger)
+    public AgentOrchestrator(IEnumerable<IAgent> agents, ILogger<AgentOrchestrator> logger)
     {
         _logger = logger;
+
+        // 启动时一次性注册所有通过DI注入的Agent，避免并发竞价条件
+        foreach (var agent in agents)
+        {
+            _agents[agent.AgentId] = agent;
+            _logger.LogInformation("Registered agent: {AgentId} ({Name})", agent.AgentId, agent.Name);
+        }
     }
 
     public void RegisterAgent(IAgent agent)

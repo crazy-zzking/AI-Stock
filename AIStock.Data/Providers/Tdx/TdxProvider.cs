@@ -9,7 +9,7 @@ namespace AIStock.Data.Providers.Tdx;
 /// <summary>
 /// 通达信数据提供者
 /// </summary>
-public class TdxProvider : IDataProvider, IDisposable
+public class TdxProvider : IDataProvider, IDisposable, IAsyncDisposable
 {
     private readonly ILogger<TdxProvider> _logger;
     private readonly string _host;
@@ -35,7 +35,7 @@ public class TdxProvider : IDataProvider, IDisposable
         DataCapability.StockUniverse
     };
 
-    public TdxProvider(ILogger<TdxProvider> logger, string host = "119.147.212.81", int port = 7709)
+    public TdxProvider(ILogger<TdxProvider> logger, string host, int port)
     {
         _logger = logger;
         _host = host;
@@ -204,7 +204,7 @@ public class TdxProvider : IDataProvider, IDisposable
             return response.Items.Select(item => new IntradayData
             {
                 Code = code,
-                Time = item.Time,
+                Time = DateTime.TryParse(item.Time, out var time) ? time : DateTime.MinValue,
                 Price = (decimal)item.Price,
                 CumulativeVolume = item.Volume * 100,
                 Source = ProviderId
@@ -227,7 +227,7 @@ public class TdxProvider : IDataProvider, IDisposable
             return response.Items.Select(item => new IntradayData
             {
                 Code = code,
-                Time = item.Time,
+                Time = DateTime.TryParse(item.Time, out var time) ? time : DateTime.MinValue,
                 Price = (decimal)item.Price,
                 CumulativeVolume = item.Volume * 100,
                 Source = ProviderId
@@ -463,9 +463,17 @@ public class TdxProvider : IDataProvider, IDisposable
 
     public void Dispose()
     {
+        DisposeAsync().AsTask().Wait();
+    }
+
+    public async ValueTask DisposeAsync()
+    {
         if (!_disposed)
         {
-            _client?.DisposeAsync().AsTask().Wait();
+            if (_client != null)
+            {
+                await _client.DisposeAsync();
+            }
             _lock.Dispose();
             _disposed = true;
         }

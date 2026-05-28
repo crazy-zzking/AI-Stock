@@ -31,7 +31,7 @@ public class CompanyRelation
     public string? TargetCompanyName { get; set; }
 
     /// <summary>
-    /// 关系类型（customer/supplier/invest/controll）
+    /// 关系类型（customer/supplier/invest/control）
     /// </summary>
     public string RelationType { get; set; } = string.Empty;
 

@@ -1,97 +1,97 @@
 namespace AIStock.Core.Models;
 
 /// <summary>
-/// 实时行情数据
+/// 实时行情数据（不可变）
 /// </summary>
-public class QuoteData
+public record QuoteData
 {
     /// <summary>
     /// 股票代码
     /// </summary>
-    public string Code { get; set; } = string.Empty;
+    public string Code { get; init; } = string.Empty;
 
     /// <summary>
     /// 股票名称
     /// </summary>
-    public string Name { get; set; } = string.Empty;
+    public string Name { get; init; } = string.Empty;
 
     /// <summary>
     /// 当前价格（元）
     /// </summary>
-    public decimal Price { get; set; }
+    public decimal Price { get; init; }
 
     /// <summary>
     /// 昨收价（元）
     /// </summary>
-    public decimal PreClose { get; set; }
+    public decimal PreClose { get; init; }
 
     /// <summary>
     /// 开盘价（元）
     /// </summary>
-    public decimal Open { get; set; }
+    public decimal Open { get; init; }
 
     /// <summary>
     /// 最高价（元）
     /// </summary>
-    public decimal High { get; set; }
+    public decimal High { get; init; }
 
     /// <summary>
     /// 最低价（元）
     /// </summary>
-    public decimal Low { get; set; }
+    public decimal Low { get; init; }
 
     /// <summary>
     /// 成交量（股）
     /// </summary>
-    public long Volume { get; set; }
+    public long Volume { get; init; }
 
     /// <summary>
     /// 成交额（元）
     /// </summary>
-    public decimal Amount { get; set; }
+    public decimal Amount { get; init; }
 
     /// <summary>
     /// 涨跌幅（%）
     /// </summary>
-    public decimal ChangePercent { get; set; }
+    public decimal ChangePercent { get; init; }
 
     /// <summary>
     /// 涨跌额（元）
     /// </summary>
-    public decimal ChangeAmount { get; set; }
+    public decimal ChangeAmount { get; init; }
 
     /// <summary>
     /// 换手率（%）
     /// </summary>
-    public decimal TurnoverRate { get; set; }
+    public decimal TurnoverRate { get; init; }
 
     /// <summary>
     /// 量比
     /// </summary>
-    public decimal VolumeRatio { get; set; }
+    public decimal VolumeRatio { get; init; }
 
     /// <summary>
     /// 委比
     /// </summary>
-    public decimal WeiBi { get; set; }
+    public decimal WeiBi { get; init; }
 
     /// <summary>
     /// 内盘
     /// </summary>
-    public long InnerVolume { get; set; }
+    public long InnerVolume { get; init; }
 
     /// <summary>
     /// 外盘
     /// </summary>
-    public long OuterVolume { get; set; }
+    public long OuterVolume { get; init; }
 
     /// <summary>
     /// 数据时间
     /// </summary>
-    public DateTime Timestamp { get; set; }
+    public DateTime Timestamp { get; init; }
 
     /// <summary>
     /// 数据来源
     /// </summary>
-    public string Source { get; set; } = string.Empty;
+    public string Source { get; init; } = string.Empty;
 }

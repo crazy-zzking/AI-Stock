@@ -83,11 +83,14 @@ public class MarketStateDetectorService : IMarketStateDetector
             int declineCount = 0;
             decimal totalAmount = 0;
 
-            foreach (var stock in stocks.Take(100))
+            // 使用批量接口获取行情，避免顺序请求
+            var stockCodes = stocks.Take(100).Select(s => s.Code).ToList();
+            var quotes = await provider.GetQuotesAsync(stockCodes);
+
+            if (quotes != null)
             {
-                try
+                foreach (var quote in quotes)
                 {
-                    var quote = await provider.GetQuoteAsync(stock.Code);
                     if (quote == null) continue;
 
                     if (quote.ChangePercent >= 9.9m) limitUpCount++;
@@ -97,10 +100,6 @@ public class MarketStateDetectorService : IMarketStateDetector
                     else if (quote.ChangePercent < 0) declineCount++;
 
                     totalAmount += quote.Amount;
-                }
-                catch
-                {
-                    continue;
                 }
             }
 

@@ -1,3 +1,4 @@
+using AIStock.Core.Enums;
 using AIStock.Core.Interfaces;
 using AIStock.Core.Models;
 using AIStock.Infrastructure.Database.Context;
@@ -193,11 +194,11 @@ public class CredibilityAnalyzerService : ICredibilityAnalyzer
         return Math.Max(0, Math.Min(100, score));
     }
 
-    private string DetermineVerdict(CredibilityResult result)
+    private Verdict DetermineVerdict(CredibilityResult result)
     {
-        if (result.CredibilityScore >= 70) return "real";
-        if (result.CredibilityScore <= 30) return "fake";
-        return "uncertain";
+        if (result.CredibilityScore >= 70) return Verdict.Real;
+        if (result.CredibilityScore <= 30) return Verdict.Fake;
+        return Verdict.Uncertain;
     }
 
     private string GenerateReason(CredibilityResult result)
@@ -271,10 +272,6 @@ public class CredibilityAnalyzerService : ICredibilityAnalyzer
 
     private string CleanJsonResponse(string response)
     {
-        var json = response.Trim();
-        if (json.StartsWith("```json")) json = json.Substring(7);
-        if (json.StartsWith("```")) json = json.Substring(3);
-        if (json.EndsWith("```")) json = json.Substring(0, json.Length - 3);
-        return json.Trim();
+        return Common.LLMResponseParser.CleanJsonResponse(response);
     }
 }

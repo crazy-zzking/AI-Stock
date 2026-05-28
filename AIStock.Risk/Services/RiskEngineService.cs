@@ -1,3 +1,4 @@
+using AIStock.Core.Enums;
 using AIStock.Core.Interfaces;
 using AIStock.Core.Models;
 using Microsoft.Extensions.Logging;
@@ -9,15 +10,14 @@ namespace AIStock.Risk.Services;
 /// </summary>
 public class RiskEngineService : IRiskEngine
 {
+    private readonly RiskConfig _config;
     private readonly ILogger<RiskEngineService> _logger;
 
-    private const decimal MaxSingleStockPercent = 20;
-    private const decimal MaxTotalPositionPercent = 80;
-    private const decimal MaxSectorPercent = 40;
-    private const decimal MaxSingleTradePercent = 10;
+    public RiskEngineService(ILogger<RiskEngineService> logger) : this(logger, new RiskConfig()) { }
 
-    public RiskEngineService(ILogger<RiskEngineService> logger)
+    public RiskEngineService(ILogger<RiskEngineService> logger, RiskConfig config)
     {
+        _config = config;
         _logger = logger;
     }
 
@@ -55,10 +55,10 @@ public class RiskEngineService : IRiskEngine
         return new RiskCheckItem
         {
             Name = "单笔交易限制",
-            Passed = tradePercent <= MaxSingleTradePercent,
+            Passed = tradePercent <= _config.MaxSingleTradePercent,
             CurrentValue = tradePercent,
-            LimitValue = MaxSingleTradePercent,
-            Description = $"单笔交易占比: {tradePercent:F2}%，限制: {MaxSingleTradePercent}%"
+            LimitValue = _config.MaxSingleTradePercent,
+            Description = $"单笔交易占比: {tradePercent:F2}%，限制: {_config.MaxSingleTradePercent}%"
         };
     }
 
@@ -70,10 +70,10 @@ public class RiskEngineService : IRiskEngine
         return new RiskCheckItem
         {
             Name = "总仓位限制",
-            Passed = totalPercent <= MaxTotalPositionPercent,
+            Passed = totalPercent <= _config.MaxTotalPositionPercent,
             CurrentValue = totalPercent,
-            LimitValue = MaxTotalPositionPercent,
-            Description = $"总仓位占比: {totalPercent:F2}%，限制: {MaxTotalPositionPercent}%"
+            LimitValue = _config.MaxTotalPositionPercent,
+            Description = $"总仓位占比: {totalPercent:F2}%，限制: {_config.MaxTotalPositionPercent}%"
         };
     }
 
@@ -84,36 +84,61 @@ public class RiskEngineService : IRiskEngine
         return new RiskCheckItem
         {
             Name = "单票仓位限制",
-            Passed = positionPercent <= MaxSingleStockPercent,
+            Passed = positionPercent <= _config.MaxSingleStockPercent,
             CurrentValue = positionPercent,
-            LimitValue = MaxSingleStockPercent,
-            Description = $"单票仓位占比: {positionPercent:F2}%，限制: {MaxSingleStockPercent}%"
+            LimitValue = _config.MaxSingleStockPercent,
+            Description = $"单票仓位占比: {positionPercent:F2}%，限制: {_config.MaxSingleStockPercent}%"
         };
     }
 
     public async Task<RiskCheckItem> CheckSectorConcentrationAsync(List<PortfolioPosition> positions, decimal totalCapital)
     {
-        var sectorValue = positions.Sum(p => p.MarketValue);
-        var sectorPercent = sectorValue / totalCapital * 100;
+        // 按行业分组检查集中度
+        var sectorGroups = positions
+            .Where(p => !string.IsNullOrEmpty(p.Name))
+            .GroupBy(p => GetSectorFromPosition(p))
+            .Where(g => !string.IsNullOrEmpty(g.Key))
+            .ToList();
+
+        var maxSectorPercent = 0m;
+        var maxSectorName = "";
+
+        foreach (var group in sectorGroups)
+        {
+            var sectorValue = group.Sum(p => p.MarketValue);
+            var sectorPercent = sectorValue / totalCapital * 100;
+            if (sectorPercent > maxSectorPercent)
+            {
+                maxSectorPercent = sectorPercent;
+                maxSectorName = group.Key;
+            }
+        }
 
         return new RiskCheckItem
         {
             Name = "板块集中度限制",
-            Passed = sectorPercent <= MaxSectorPercent,
-            CurrentValue = sectorPercent,
-            LimitValue = MaxSectorPercent,
-            Description = $"板块集中度: {sectorPercent:F2}%，限制: {MaxSectorPercent}%"
+            Passed = maxSectorPercent <= _config.MaxSectorPercent,
+            CurrentValue = maxSectorPercent,
+            LimitValue = _config.MaxSectorPercent,
+            Description = $"板块集中度: {maxSectorPercent:F2}%（{maxSectorName}），限制: {_config.MaxSectorPercent}%"
         };
     }
 
-    private string CalculateRiskLevel(List<RiskCheckItem> checks)
+    private static string GetSectorFromPosition(PortfolioPosition position)
+    {
+        if (!string.IsNullOrEmpty(position.Industry))
+            return position.Industry;
+        return "未知";
+    }
+
+    private RiskLevel CalculateRiskLevel(List<RiskCheckItem> checks)
     {
         var failedCount = checks.Count(c => !c.Passed);
 
-        if (failedCount >= 3) return "critical";
-        if (failedCount >= 2) return "high";
-        if (failedCount >= 1) return "medium";
-        return "low";
+        if (failedCount >= _config.CriticalThreshold) return RiskLevel.Critical;
+        if (failedCount >= _config.HighThreshold) return RiskLevel.High;
+        if (failedCount >= _config.MediumThreshold) return RiskLevel.Medium;
+        return RiskLevel.Low;
     }
 
     private string GenerateSuggestion(RiskCheckResult result)

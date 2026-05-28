@@ -68,5 +68,10 @@ public enum DataCapability
     /// <summary>
     /// 股票池
     /// </summary>
-    StockUniverse
+    StockUniverse,
+
+    /// <summary>
+    /// 交易能力
+    /// </summary>
+    Trading
 }

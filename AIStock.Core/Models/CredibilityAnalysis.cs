@@ -41,9 +41,9 @@ public class CredibilityResult : AnalysisResultBase
     public string? CapitalAnalysis { get; set; }
 
     /// <summary>
-    /// 综合判断（real/fake/uncertain）
+    /// 综合判断
     /// </summary>
-    public string Verdict { get; set; } = "uncertain";
+    public Enums.Verdict Verdict { get; set; } = Enums.Verdict.Uncertain;
 
     /// <summary>
     /// 判断理由
@@ -87,9 +87,9 @@ public class SpreadAnalysisResult : AnalysisResultBase
     public double HeatSlope { get; set; }
 
     /// <summary>
-    /// 传播速度评级（slow/medium/fast/viral）
+    /// 传播速度评级
     /// </summary>
-    public string SpreadSpeed { get; set; } = "medium";
+    public Enums.SpreadSpeed SpreadSpeed { get; set; } = Enums.SpreadSpeed.Medium;
 
     /// <summary>
     /// 预计热度峰值时间

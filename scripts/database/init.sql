@@ -46,7 +46,7 @@ CREATE TABLE IF NOT EXISTS `company_relation` (
     `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键',
     `source_company` VARCHAR(20) NOT NULL COMMENT '源公司代码',
     `target_company` VARCHAR(20) NOT NULL COMMENT '目标公司代码',
-    `relation_type` VARCHAR(50) NOT NULL COMMENT '关系类型（customer/supplier/invest/controll）',
+    `relation_type` VARCHAR(50) NOT NULL COMMENT '关系类型（customer/supplier/invest/control）',
     `weight` DECIMAL(5,2) NOT NULL DEFAULT 1.00 COMMENT '权重',
     `description` VARCHAR(500) DEFAULT NULL COMMENT '描述',
     `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',

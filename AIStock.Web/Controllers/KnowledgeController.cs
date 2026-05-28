@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using AIStock.Core.Interfaces;
 using AIStock.Core.Models;
 using Microsoft.AspNetCore.Mvc;
@@ -206,25 +207,31 @@ public class KnowledgeController : ControllerBase
 /// </summary>
 public class ConceptDiffusionRequest
 {
+    [Required(ErrorMessage = "核心事件不能为空")]
     public string CoreEvent { get; set; } = string.Empty;
+
+    [Required(ErrorMessage = "关联概念不能为空")]
+    [MinLength(1, ErrorMessage = "至少需要一个关联概念")]
     public List<string> RelatedConcepts { get; set; } = new();
 }
 
-/// <summary>
-/// 概念筛选请求
-/// </summary>
 public class ConceptFilterRequest
 {
+    [Required(ErrorMessage = "概念列表不能为空")]
+    [MinLength(1, ErrorMessage = "至少需要一个概念")]
     public List<string> Concepts { get; set; } = new();
+
+    [Range(1, 100, ErrorMessage = "数量必须在1-100之间")]
     public int Count { get; set; } = 20;
 }
 
-/// <summary>
-/// 产业链筛选请求
-/// </summary>
 public class ChainFilterRequest
 {
+    [Required(ErrorMessage = "产业链名称不能为空")]
     public string ChainName { get; set; } = string.Empty;
+
     public string? Role { get; set; }
+
+    [Range(1, 100, ErrorMessage = "数量必须在1-100之间")]
     public int Count { get; set; } = 20;
 }

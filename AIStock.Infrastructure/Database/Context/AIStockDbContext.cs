@@ -57,6 +57,46 @@ public class AIStockDbContext : DbContext
     /// </summary>
     public DbSet<PositionEntity> Position { get; set; }
 
+    /// <summary>
+    /// 事件-股票关联
+    /// </summary>
+    public DbSet<EventStockRelationEntity> EventStockRelation { get; set; }
+
+    /// <summary>
+    /// 事件-概念关联
+    /// </summary>
+    public DbSet<EventConceptRelationEntity> EventConceptRelation { get; set; }
+
+    public override int SaveChanges()
+    {
+        UpdateTimestamps();
+        return base.SaveChanges();
+    }
+
+    public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
+    {
+        UpdateTimestamps();
+        return base.SaveChangesAsync(cancellationToken);
+    }
+
+    private void UpdateTimestamps()
+    {
+        var entries = ChangeTracker.Entries()
+            .Where(e => e.State == EntityState.Added || e.State == EntityState.Modified);
+
+        foreach (var entry in entries)
+        {
+            if (entry.Entity.GetType().GetProperty("CreatedAt") != null && entry.State == EntityState.Added)
+            {
+                entry.Property("CreatedAt").CurrentValue = DateTime.UtcNow;
+            }
+            if (entry.Entity.GetType().GetProperty("UpdatedAt") != null)
+            {
+                entry.Property("UpdatedAt").CurrentValue = DateTime.UtcNow;
+            }
+        }
+    }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -132,6 +172,30 @@ public class AIStockDbContext : DbContext
         {
             entity.HasKey(e => e.Id);
             entity.HasIndex(e => e.Code).IsUnique();
+        });
+
+        // 事件-股票关联
+        modelBuilder.Entity<EventStockRelationEntity>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => new { e.EventId, e.StockCode }).IsUnique();
+            entity.HasIndex(e => e.StockCode);
+            entity.HasOne(e => e.Event)
+                  .WithMany()
+                  .HasForeignKey(e => e.EventId)
+                  .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // 事件-概念关联
+        modelBuilder.Entity<EventConceptRelationEntity>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => new { e.EventId, e.ConceptName }).IsUnique();
+            entity.HasIndex(e => e.ConceptName);
+            entity.HasOne(e => e.Event)
+                  .WithMany()
+                  .HasForeignKey(e => e.EventId)
+                  .OnDelete(DeleteBehavior.Cascade);
         });
     }
 }

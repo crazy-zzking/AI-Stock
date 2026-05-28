@@ -3,6 +3,7 @@ using AIStock.Intelligence.Collectors;
 using AIStock.Intelligence.Common;
 using AIStock.Intelligence.Services;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 
 namespace AIStock.Intelligence;
 
@@ -21,7 +22,12 @@ public static class DependencyInjection
 
         // 采集器
         services.AddScoped<IReportCollector, EastmoneyReportCollector>();
-        services.AddScoped<INewsCollector, NewsCollectorService>();
+        services.AddScoped<INewsCollector>(sp =>
+        {
+            var httpClient = sp.GetRequiredService<IHttpClientFactory>().CreateClient();
+            var logger = sp.GetRequiredService<ILogger<NewsCollectorService>>();
+            return new NewsCollectorService(httpClient, logger);
+        });
         services.AddScoped<IKnowledgeStarCollector, KnowledgeStarCollectorService>();
 
         // 分析服务

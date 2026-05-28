@@ -283,17 +283,34 @@ public class EventEngineService
         if (endDate.HasValue)
             query = query.Where(e => e.EventTime <= endDate.Value);
 
-        var events = await query.ToListAsync(cancellationToken);
+        // 使用SQL聚合替代全量加载到内存
+        var totalCount = await query.CountAsync(cancellationToken);
+        var positiveCount = await query.CountAsync(e => e.Sentiment == "positive", cancellationToken);
+        var negativeCount = await query.CountAsync(e => e.Sentiment == "negative", cancellationToken);
+        var neutralCount = await query.CountAsync(e => e.Sentiment == "neutral", cancellationToken);
+
+        var avgImportance = await query
+            .Where(e => e.Importance.HasValue)
+            .AverageAsync(e => (double?)e.Importance!.Value, cancellationToken) ?? 0;
+
+        var avgCredibility = await query
+            .Where(e => e.Credibility.HasValue)
+            .AverageAsync(e => (double?)e.Credibility!.Value, cancellationToken) ?? 0;
+
+        var byType = await query
+            .GroupBy(e => e.EventType)
+            .Select(g => new { Type = g.Key, Count = g.Count() })
+            .ToDictionaryAsync(g => g.Type, g => g.Count, cancellationToken);
 
         return new EventStatistics
         {
-            TotalCount = events.Count,
-            PositiveCount = events.Count(e => e.Sentiment == "positive"),
-            NegativeCount = events.Count(e => e.Sentiment == "negative"),
-            NeutralCount = events.Count(e => e.Sentiment == "neutral"),
-            AverageImportance = events.Where(e => e.Importance.HasValue).Average(e => e.Importance!.Value),
-            AverageCredibility = events.Where(e => e.Credibility.HasValue).Average(e => e.Credibility!.Value),
-            ByType = events.GroupBy(e => e.EventType).ToDictionary(g => g.Key, g => g.Count())
+            TotalCount = totalCount,
+            PositiveCount = positiveCount,
+            NegativeCount = negativeCount,
+            NeutralCount = neutralCount,
+            AverageImportance = avgImportance,
+            AverageCredibility = avgCredibility,
+            ByType = byType
         };
     }
 }

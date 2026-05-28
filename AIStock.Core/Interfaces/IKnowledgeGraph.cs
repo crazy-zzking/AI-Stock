@@ -10,47 +10,47 @@ public interface ICompanyRelationGraph
     /// <summary>
     /// 添加公司关系
     /// </summary>
-    Task<long> AddRelationAsync(CompanyRelation relation);
+    Task<long> AddRelationAsync(CompanyRelation relation, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// 批量添加公司关系
     /// </summary>
-    Task<int> AddRelationsAsync(IEnumerable<CompanyRelation> relations);
+    Task<int> AddRelationsAsync(IEnumerable<CompanyRelation> relations, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// 获取公司的所有关系
     /// </summary>
-    Task<List<CompanyRelation>> GetCompanyRelationsAsync(string companyCode);
+    Task<List<CompanyRelation>> GetCompanyRelationsAsync(string companyCode, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// 获取公司的供应商
     /// </summary>
-    Task<List<CompanyRelation>> GetSuppliersAsync(string companyCode);
+    Task<List<CompanyRelation>> GetSuppliersAsync(string companyCode, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// 获取公司的客户
     /// </summary>
-    Task<List<CompanyRelation>> GetCustomersAsync(string companyCode);
+    Task<List<CompanyRelation>> GetCustomersAsync(string companyCode, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// 获取公司的投资关系
     /// </summary>
-    Task<List<CompanyRelation>> GetInvestmentsAsync(string companyCode);
+    Task<List<CompanyRelation>> GetInvestmentsAsync(string companyCode, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// 获取公司的控股关系
     /// </summary>
-    Task<List<CompanyRelation>> GetControllingAsync(string companyCode);
+    Task<List<CompanyRelation>> GetControllingAsync(string companyCode, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// 查找两个公司之间的关系路径
     /// </summary>
-    Task<List<List<CompanyRelation>>> FindRelationPathAsync(string fromCode, string toCode, int maxDepth = 3);
+    Task<List<List<CompanyRelation>>> FindRelationPathAsync(string fromCode, string toCode, int maxDepth = 3, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// 删除公司关系
     /// </summary>
-    Task<bool> DeleteRelationAsync(long id);
+    Task<bool> DeleteRelationAsync(long id, CancellationToken cancellationToken = default);
 }
 
 /// <summary>
@@ -61,37 +61,37 @@ public interface IIndustryChainGraph
     /// <summary>
     /// 添加产业链节点
     /// </summary>
-    Task<long> AddChainNodeAsync(IndustryChainNode node);
+    Task<long> AddChainNodeAsync(IndustryChainNode node, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// 添加公司-产业链关联
     /// </summary>
-    Task<long> AddCompanyChainRelationAsync(CompanyChainRelation relation);
+    Task<long> AddCompanyChainRelationAsync(CompanyChainRelation relation, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// 获取产业链结构
     /// </summary>
-    Task<List<IndustryChainNode>> GetChainStructureAsync(string chainName);
+    Task<List<IndustryChainNode>> GetChainStructureAsync(string chainName, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// 获取公司的产业链位置
     /// </summary>
-    Task<List<CompanyChainRelation>> GetCompanyChainPositionsAsync(string companyCode);
+    Task<List<CompanyChainRelation>> GetCompanyChainPositionsAsync(string companyCode, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// 获取产业链的上下游公司
     /// </summary>
-    Task<List<CompanyChainRelation>> GetChainCompaniesAsync(string chainName, string? role = null);
+    Task<List<CompanyChainRelation>> GetChainCompaniesAsync(string chainName, string? role = null, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// 获取所有产业链列表
     /// </summary>
-    Task<List<string>> GetAllChainNamesAsync();
+    Task<List<string>> GetAllChainNamesAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
     /// 概念扩散推演
     /// </summary>
-    Task<ConceptDiffusionResult> DiffuseConceptAsync(string coreEvent, List<string> relatedConcepts);
+    Task<ConceptDiffusionResult> DiffuseConceptAsync(string coreEvent, List<string> relatedConcepts, CancellationToken cancellationToken = default);
 }
 
 /// <summary>
@@ -102,15 +102,15 @@ public interface IStockFilter
     /// <summary>
     /// 根据条件筛选标的
     /// </summary>
-    Task<List<StockFilterResult>> FilterStocksAsync(StockFilterCriteria criteria);
+    Task<List<StockFilterResult>> FilterStocksAsync(StockFilterCriteria criteria, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// 根据概念筛选标的
     /// </summary>
-    Task<List<StockFilterResult>> FilterByConceptsAsync(List<string> concepts, int count = 20);
+    Task<List<StockFilterResult>> FilterByConceptsAsync(List<string> concepts, int count = 20, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// 根据产业链筛选标的
     /// </summary>
-    Task<List<StockFilterResult>> FilterByChainAsync(string chainName, string? role = null, int count = 20);
+    Task<List<StockFilterResult>> FilterByChainAsync(string chainName, string? role = null, int count = 20, CancellationToken cancellationToken = default);
 }

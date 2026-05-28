@@ -1,12 +1,11 @@
 using AIStock.Core.Enums;
 using AIStock.Core.Interfaces;
-using AIStock.Data.Providers.Sanhu;
 using Microsoft.Extensions.Logging;
 
 namespace AIStock.Execution.Services;
 
 /// <summary>
-/// 订单管理实现 - 对接散户量化
+/// 订单管理实现 - 通过IDataProvider接口解耦
 /// </summary>
 public class OrderManagerService : IOrderManager
 {
@@ -21,46 +20,44 @@ public class OrderManagerService : IOrderManager
         _logger = logger;
     }
 
-    private SanhuProvider? GetSanhuProvider()
+    private IDataProvider? GetTradingProvider()
     {
-        return _dataProviderResolver.GetAllProviders()
-            .FirstOrDefault(p => p.ProviderId == "sanhu") as SanhuProvider;
+        return _dataProviderResolver.GetPrimaryProvider(DataCapability.Trading);
     }
 
     public async Task<OrderResult> PlaceOrderAsync(OrderRequest request)
     {
         try
         {
-            var provider = GetSanhuProvider();
+            var provider = GetTradingProvider();
             if (provider == null)
             {
                 return new OrderResult
                 {
                     Success = false,
-                    Message = "散户量化Provider未配置",
+                    Message = "交易Provider未配置",
                     Status = OrderStatus.Failed
                 };
             }
 
-            var hands = (int)(request.Volume / 100);
-            if (hands <= 0)
+            if (request.Volume < 100)
             {
                 return new OrderResult
                 {
                     Success = false,
-                    Message = "下单数量不足1手",
+                    Message = "下单数量不足1手(100股)",
                     Status = OrderStatus.Failed
                 };
             }
 
-            SanhuOrderResult result;
+            TradingOrderResult result;
             if (request.Side.ToLower() == "buy")
             {
-                result = await provider.PlaceBuyOrderAsync(request.Code, request.Price, hands);
+                result = await provider.PlaceBuyOrderAsync(request.Code, request.Price, (int)request.Volume);
             }
             else
             {
-                result = await provider.PlaceSellOrderAsync(request.Code, request.Price, hands);
+                result = await provider.PlaceSellOrderAsync(request.Code, request.Price, (int)request.Volume);
             }
 
             var orderId = result.OrderId.ToString();
@@ -91,7 +88,7 @@ public class OrderManagerService : IOrderManager
 
     public async Task<bool> CancelOrderAsync(string orderId)
     {
-        _logger.LogWarning("CancelOrder not supported via SanhuQuant API");
+        _logger.LogWarning("CancelOrder not supported via current trading provider");
         return false;
     }
 
@@ -102,7 +99,7 @@ public class OrderManagerService : IOrderManager
             if (!long.TryParse(orderId, out var orderIdLong))
                 return OrderStatus.Failed;
 
-            var provider = GetSanhuProvider();
+            var provider = GetTradingProvider();
             if (provider == null)
                 return OrderStatus.Failed;
 
@@ -126,7 +123,7 @@ public class OrderManagerService : IOrderManager
     {
         try
         {
-            var provider = GetSanhuProvider();
+            var provider = GetTradingProvider();
             if (provider == null)
                 return new List<OrderInfo>();
 
@@ -139,8 +136,8 @@ public class OrderManagerService : IOrderManager
                 Price = t.Price,
                 Volume = t.Volume,
                 Status = OrderStatus.Filled,
-                CreateTime = DateTime.UtcNow,
-                UpdateTime = DateTime.UtcNow
+                CreateTime = t.TradeTime,
+                UpdateTime = t.TradeTime
             }).ToList();
         }
         catch (Exception ex)

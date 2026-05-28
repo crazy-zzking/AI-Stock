@@ -10,10 +10,14 @@ namespace AIStock.Risk.Services;
 /// </summary>
 public class StopLossSystemService : IStopLossSystem
 {
+    private readonly RiskConfig _config;
     private readonly ILogger<StopLossSystemService> _logger;
 
-    public StopLossSystemService(ILogger<StopLossSystemService> logger)
+    public StopLossSystemService(ILogger<StopLossSystemService> logger) : this(logger, new RiskConfig()) { }
+
+    public StopLossSystemService(ILogger<StopLossSystemService> logger, RiskConfig config)
     {
+        _config = config;
         _logger = logger;
     }
 
@@ -23,13 +27,14 @@ public class StopLossSystemService : IStopLossSystem
         {
             case StopLossMode.ATR:
                 var atr = CalculateATR(klines);
-                return CalculateATRStopLoss(signal.Price, atr);
+                return CalculateATRStopLoss(signal.Price, atr, _config.AtrMultiplier);
             case StopLossMode.Fixed:
-                return CalculateFixedStopLoss(signal.Price, 5);
+                return CalculateFixedStopLoss(signal.Price, _config.DefaultFixedStopPercent);
             case StopLossMode.Trailing:
-                return CalculateFixedStopLoss(signal.Price, 8);
+                var highestPrice = klines.Any() ? klines.Max(k => k.High) : signal.Price;
+                return CalculateTrailingStop(highestPrice, _config.DefaultTrailingPercent);
             default:
-                return signal.Price * 0.95m;
+                return signal.Price * _config.DefaultStopLossMultiplier;
         }
     }
 
@@ -39,13 +44,13 @@ public class StopLossSystemService : IStopLossSystem
         {
             case StopLossMode.ATR:
                 var atr = CalculateATR(klines);
-                return signal.Price + atr * 3;
+                return signal.Price + atr * _config.AtrMultiplier;
             case StopLossMode.Fixed:
-                return signal.Price * 1.1m;
+                return signal.Price * _config.DefaultTakeProfitMultiplier;
             case StopLossMode.Trailing:
-                return signal.Price * 1.15m;
+                return signal.Price * _config.DefaultTrailingTakeProfitMultiplier;
             default:
-                return signal.Price * 1.1m;
+                return signal.Price * _config.DefaultTakeProfitMultiplier;
         }
     }
 

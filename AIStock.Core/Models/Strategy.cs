@@ -140,9 +140,9 @@ public class TradeSignal
     public string Code { get; set; } = string.Empty;
 
     /// <summary>
-    /// 信号类型（buy/sell/hold）
+    /// 信号类型
     /// </summary>
-    public string SignalType { get; set; } = string.Empty;
+    public Enums.SignalType SignalType { get; set; } = Enums.SignalType.Hold;
 
     /// <summary>
     /// 信号强度（0-100）
@@ -315,22 +315,22 @@ public class BacktestTrade
 /// <summary>
 /// 每日净值
 /// </summary>
-public class DailyNav
+public record DailyNav
 {
     /// <summary>
     /// 日期
     /// </summary>
-    public DateTime Date { get; set; }
+    public DateTime Date { get; init; }
 
     /// <summary>
     /// 净值
     /// </summary>
-    public decimal Nav { get; set; }
+    public decimal Nav { get; init; }
 
     /// <summary>
     /// 收益率（%）
     /// </summary>
-    public decimal Return { get; set; }
+    public decimal Return { get; init; }
 }
 
 /// <summary>
@@ -347,6 +347,11 @@ public class PortfolioPosition
     /// 股票名称
     /// </summary>
     public string Name { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 行业
+    /// </summary>
+    public string Industry { get; set; } = string.Empty;
 
     /// <summary>
     /// 持仓数量
@@ -410,9 +415,9 @@ public class RiskCheckResult
     public List<RiskCheckItem> Checks { get; set; } = new();
 
     /// <summary>
-    /// 风险等级（low/medium/high/critical）
+    /// 风险等级
     /// </summary>
-    public string RiskLevel { get; set; } = "low";
+    public Enums.RiskLevel RiskLevel { get; set; } = Enums.RiskLevel.Low;
 
     /// <summary>
     /// 建议
@@ -423,30 +428,30 @@ public class RiskCheckResult
 /// <summary>
 /// 风控检查项
 /// </summary>
-public class RiskCheckItem
+public record RiskCheckItem
 {
     /// <summary>
     /// 检查名称
     /// </summary>
-    public string Name { get; set; } = string.Empty;
+    public string Name { get; init; } = string.Empty;
 
     /// <summary>
     /// 是否通过
     /// </summary>
-    public bool Passed { get; set; }
+    public bool Passed { get; init; }
 
     /// <summary>
     /// 当前值
     /// </summary>
-    public decimal CurrentValue { get; set; }
+    public decimal CurrentValue { get; init; }
 
     /// <summary>
     /// 限制值
     /// </summary>
-    public decimal LimitValue { get; set; }
+    public decimal LimitValue { get; init; }
 
     /// <summary>
     /// 说明
     /// </summary>
-    public string Description { get; set; } = string.Empty;
+    public string Description { get; init; } = string.Empty;
 }
