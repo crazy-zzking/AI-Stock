@@ -413,7 +413,7 @@ Portfolio Engine → Risk Engine → OMS → Execution Engine → SanhuQuant API
 
 ---
 
-### 阶段六：AI高级能力（待开发）
+### 阶段六：AI高级能力（进行中）
 
 **工期：** 4-5周
 
@@ -421,13 +421,30 @@ Portfolio Engine → Risk Engine → OMS → Execution Engine → SanhuQuant API
 
 #### 任务清单
 
-| 任务 | 优先级 | 说明 |
-|------|--------|------|
-| DL策略 | P1 | LSTM/Transformer/PatchTST |
-| RL策略 | P2 | PPO/SAC/DQN动态仓位 |
-| Multi-Agent框架 | P3 | Research/Theme/Alpha/Risk/Execution |
-| Agent编排器 | P3 | 工作流编排 |
-| 自主决策系统 | P3 | 自动交易决策 |
+| 任务 | 优先级 | 说明 | 状态 |
+|------|--------|------|------|
+| DL策略 | P1 | LSTM/Transformer/PatchTST | ⏳ 接口已定义 |
+| RL策略 | P2 | PPO/SAC/DQN动态仓位 | ⏳ 待开发 |
+| Multi-Agent框架 | P3 | Research/Theme/Alpha/Risk/Execution | ✅ 完成 |
+| Agent编排器 | P3 | 工作流编排 | ✅ 完成 |
+| 自主决策系统 | P3 | 自动交易决策 | ⏳ 待开发 |
+
+#### 已实现API
+
+| 接口 | 方法 | 说明 |
+|------|------|------|
+| `/api/orchestrator/agents` | GET | 获取所有Agent状态 |
+| `/api/orchestrator/analyze` | POST | 执行股票分析 |
+| `/api/orchestrator/signal` | POST | 生成交易信号 |
+| `/api/orchestrator/workflow` | POST | 执行工作流 |
+
+#### Agent列表
+
+| Agent | 类型 | 功能 |
+|-------|------|------|
+| ResearchAgent | research | 市场研究和分析 |
+| AlphaAgent | alpha | 交易信号生成 |
+| RiskAgent | risk | 风险控制 |
 
 ---
 
@@ -590,3 +607,4 @@ curl http://localhost:5172/api/health
 | 2026-05-28 | v4.1 | 对接散户量化持仓和订单接口（持仓查询、买入、卖出、订单查询、可撤委托、成交记录） |
 | 2026-05-28 | v4.2 | 合并持仓和资金接口（一次请求返回持仓+账户资金） |
 | 2026-05-28 | v4.3 | 移除GetAccountBalanceAsync，统一使用GetAccountPositionsAsync |
+| 2026-05-28 | v5.0 | 阶段六：Multi-Agent框架（ResearchAgent、AlphaAgent、RiskAgent、AgentOrchestrator） |
