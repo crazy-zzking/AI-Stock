@@ -135,9 +135,7 @@ Portfolio Engine → Risk Engine → OMS → Execution Engine → SanhuQuant API
 | 回测引擎 | 手续费/滑点/冲击成本/涨跌停 | P0 | ✅ 完成 |
 | 规则策略 | 均线突破/网格/配对交易 | P0 | ✅ 完成 |
 | ML策略 | XGBoost/LightGBM | P1 | ⏳ 阶段五 |
-| DL策略 | LSTM/Transformer/PatchTST | P1 | ⏳ 阶段六 |
-| RL策略 | PPO/SAC/DQN动态仓位 | P2 | ⏳ 阶段六 |
-| Multi-Agent | Research/Theme/Alpha/Risk/Execution | P3 | ⏳ 阶段六 |
+| Multi-Agent | Research/Theme/Alpha/Risk/Execution | P3 | ✅ 完成 |
 
 ### 第9层：风控层
 
@@ -417,14 +415,12 @@ Portfolio Engine → Risk Engine → OMS → Execution Engine → SanhuQuant API
 
 **工期：** 4-5周
 
-**目标：** 实现深度学习、强化学习和Multi-Agent
+**目标：** 实现Multi-Agent框架
 
 #### 任务清单
 
 | 任务 | 优先级 | 说明 | 状态 |
 |------|--------|------|------|
-| DL策略 | P1 | LSTM/Transformer/PatchTST | ⏳ 接口已定义 |
-| RL策略 | P2 | PPO/SAC/DQN动态仓位 | ⏳ 待开发 |
 | Multi-Agent框架 | P3 | Research/Theme/Alpha/Risk/Execution | ✅ 完成 |
 | Agent编排器 | P3 | 工作流编排 | ✅ 完成 |
 | 自主决策系统 | P3 | 自动交易决策 | ⏳ 待开发 |
