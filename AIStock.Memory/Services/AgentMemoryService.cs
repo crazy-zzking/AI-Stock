@@ -2,17 +2,18 @@ using AIStock.Core.Interfaces;
 using AIStock.Infrastructure.Database.Context;
 using AIStock.Infrastructure.Database.Entities;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using System.Text.Json;
 
 namespace AIStock.Memory.Services;
 
 /// <summary>
-/// Agent记忆服务 — EF Core持久化实现
+/// Agent记忆服务 — EF Core持久化实现，使用IServiceScopeFactory确保并行安全
 /// </summary>
 public class AgentMemoryService : IAgentMemory
 {
-    private readonly AIStockDbContext _dbContext;
+    private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<AgentMemoryService> _logger;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -22,10 +23,10 @@ public class AgentMemoryService : IAgentMemory
     };
 
     public AgentMemoryService(
-        AIStockDbContext dbContext,
+        IServiceScopeFactory scopeFactory,
         ILogger<AgentMemoryService> logger)
     {
-        _dbContext = dbContext;
+        _scopeFactory = scopeFactory;
         _logger = logger;
     }
 
@@ -33,6 +34,8 @@ public class AgentMemoryService : IAgentMemory
     {
         try
         {
+            using var scope = _scopeFactory.CreateScope();
+            var dbContext = scope.ServiceProvider.GetRequiredService<AIStockDbContext>();
             var stockCode = task.Parameters.GetValueOrDefault("code")?.ToString() ?? "";
 
             // 提取关键指标
@@ -52,8 +55,8 @@ public class AgentMemoryService : IAgentMemory
                 CreatedAt = DateTime.UtcNow
             };
 
-            _dbContext.AgentMemory.Add(entity);
-            await _dbContext.SaveChangesAsync();
+            dbContext.AgentMemory.Add(entity);
+            await dbContext.SaveChangesAsync();
 
             _logger.LogDebug("Saved memory for agent {AgentId}, stock {Code}, task {TaskType}",
                 agentId, stockCode, task.TaskType);
@@ -66,7 +69,10 @@ public class AgentMemoryService : IAgentMemory
 
     public async Task<List<AgentMemoryRecord>> GetHistoryAsync(string agentId, string stockCode, int count = 10)
     {
-        var entities = await _dbContext.AgentMemory
+        using var scope = _scopeFactory.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<AIStockDbContext>();
+
+        var entities = await dbContext.AgentMemory
             .Where(m => m.AgentId == agentId && m.StockCode == stockCode)
             .OrderByDescending(m => m.CreatedAt)
             .Take(count)
@@ -77,7 +83,10 @@ public class AgentMemoryService : IAgentMemory
 
     public async Task<AgentMemoryRecord?> GetLatestAsync(string agentId, string stockCode)
     {
-        var entity = await _dbContext.AgentMemory
+        using var scope = _scopeFactory.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<AIStockDbContext>();
+
+        var entity = await dbContext.AgentMemory
             .Where(m => m.AgentId == agentId && m.StockCode == stockCode)
             .OrderByDescending(m => m.CreatedAt)
             .FirstOrDefaultAsync();
@@ -87,7 +96,10 @@ public class AgentMemoryService : IAgentMemory
 
     public async Task<List<AgentMemoryRecord>> GetRecentAsync(string agentId, int count = 20)
     {
-        var entities = await _dbContext.AgentMemory
+        using var scope = _scopeFactory.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<AIStockDbContext>();
+
+        var entities = await dbContext.AgentMemory
             .Where(m => m.AgentId == agentId)
             .OrderByDescending(m => m.CreatedAt)
             .Take(count)

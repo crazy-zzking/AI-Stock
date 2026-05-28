@@ -6,6 +6,7 @@ using AIStock.Prompt;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
+using System.Diagnostics;
 
 namespace AIStock.LLM.Services;
 
@@ -14,6 +15,7 @@ namespace AIStock.LLM.Services;
 /// </summary>
 public class LLMService : ILLMService
 {
+    private static readonly ActivitySource ActivitySource = new("AIStock.LLM");
     private readonly AIStockDbContext _dbContext;
     private readonly ILLMProvider _llmProvider;
     private readonly IMemoryCache _cache;
@@ -56,6 +58,10 @@ public class LLMService : ILLMService
 
     public async Task<LLMResponse> SendAsync(LLMRequest request, string modelId, CancellationToken cancellationToken = default)
     {
+        using var activity = ActivitySource.StartActivity("LLM.Send", ActivityKind.Client);
+        activity?.SetTag("llm.model_id", modelId);
+        activity?.SetTag("llm.temperature", (double)request.Temperature);
+
         var configs = await GetModelConfigsAsync();
 
         if (!configs.TryGetValue(modelId, out var config))

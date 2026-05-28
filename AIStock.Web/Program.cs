@@ -7,6 +7,7 @@ using AIStock.Data.Providers.Tdx;
 using AIStock.EventEngine;
 using AIStock.Execution;
 using AIStock.Feature;
+using AIStock.GraphRAG;
 using AIStock.Infrastructure.Database.Context;
 using AIStock.Infrastructure.MessageBus;
 using AIStock.Intelligence;
@@ -19,6 +20,10 @@ using AIStock.Prompt.Services;
 using AIStock.Risk;
 using AIStock.Strategy;
 using Microsoft.EntityFrameworkCore;
+using OpenTelemetry.Logs;
+using OpenTelemetry.Metrics;
+using OpenTelemetry.Resources;
+using OpenTelemetry.Trace;
 using Serilog;
 using StackExchange.Redis;
 
@@ -42,6 +47,52 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddOpenApi();
 builder.Services.AddMemoryCache();
+
+// 配置 OpenTelemetry 可观测性
+var otelEndpoint = builder.Configuration.GetValue<string>("OpenTelemetry:Endpoint");
+var serviceName = "AIStock";
+var serviceVersion = "1.0.0";
+
+if (!string.IsNullOrEmpty(otelEndpoint))
+{
+    builder.Services.AddOpenTelemetry()
+        .ConfigureResource(r => r.AddService(
+            serviceName: serviceName,
+            serviceVersion: serviceVersion))
+        .WithTracing(t => t
+            .AddAspNetCoreInstrumentation()
+            .AddHttpClientInstrumentation()
+            .AddEntityFrameworkCoreInstrumentation()
+            .AddSource("AIStock.Orchestrator", "AIStock.LLM", "AIStock.Strategy")
+            .AddOtlpExporter(o => o.Endpoint = new Uri(otelEndpoint)))
+        .WithMetrics(m => m
+            .AddAspNetCoreInstrumentation()
+            .AddRuntimeInstrumentation()
+            .AddPrometheusExporter());
+
+    // 将 OTLP 也接入 Serilog 日志管道
+    builder.Logging.AddOpenTelemetry(o =>
+    {
+        o.SetResourceBuilder(ResourceBuilder.CreateDefault()
+            .AddService(serviceName, serviceVersion: serviceVersion));
+        o.IncludeFormattedMessage = true;
+        o.IncludeScopes = true;
+        o.ParseStateValues = true;
+        o.AddOtlpExporter(exp => exp.Endpoint = new Uri(otelEndpoint));
+    });
+}
+else
+{
+    // 无 OTLP 端点时仅启用 Prometheus metrics（本地开发模式）
+    builder.Services.AddOpenTelemetry()
+        .ConfigureResource(r => r.AddService(
+            serviceName: serviceName,
+            serviceVersion: serviceVersion))
+        .WithMetrics(m => m
+            .AddAspNetCoreInstrumentation()
+            .AddRuntimeInstrumentation()
+            .AddPrometheusExporter());
+}
 
 // 配置MySQL
 var connectionString = builder.Configuration.GetConnectionString("MySQL");
@@ -67,6 +118,9 @@ builder.Services.AddEventEngineServices();
 
 // 注册知识图谱服务
 builder.Services.AddKnowledgeServices();
+
+// 注册图谱增强RAG服务
+builder.Services.AddGraphRAGServices();
 
 // 注册特征工程服务
 builder.Services.AddFeatureServices();
@@ -213,6 +267,7 @@ app.UseExceptionHandler(error =>
 app.UseCors();
 app.UseAuthorization();
 app.MapControllers();
+app.MapPrometheusScrapingEndpoint();
 
 // 初始化数据库（使用Migration）
 using (var scope = app.Services.CreateScope())

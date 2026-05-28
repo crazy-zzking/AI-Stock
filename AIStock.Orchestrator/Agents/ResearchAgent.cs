@@ -1,5 +1,6 @@
 using AIStock.Core.Interfaces;
 using AIStock.Core.Models;
+using AIStock.GraphRAG;
 using AIStock.Memory;
 using Microsoft.Extensions.Logging;
 
@@ -12,6 +13,7 @@ public class ResearchAgent : IAgent
 {
     private readonly IDataProviderResolver _dataProviderResolver;
     private readonly IFeatureCalculator _featureCalculator;
+    private readonly IGraphRAGService? _graphRAG;
     private readonly ILogger<ResearchAgent> _logger;
     private readonly IAgentMemory? _memory;
 
@@ -19,12 +21,14 @@ public class ResearchAgent : IAgent
         IDataProviderResolver dataProviderResolver,
         IFeatureCalculator featureCalculator,
         ILogger<ResearchAgent> logger,
-        IAgentMemory? memory = null)
+        IAgentMemory? memory = null,
+        IGraphRAGService? graphRAG = null)
     {
         _dataProviderResolver = dataProviderResolver;
         _featureCalculator = featureCalculator;
         _logger = logger;
         _memory = memory;
+        _graphRAG = graphRAG;
     }
 
     public string AgentId => "research-agent";
@@ -110,6 +114,21 @@ public class ResearchAgent : IAgent
             ["volatility"] = indicators.Volatility ?? 0,
             ["atr"] = indicators.ATR ?? 0
         };
+
+        // 注入图谱上下文（供LLM下游使用）
+        if (_graphRAG != null)
+        {
+            try
+            {
+                var graphContext = await _graphRAG.BuildContextAsync(code, "analysis");
+                analysis["graphContext"] = graphContext.ToPromptText();
+                analysis["graphContextRaw"] = graphContext;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to build graph context for {Code}", code);
+            }
+        }
 
         return new AgentResult
         {

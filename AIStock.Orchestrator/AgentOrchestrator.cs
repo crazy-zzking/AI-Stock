@@ -1,5 +1,6 @@
 using AIStock.Core.Interfaces;
 using Microsoft.Extensions.Logging;
+using System.Diagnostics;
 
 namespace AIStock.Orchestrator;
 
@@ -8,6 +9,7 @@ namespace AIStock.Orchestrator;
 /// </summary>
 public class AgentOrchestrator : IAgentOrchestrator
 {
+    private static readonly ActivitySource ActivitySource = new("AIStock.Orchestrator");
     private readonly Dictionary<string, IAgent> _agents = new();
     private readonly ILogger<AgentOrchestrator> _logger;
 
@@ -37,6 +39,10 @@ public class AgentOrchestrator : IAgentOrchestrator
 
     public async Task<WorkflowResult> ExecuteWorkflowAsync(WorkflowDefinition workflow)
     {
+        using var activity = ActivitySource.StartActivity("ExecuteWorkflow", ActivityKind.Internal);
+        activity?.SetTag("workflow.id", workflow.WorkflowId);
+        activity?.SetTag("workflow.name", workflow.Name);
+        activity?.SetTag("workflow.steps", workflow.Steps.Count);
         var startTime = DateTime.UtcNow;
         var result = new WorkflowResult
         {
@@ -105,12 +111,19 @@ public class AgentOrchestrator : IAgentOrchestrator
         }
 
         result.TotalExecutionTime = (long)(DateTime.UtcNow - startTime).TotalMilliseconds;
+        activity?.SetTag("workflow.success", result.Success);
+        activity?.SetTag("workflow.duration_ms", result.TotalExecutionTime);
         return result;
     }
 
     private async Task<(string StepId, AgentResult Result)> ExecuteStepAsync(
         WorkflowStep step, Dictionary<string, AgentResult> stepResults)
     {
+        using var activity = ActivitySource.StartActivity($"Agent.{step.AgentId}.{step.TaskType}");
+        activity?.SetTag("step.id", step.StepId);
+        activity?.SetTag("agent.id", step.AgentId);
+        activity?.SetTag("task.type", step.TaskType);
+
         var agent = _agents[step.AgentId];
 
         var task = new AgentTask

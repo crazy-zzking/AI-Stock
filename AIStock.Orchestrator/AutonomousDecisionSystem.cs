@@ -5,21 +5,24 @@ using Microsoft.Extensions.Logging;
 namespace AIStock.Orchestrator;
 
 /// <summary>
-/// 自主决策系统 - 自动分析市场并生成交易决策
+/// 自主决策系统 - 自动分析市场并生成交易决策，风控通过后自动下单
 /// </summary>
 public class AutonomousDecisionSystem
 {
     private readonly IAgentOrchestrator _orchestrator;
     private readonly IDataProviderResolver _dataProviderResolver;
+    private readonly IOrderManager _orderManager;
     private readonly ILogger<AutonomousDecisionSystem> _logger;
 
     public AutonomousDecisionSystem(
         IAgentOrchestrator orchestrator,
         IDataProviderResolver dataProviderResolver,
+        IOrderManager orderManager,
         ILogger<AutonomousDecisionSystem> logger)
     {
         _orchestrator = orchestrator;
         _dataProviderResolver = dataProviderResolver;
+        _orderManager = orderManager;
         _logger = logger;
     }
 
@@ -36,6 +39,7 @@ public class AutonomousDecisionSystem
 
         try
         {
+            // Step 1: 分析
             var analyzeResult = await ExecuteAnalysisAsync(request.Code);
             if (!analyzeResult.Success)
             {
@@ -43,7 +47,9 @@ public class AutonomousDecisionSystem
                 result.Message = $"Analysis failed: {analyzeResult.Message}";
                 return result;
             }
+            result.Analysis = analyzeResult.Output;
 
+            // Step 2: 信号生成
             var signalResult = await ExecuteSignalGenerationAsync(request.Code);
             if (!signalResult.Success)
             {
@@ -51,14 +57,40 @@ public class AutonomousDecisionSystem
                 result.Message = $"Signal generation failed: {signalResult.Message}";
                 return result;
             }
-
-            var riskResult = await ExecuteRiskCheckAsync(signalResult, request.TotalCapital);
-            
-            result.Success = true;
-            result.Analysis = analyzeResult.Output;
             result.Signals = signalResult.Output;
-            result.RiskCheck = riskResult?.Output;
-            result.Message = "Decision completed";
+
+            // Step 3: 风控检查（对每个信号分别检查）
+            var signals = ExtractSignals(signalResult);
+            var riskResults = new List<object>();
+            var orders = new List<OrderResult>();
+
+            foreach (var signal in signals)
+            {
+                var riskResult = await ExecuteRiskCheckAsync(signal, request.TotalCapital);
+                if (riskResult != null)
+                {
+                    riskResults.Add(riskResult.Output);
+
+                    // Step 4: 风控通过后自动下单
+                    if (riskResult.Success && IsRiskPassed(riskResult))
+                    {
+                        var orderResult = await PlaceOrderAsync(signal);
+                        orders.Add(orderResult);
+                        _logger.LogInformation(
+                            "Auto order placed for {Code}: {Side} {Volume}@{Price}, OrderId={OrderId}",
+                            signal.Code, signal.SignalType, signal.Volume, signal.Price, orderResult.OrderId);
+                    }
+                }
+            }
+
+            result.Success = true;
+            result.RiskCheck = riskResults.Count > 0
+                ? new Dictionary<string, object> { ["checks"] = riskResults }
+                : null;
+            result.Orders = orders;
+            result.Message = signals.Count > 0
+                ? $"Decision completed: {signals.Count} signals, {orders.Count} orders placed"
+                : "Decision completed: no actionable signals";
         }
         catch (Exception ex)
         {
@@ -72,25 +104,22 @@ public class AutonomousDecisionSystem
     }
 
     /// <summary>
-    /// 批量决策
+    /// 批量决策（并行执行）
     /// </summary>
     public async Task<List<DecisionResult>> MakeBatchDecisionAsync(List<string> codes, decimal totalCapital)
     {
-        var results = new List<DecisionResult>();
-
-        foreach (var code in codes)
+        var tasks = codes.Select(code =>
         {
             var request = new DecisionRequest
             {
                 Code = code,
                 TotalCapital = totalCapital
             };
+            return MakeDecisionAsync(request);
+        });
 
-            var result = await MakeDecisionAsync(request);
-            results.Add(result);
-        }
-
-        return results;
+        var results = await Task.WhenAll(tasks);
+        return results.ToList();
     }
 
     private async Task<AgentResult> ExecuteAnalysisAsync(string code)
@@ -127,7 +156,7 @@ public class AutonomousDecisionSystem
         return await agent.ExecuteAsync(task);
     }
 
-    private async Task<AgentResult?> ExecuteRiskCheckAsync(AgentResult signalResult, decimal totalCapital)
+    private async Task<AgentResult?> ExecuteRiskCheckAsync(TradeSignal signal, decimal totalCapital)
     {
         var agent = _orchestrator.GetAgent("risk-agent");
         if (agent == null)
@@ -140,11 +169,62 @@ public class AutonomousDecisionSystem
             TaskType = "check-risk",
             Parameters = new Dictionary<string, object>
             {
+                ["signal"] = signal,
                 ["totalCapital"] = totalCapital
             }
         };
 
         return await agent.ExecuteAsync(task);
+    }
+
+    private async Task<OrderResult> PlaceOrderAsync(TradeSignal signal)
+    {
+        var orderRequest = new OrderRequest
+        {
+            Code = signal.Code,
+            Side = signal.SignalType.ToString().ToLower(),
+            OrderType = Core.Enums.OrderType.Limit,
+            Price = signal.Price,
+            Volume = signal.Volume,
+            StrategyName = signal.StrategyName,
+            SignalId = signal.SignalId
+        };
+
+        return await _orderManager.PlaceOrderAsync(orderRequest);
+    }
+
+    private static List<TradeSignal> ExtractSignals(AgentResult signalResult)
+    {
+        var signals = new List<TradeSignal>();
+
+        if (signalResult.Output.TryGetValue("signals", out var signalsObj))
+        {
+            if (signalsObj is List<TradeSignal> signalList)
+                signals = signalList;
+            else if (signalsObj is System.Text.Json.JsonElement jsonElement && jsonElement.ValueKind == System.Text.Json.JsonValueKind.Array)
+            {
+                signals = System.Text.Json.JsonSerializer.Deserialize<List<TradeSignal>>(
+                    jsonElement.GetRawText()) ?? new List<TradeSignal>();
+            }
+        }
+
+        return signals;
+    }
+
+    private static bool IsRiskPassed(AgentResult riskResult)
+    {
+        if (riskResult.Output.TryGetValue("riskCheckResult", out var riskObj))
+        {
+            // RiskCheckResult has Passed property
+            if (riskObj is RiskCheckResult checkResult)
+                return checkResult.Passed;
+
+            if (riskObj is System.Text.Json.JsonElement jsonElement &&
+                jsonElement.TryGetProperty("passed", out var passedProp))
+                return passedProp.GetBoolean();
+        }
+
+        return false;
     }
 }
 
@@ -193,6 +273,11 @@ public class DecisionResult
     /// 风控结果
     /// </summary>
     public Dictionary<string, object>? RiskCheck { get; set; }
+
+    /// <summary>
+    /// 订单结果列表
+    /// </summary>
+    public List<OrderResult> Orders { get; set; } = new();
 
     /// <summary>
     /// 消息
