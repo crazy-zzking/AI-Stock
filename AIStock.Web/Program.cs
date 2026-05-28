@@ -8,6 +8,7 @@ using AIStock.EventEngine;
 using AIStock.Infrastructure.Database.Context;
 using AIStock.Infrastructure.MessageBus;
 using AIStock.Intelligence;
+using AIStock.Knowledge;
 using AIStock.LLM;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
@@ -55,6 +56,9 @@ builder.Services.AddIntelligenceServices();
 
 // 注册事件引擎服务
 builder.Services.AddEventEngineServices();
+
+// 注册知识图谱服务
+builder.Services.AddKnowledgeServices();
 
 // 注册数据源Provider
 builder.Services.AddSingleton<IDataProviderResolver, DataProviderResolver>();
