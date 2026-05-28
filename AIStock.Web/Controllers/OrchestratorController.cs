@@ -1,4 +1,5 @@
 using AIStock.Core.Interfaces;
+using AIStock.Orchestrator;
 using AIStock.Orchestrator.Agents;
 using Microsoft.AspNetCore.Mvc;
 
@@ -15,6 +16,7 @@ public class OrchestratorController : ControllerBase
     private readonly ResearchAgent _researchAgent;
     private readonly AlphaAgent _alphaAgent;
     private readonly RiskAgent _riskAgent;
+    private readonly AutonomousDecisionSystem _decisionSystem;
     private readonly ILogger<OrchestratorController> _logger;
 
     public OrchestratorController(
@@ -22,12 +24,14 @@ public class OrchestratorController : ControllerBase
         ResearchAgent researchAgent,
         AlphaAgent alphaAgent,
         RiskAgent riskAgent,
+        AutonomousDecisionSystem decisionSystem,
         ILogger<OrchestratorController> logger)
     {
         _orchestrator = orchestrator;
         _researchAgent = researchAgent;
         _alphaAgent = alphaAgent;
         _riskAgent = riskAgent;
+        _decisionSystem = decisionSystem;
 
         _orchestrator.RegisterAgent(_researchAgent);
         _orchestrator.RegisterAgent(_alphaAgent);
@@ -93,6 +97,26 @@ public class OrchestratorController : ControllerBase
         var result = await _orchestrator.ExecuteWorkflowAsync(workflow);
         return Ok(result);
     }
+
+    /// <summary>
+    /// 自主决策
+    /// </summary>
+    [HttpPost("decision")]
+    public async Task<ActionResult<DecisionResult>> MakeDecision([FromBody] DecisionRequest request)
+    {
+        var result = await _decisionSystem.MakeDecisionAsync(request);
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// 批量决策
+    /// </summary>
+    [HttpPost("decision/batch")]
+    public async Task<ActionResult<List<DecisionResult>>> MakeBatchDecision([FromBody] BatchDecisionRequest request)
+    {
+        var results = await _decisionSystem.MakeBatchDecisionAsync(request.Codes, request.TotalCapital);
+        return Ok(results);
+    }
 }
 
 /// <summary>
@@ -104,4 +128,20 @@ public class AnalyzeRequest
     /// 股票代码
     /// </summary>
     public string Code { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// 批量决策请求
+/// </summary>
+public class BatchDecisionRequest
+{
+    /// <summary>
+    /// 股票代码列表
+    /// </summary>
+    public List<string> Codes { get; set; } = new();
+
+    /// <summary>
+    /// 总资金
+    /// </summary>
+    public decimal TotalCapital { get; set; }
 }

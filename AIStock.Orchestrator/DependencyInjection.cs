@@ -12,6 +12,7 @@ public static class DependencyInjection
         services.AddScoped<ResearchAgent>();
         services.AddScoped<AlphaAgent>();
         services.AddScoped<RiskAgent>();
+        services.AddScoped<AutonomousDecisionSystem>();
         return services;
     }
 }
