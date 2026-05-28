@@ -1,5 +1,6 @@
 using AIStock.Core.Interfaces;
 using AIStock.Core.Models;
+using AIStock.Strategy.Services;
 using Microsoft.AspNetCore.Mvc;
 
 namespace AIStock.Web.Controllers;
@@ -14,17 +15,20 @@ public class StrategyController : ControllerBase
     private readonly IBacktestEngine _backtestEngine;
     private readonly IAlphaEngine _alphaEngine;
     private readonly IPortfolioEngine _portfolioEngine;
+    private readonly IServiceProvider _serviceProvider;
     private readonly ILogger<StrategyController> _logger;
 
     public StrategyController(
         IBacktestEngine backtestEngine,
         IAlphaEngine alphaEngine,
         IPortfolioEngine portfolioEngine,
+        IServiceProvider serviceProvider,
         ILogger<StrategyController> logger)
     {
         _backtestEngine = backtestEngine;
         _alphaEngine = alphaEngine;
         _portfolioEngine = portfolioEngine;
+        _serviceProvider = serviceProvider;
         _logger = logger;
     }
 
@@ -124,9 +128,9 @@ public class StrategyController : ControllerBase
     {
         return strategyName.ToLower() switch
         {
-            "mabreakout" => new Core.Interfaces.IStrategy[] { }.FirstOrDefault(),
-            "gridtrading" => new Core.Interfaces.IStrategy[] { }.FirstOrDefault(),
-            "pairtrading" => new Core.Interfaces.IStrategy[] { }.FirstOrDefault(),
+            "mabreakout" => _serviceProvider.GetService<MABreakoutStrategy>(),
+            "gridtrading" => _serviceProvider.GetService<GridTradingStrategy>(),
+            "pairtrading" => _serviceProvider.GetService<PairTradingStrategy>(),
             _ => null
         };
     }

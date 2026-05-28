@@ -118,7 +118,7 @@ public class SanhuProvider : BaseProvider
         {
             var url = $"{_baseUrl}/v1/hsa_fenshi?token={_token}&code={code}&all=1";
             Logger.LogDebug("Requesting intraday from: {Url}", url);
-            
+
             var response = await SendRequestAsync(url);
 
             if (response == null)
@@ -308,7 +308,7 @@ public class SanhuProvider : BaseProvider
                         AvailableVolume = item.TryGetProperty("KeMai", out var kemai) ? kemai.GetInt64() : 0,
                         CostPrice = item.TryGetProperty("ChengBen", out var chengben) ? chengben.GetInt64() / 1000m : 0,
                         CurrentPrice = item.TryGetProperty("JiaGe", out var jiage) ? jiage.GetInt64() / 1000m : 0,
-                        Profit = item.TryGetProperty("YingKui", out var yingkui) ? yingkui.GetInt64() / 1000m : 0,
+                        Profit = item.TryGetProperty("YingKui", out var yingkui) ? yingkui.GetInt64() : 0,
                         ProfitRate = item.TryGetProperty("LiRunLv", out var lirunlv) ? lirunlv.GetInt64() / 1000m : 0
                     };
                     position.MarketValue = position.Volume * position.CurrentPrice;
@@ -316,7 +316,7 @@ public class SanhuProvider : BaseProvider
                 }
             }
 
-            Logger.LogInformation("Got account info: TotalAssets={TotalAssets}, Positions={Count}", 
+            Logger.LogInformation("Got account info: TotalAssets={TotalAssets}, Positions={Count}",
                 result.TotalAssets, result.Positions.Count);
 
             return result;
