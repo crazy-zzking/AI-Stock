@@ -23,6 +23,7 @@ public class LLMService : ILLMService
     private readonly IPromptRegistry? _promptRegistry;
 
     private const string CacheKey = "LLM_Model_Configs";
+    private const string CacheKeyAll = "LLM_Model_Configs_All";
     private static readonly TimeSpan CacheExpiry = TimeSpan.FromMinutes(5);
 
     public LLMService(
@@ -137,7 +138,67 @@ public class LLMService : ILLMService
     public async Task RefreshModelConfigsAsync()
     {
         _cache.Remove(CacheKey);
+        _cache.Remove(CacheKeyAll);
         await GetModelConfigsAsync();
+    }
+
+    public async Task<List<LLMConfig>> GetAllModelsAsync()
+    {
+        var configs = await GetAllModelConfigsAsync();
+        return configs.Values.OrderBy(m => m.Priority).ToList();
+    }
+
+    public async Task<LLMConfig> AddModelConfigAsync(LLMConfig config)
+    {
+        var entity = MapToEntity(config);
+        entity.CreatedAt = DateTime.UtcNow;
+        entity.UpdatedAt = DateTime.UtcNow;
+        _dbContext.LLMModelConfig.Add(entity);
+        await _dbContext.SaveChangesAsync();
+
+        _cache.Remove(CacheKey);
+        _cache.Remove(CacheKeyAll);
+        _logger.LogInformation("Added LLM model config: {ModelId}", config.Id);
+        return MapToConfig(entity);
+    }
+
+    public async Task<LLMConfig?> UpdateModelConfigAsync(LLMConfig config)
+    {
+        var entity = await _dbContext.LLMModelConfig.FindAsync(config.Id);
+        if (entity == null) return null;
+
+        entity.Name = config.Name;
+        entity.BaseUrl = config.BaseUrl;
+        entity.ApiKey = config.ApiKey;
+        entity.Model = config.Model;
+        entity.IsEnabled = config.IsEnabled;
+        entity.Priority = config.Priority;
+        entity.TimeoutSeconds = config.TimeoutSeconds;
+        entity.MaxTokens = config.MaxTokens;
+        entity.Temperature = config.Temperature;
+        entity.Description = config.Description;
+        entity.UpdatedAt = DateTime.UtcNow;
+
+        await _dbContext.SaveChangesAsync();
+
+        _cache.Remove(CacheKey);
+        _cache.Remove(CacheKeyAll);
+        _logger.LogInformation("Updated LLM model config: {ModelId}", config.Id);
+        return MapToConfig(entity);
+    }
+
+    public async Task<bool> DeleteModelConfigAsync(string modelId)
+    {
+        var entity = await _dbContext.LLMModelConfig.FindAsync(modelId);
+        if (entity == null) return false;
+
+        _dbContext.LLMModelConfig.Remove(entity);
+        await _dbContext.SaveChangesAsync();
+
+        _cache.Remove(CacheKey);
+        _cache.Remove(CacheKeyAll);
+        _logger.LogInformation("Deleted LLM model config: {ModelId}", modelId);
+        return true;
     }
 
     private async Task<Dictionary<string, LLMConfig>> GetModelConfigsAsync()
@@ -226,5 +287,55 @@ public class LLMService : ILLMService
             Temperature = entity.Temperature,
             Description = entity.Description
         };
+    }
+
+    private static LLMModelConfigEntity MapToEntity(LLMConfig config)
+    {
+        return new LLMModelConfigEntity
+        {
+            Id = config.Id,
+            Name = config.Name,
+            BaseUrl = config.BaseUrl,
+            ApiKey = config.ApiKey,
+            Model = config.Model,
+            IsEnabled = config.IsEnabled,
+            Priority = config.Priority,
+            TimeoutSeconds = config.TimeoutSeconds,
+            MaxTokens = config.MaxTokens,
+            Temperature = config.Temperature,
+            Description = config.Description
+        };
+    }
+
+    private async Task<Dictionary<string, LLMConfig>> GetAllModelConfigsAsync()
+    {
+        if (_cache.TryGetValue(CacheKeyAll, out Dictionary<string, LLMConfig>? cachedConfigs) && cachedConfigs != null)
+        {
+            return cachedConfigs;
+        }
+
+        try
+        {
+            var entities = await _dbContext.LLMModelConfig
+                .OrderBy(e => e.Priority)
+                .ToListAsync();
+
+            var configs = new Dictionary<string, LLMConfig>();
+            foreach (var entity in entities)
+            {
+                var config = MapToConfig(entity);
+                configs[config.Id] = config;
+            }
+
+            _cache.Set(CacheKeyAll, configs, CacheExpiry);
+            _logger.LogInformation("Loaded {Count} LLM model configs (all)", configs.Count);
+
+            return configs;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to load all LLM model configs");
+            return new Dictionary<string, LLMConfig>();
+        }
     }
 }

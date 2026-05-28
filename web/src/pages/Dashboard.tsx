@@ -1,18 +1,23 @@
 import React, { useEffect, useState } from 'react';
-import { Card, Row, Col, Statistic, Spin, message } from 'antd';
+import { Card, Row, Col, Statistic, message, Button } from 'antd';
 import {
   StockOutlined,
   RiseOutlined,
   FallOutlined,
   RobotOutlined,
+  ReloadOutlined,
 } from '@ant-design/icons';
 import { getPositions, getAgents, getMarketState } from '../api';
+import { useNavigate } from 'react-router-dom';
+import LoadingSkeleton from '../components/LoadingSkeleton';
+import type { PositionSummary, AgentStatus } from '../types/models';
 
 const Dashboard: React.FC = () => {
   const [loading, setLoading] = useState(true);
-  const [positionData, setPositionData] = useState<any>(null);
-  const [agents, setAgents] = useState<any[]>([]);
+  const [positionData, setPositionData] = useState<PositionSummary | null>(null);
+  const [agents, setAgents] = useState<AgentStatus[]>([]);
   const [marketState, setMarketState] = useState<number>(0);
+  const navigate = useNavigate();
 
   useEffect(() => {
     loadData();
@@ -38,12 +43,22 @@ const Dashboard: React.FC = () => {
   const marketStateText = ['牛市', '熊市', '震荡', '极端', '未知'][marketState] || '未知';
 
   if (loading) {
-    return <Spin size="large" style={{ display: 'block', margin: '100px auto' }} />;
+    return <LoadingSkeleton rows={3} cardCount={4} />;
   }
 
   return (
     <div>
-      <h2>Dashboard</h2>
+      <h2>
+        Dashboard
+        <Button
+          icon={<ReloadOutlined />}
+          size="small"
+          style={{ marginLeft: 12 }}
+          onClick={() => { setLoading(true); loadData(); }}
+        >
+          刷新
+        </Button>
+      </h2>
       <Row gutter={16}>
         <Col span={6}>
           <Card>
@@ -90,7 +105,7 @@ const Dashboard: React.FC = () => {
 
       <Row gutter={16} style={{ marginTop: 16 }}>
         <Col span={8}>
-          <Card title="市场状态">
+          <Card title="市场状态" onClick={() => navigate('/auto-trading')} style={{ cursor: 'pointer' }}>
             <Statistic
               value={marketStateText}
               valueStyle={{ fontSize: 24 }}

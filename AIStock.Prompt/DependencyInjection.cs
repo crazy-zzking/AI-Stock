@@ -14,7 +14,7 @@ public static class DependencyInjection
     /// </summary>
     public static IServiceCollection AddPromptServices(this IServiceCollection services)
     {
-        services.TryAddSingleton<IPromptRegistry, PromptRegistryService>();
+        services.TryAddScoped<IPromptRegistry, PromptRegistryService>();
         return services;
     }
 }

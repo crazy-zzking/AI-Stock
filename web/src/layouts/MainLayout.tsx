@@ -5,6 +5,14 @@ import {
   StockOutlined,
   RobotOutlined,
   SettingOutlined,
+  ThunderboltOutlined,
+  ApartmentOutlined,
+  HistoryOutlined,
+  ControlOutlined,
+  NodeIndexOutlined,
+  SearchOutlined,
+  MessageOutlined,
+  FileTextOutlined,
 } from '@ant-design/icons';
 import { useNavigate, useLocation, Outlet } from 'react-router-dom';
 
@@ -15,6 +23,11 @@ const menuItems = [
     key: '/',
     icon: <DashboardOutlined />,
     label: 'Dashboard',
+  },
+  {
+    key: '/auto-trading',
+    icon: <ThunderboltOutlined />,
+    label: '自主交易',
   },
   {
     key: '/positions',
@@ -30,6 +43,46 @@ const menuItems = [
     key: '/strategy',
     icon: <SettingOutlined />,
     label: '策略',
+  },
+  {
+    key: '/knowledge',
+    icon: <ApartmentOutlined />,
+    label: '知识图谱',
+  },
+  {
+    key: '/memory',
+    icon: <HistoryOutlined />,
+    label: 'Agent记忆',
+  },
+  {
+    key: '/stock-detail',
+    icon: <SearchOutlined />,
+    label: '股票详情',
+  },
+  {
+    key: '/workflow',
+    icon: <NodeIndexOutlined />,
+    label: 'Workflow',
+  },
+  {
+    key: '/llm',
+    icon: <RobotOutlined />,
+    label: 'LLM管理',
+  },
+  {
+    key: '/observability',
+    icon: <ControlOutlined />,
+    label: '系统观测',
+  },
+  {
+    key: '/ai-chat',
+    icon: <MessageOutlined />,
+    label: 'AI 对话',
+  },
+  {
+    key: '/prompts',
+    icon: <FileTextOutlined />,
+    label: 'Prompt',
   },
 ];
 

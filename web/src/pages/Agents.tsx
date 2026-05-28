@@ -1,14 +1,19 @@
 import React, { useEffect, useState } from 'react';
 import { Card, Table, Button, Input, message, Tag, Space, Modal } from 'antd';
-import { RobotOutlined, SendOutlined } from '@ant-design/icons';
+import { SendOutlined, HistoryOutlined } from '@ant-design/icons';
 import { getAgents, analyzeStock, generateSignal, makeDecision } from '../api';
+import ResultPanel from '../components/ResultPanel';
+import { useNavigate } from 'react-router-dom';
+import type { AgentResult, DecisionResult } from '../types/models';
 
 const Agents: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [agents, setAgents] = useState<any[]>([]);
   const [code, setCode] = useState('');
-  const [result, setResult] = useState<any>(null);
+  const [result, setResult] = useState<AgentResult | DecisionResult | null>(null);
+  const [resultMode, setResultMode] = useState<'agent' | 'decision'>('agent');
   const [modalVisible, setModalVisible] = useState(false);
+  const navigate = useNavigate();
 
   useEffect(() => {
     loadAgents();
@@ -33,6 +38,7 @@ const Agents: React.FC = () => {
     try {
       const res = await analyzeStock(code);
       setResult(res.data);
+      setResultMode('agent');
       setModalVisible(true);
     } catch (error) {
       message.error('分析失败');
@@ -47,6 +53,7 @@ const Agents: React.FC = () => {
     try {
       const res = await generateSignal(code);
       setResult(res.data);
+      setResultMode('agent');
       setModalVisible(true);
     } catch (error) {
       message.error('信号生成失败');
@@ -61,6 +68,7 @@ const Agents: React.FC = () => {
     try {
       const res = await makeDecision(code, 1000000);
       setResult(res.data);
+      setResultMode('decision');
       setModalVisible(true);
     } catch (error) {
       message.error('决策失败');
@@ -89,6 +97,7 @@ const Agents: React.FC = () => {
           <Button type="primary" icon={<SendOutlined />} onClick={handleAnalyze}>分析</Button>
           <Button icon={<SendOutlined />} onClick={handleSignal}>信号</Button>
           <Button icon={<SendOutlined />} onClick={handleDecision}>决策</Button>
+          <Button icon={<HistoryOutlined />} onClick={() => navigate('/memory')}>记忆</Button>
         </Space>
       </Card>
       <Card title="Agent列表">
@@ -105,9 +114,9 @@ const Agents: React.FC = () => {
         open={modalVisible}
         onCancel={() => setModalVisible(false)}
         footer={null}
-        width={600}
+        width={700}
       >
-        <pre>{JSON.stringify(result, null, 2)}</pre>
+        <ResultPanel result={result} mode={resultMode} />
       </Modal>
     </div>
   );

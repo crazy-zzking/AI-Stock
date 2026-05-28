@@ -22,10 +22,20 @@ public class LLMController : ControllerBase
     }
 
     /// <summary>
-    /// 获取所有可用模型
+    /// 获取所有模型配置（含禁用）
     /// </summary>
     [HttpGet("models")]
     public async Task<IActionResult> GetModels()
+    {
+        var models = await _llmService.GetAllModelsAsync();
+        return Ok(models);
+    }
+
+    /// <summary>
+    /// 获取所有可用模型（仅启用）
+    /// </summary>
+    [HttpGet("models/available")]
+    public async Task<IActionResult> GetAvailableModels()
     {
         var models = await _llmService.GetAvailableModelsAsync();
         return Ok(models);
@@ -52,6 +62,72 @@ public class LLMController : ControllerBase
     {
         await _llmService.RefreshModelConfigsAsync();
         return Ok(new { message = "Model configs refreshed" });
+    }
+
+    /// <summary>
+    /// 添加模型配置
+    /// </summary>
+    [HttpPost("models")]
+    public async Task<IActionResult> AddModel([FromBody] LLMConfig config)
+    {
+        if (string.IsNullOrEmpty(config.Id))
+            return BadRequest(new { error = "Model Id is required" });
+        if (string.IsNullOrEmpty(config.Name))
+            return BadRequest(new { error = "Model Name is required" });
+
+        try
+        {
+            var result = await _llmService.AddModelConfigAsync(config);
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to add model config: {ModelId}", config.Id);
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// 更新模型配置
+    /// </summary>
+    [HttpPut("models/{modelId}")]
+    public async Task<IActionResult> UpdateModel(string modelId, [FromBody] LLMConfig config)
+    {
+        if (modelId != config.Id)
+            return BadRequest(new { error = "ModelId mismatch" });
+
+        try
+        {
+            var result = await _llmService.UpdateModelConfigAsync(config);
+            if (result == null)
+                return NotFound(new { error = $"Model not found: {modelId}" });
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to update model config: {ModelId}", config.Id);
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// 删除模型配置
+    /// </summary>
+    [HttpDelete("models/{modelId}")]
+    public async Task<IActionResult> DeleteModel(string modelId)
+    {
+        try
+        {
+            var result = await _llmService.DeleteModelConfigAsync(modelId);
+            if (!result)
+                return NotFound(new { error = $"Model not found: {modelId}" });
+            return Ok(new { message = $"Model {modelId} deleted" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to delete model config: {ModelId}", modelId);
+            return BadRequest(new { error = ex.Message });
+        }
     }
 
     /// <summary>

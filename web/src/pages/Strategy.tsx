@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Card, Form, Input, Button, InputNumber, Select, message, Result } from 'antd';
+import { Card, Form, Input, Button, InputNumber, Select, message } from 'antd';
 import { runBacktest } from '../api';
 
 const Strategy: React.FC = () => {

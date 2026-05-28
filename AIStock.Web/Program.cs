@@ -139,10 +139,6 @@ builder.Services.AddOrchestratorServices();
 
 // 注册Prompt Registry服务
 builder.Services.AddPromptServices();
-builder.Services.Configure<PromptRegistryOptions>(options =>
-{
-    options.RootPath = builder.Configuration.GetValue<string>("PromptRegistry:RootPath") ?? "prompts";
-});
 
 // 注册Agent Memory服务
 builder.Services.AddMemoryServices();
@@ -274,6 +270,10 @@ using (var scope = app.Services.CreateScope())
 {
     var dbContext = scope.ServiceProvider.GetRequiredService<AIStockDbContext>();
     await dbContext.Database.MigrateAsync();
+
+    // 自动导入默认Prompt（仅当表为空时）
+    var promptRegistry = scope.ServiceProvider.GetRequiredService<IPromptRegistry>();
+    await promptRegistry.SeedDefaultPromptsAsync();
 }
 
 // 注册Provider到Resolver

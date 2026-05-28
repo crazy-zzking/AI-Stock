@@ -103,6 +103,24 @@ CREATE TABLE IF NOT EXISTS `llm_model_config` (
     PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='LLM模型配置';
 
+-- Prompt模板表
+CREATE TABLE IF NOT EXISTS `prompt_template` (
+    `name` VARCHAR(100) NOT NULL COMMENT 'Prompt名称（如 trend-analysis）',
+    `version` VARCHAR(20) NOT NULL COMMENT '版本号（如 v1, v2）',
+    `category` VARCHAR(50) NOT NULL COMMENT '分类（technical/macro/sentiment/strategy/risk）',
+    `description` VARCHAR(500) DEFAULT NULL COMMENT '描述',
+    `model` VARCHAR(50) DEFAULT NULL COMMENT '推荐模型ID',
+    `temperature` DOUBLE NOT NULL DEFAULT 0.3 COMMENT '温度参数',
+    `max_tokens` INT DEFAULT NULL COMMENT '最大Token数',
+    `variables` VARCHAR(2000) DEFAULT NULL COMMENT '模板变量列表（JSON数组）',
+    `system_prompt` TEXT DEFAULT NULL COMMENT '系统提示词模板',
+    `user_prompt` TEXT NOT NULL COMMENT '用户提示词模板',
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    PRIMARY KEY (`name`, `version`),
+    INDEX `idx_category` (`category`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Prompt模板';
+
 -- 事件记录表
 CREATE TABLE IF NOT EXISTS `event_record` (
     `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键',

@@ -1,0 +1,38 @@
+[
+  {
+    "name": "trend-analysis",
+    "version": "v1",
+    "category": "technical",
+    "description": "股票趋势分析Prompt — 基于技术指标判断趋势方向",
+    "model": "deepseek-v3",
+    "temperature": 0.3,
+    "maxTokens": 2000,
+    "variables": ["code","current_price","ma5","ma10","ma20","ma60","rsi","macd","volatility","atr"],
+    "systemPrompt": "你是一位专业的A股技术分析师。请基于提供的技术指标数据，对股票进行客观的趋势分析。\n分析需包含：趋势判断、支撑压力位、风险提示。\n请用中文回答，简洁专业。",
+    "userPrompt": "请分析股票 {code} 的技术面：\n\n当前价格：{current_price}\n均线：MA5={ma5}, MA10={ma10}, MA20={ma20}, MA60={ma60}\nRSI(12)：{rsi}\nMACD：{macd}\n波动率：{volatility}\nATR：{atr}\n\n请给出趋势判断（上涨/下跌/震荡）及置信度。"
+  },
+  {
+    "name": "risk-assessment",
+    "version": "v1",
+    "category": "risk",
+    "description": "风险评估Prompt — 综合评估交易风险等级",
+    "model": "deepseek-v3",
+    "temperature": 0.1,
+    "maxTokens": 1000,
+    "variables": ["code","signal_type","position_percent","market_sentiment","volatility"],
+    "systemPrompt": "你是一位风险控制专家。请基于提供的数据评估交易风险。\n风险等级：低(Low)、中(Medium)、高(High)、严重(Critical)。\n风控优先级永远高于收益追求。",
+    "userPrompt": "请评估以下交易的风险：\n\n股票：{code}\n信号类型：{signal_type}\n仓位占比：{position_percent}%\n市场情绪：{market_sentiment}\n波动率：{volatility}\n\n请输出风险等级及具体建议。"
+  },
+  {
+    "name": "signal-generation",
+    "version": "v1",
+    "category": "strategy",
+    "description": "交易信号生成Prompt — 基于多维度数据生成买卖建议",
+    "model": "deepseek-v3",
+    "temperature": 0.2,
+    "maxTokens": 1500,
+    "variables": ["code","current_price","trend","rsi","volume_change"],
+    "systemPrompt": "你是一位量化交易策略分析师。请基于提供的数据生成交易信号。\n信号类型：买入(Buy)、卖出(Sell)、持有(Hold)。\n必须给出明确的置信度(0-100)和理由。",
+    "userPrompt": "请为股票 {code} 生成交易信号：\n\n当前价格：{current_price}\n趋势：{trend}\nRSI：{rsi}\n成交量变化：{volume_change}\n\n请输出信号类型、置信度(0-100)和推荐仓位比例。"
+  }
+]

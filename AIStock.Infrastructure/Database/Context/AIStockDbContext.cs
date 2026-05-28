@@ -58,6 +58,11 @@ public class AIStockDbContext : DbContext
     public DbSet<PositionEntity> Position { get; set; }
 
     /// <summary>
+    /// Prompt模板
+    /// </summary>
+    public DbSet<PromptTemplateEntity> PromptTemplate { get; set; }
+
+    /// <summary>
     /// 事件-股票关联
     /// </summary>
     public DbSet<EventStockRelationEntity> EventStockRelation { get; set; }
@@ -210,6 +215,13 @@ public class AIStockDbContext : DbContext
             entity.HasIndex(e => new { e.AgentId, e.StockCode, e.CreatedAt });
             entity.HasIndex(e => e.AgentId);
             entity.HasIndex(e => e.CreatedAt);
+        });
+
+        // Prompt模板
+        modelBuilder.Entity<PromptTemplateEntity>(entity =>
+        {
+            entity.HasKey(e => new { e.Name, e.Version });
+            entity.HasIndex(e => e.Category);
         });
     }
 }

@@ -28,6 +28,11 @@ public interface ILLMService
     Task<List<LLMConfig>> GetAvailableModelsAsync();
 
     /// <summary>
+    /// 获取所有模型配置（含禁用）
+    /// </summary>
+    Task<List<LLMConfig>> GetAllModelsAsync();
+
+    /// <summary>
     /// 获取指定模型配置
     /// </summary>
     Task<LLMConfig?> GetModelConfigAsync(string modelId);
@@ -36,4 +41,19 @@ public interface ILLMService
     /// 刷新模型配置缓存
     /// </summary>
     Task RefreshModelConfigsAsync();
+
+    /// <summary>
+    /// 添加模型配置
+    /// </summary>
+    Task<LLMConfig> AddModelConfigAsync(LLMConfig config);
+
+    /// <summary>
+    /// 更新模型配置
+    /// </summary>
+    Task<LLMConfig?> UpdateModelConfigAsync(LLMConfig config);
+
+    /// <summary>
+    /// 删除模型配置
+    /// </summary>
+    Task<bool> DeleteModelConfigAsync(string modelId);
 }
