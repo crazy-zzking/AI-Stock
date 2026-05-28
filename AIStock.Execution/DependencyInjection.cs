@@ -1,0 +1,15 @@
+using AIStock.Core.Interfaces;
+using AIStock.Execution.Services;
+using Microsoft.Extensions.DependencyInjection;
+
+namespace AIStock.Execution;
+
+public static class DependencyInjection
+{
+    public static IServiceCollection AddExecutionServices(this IServiceCollection services)
+    {
+        services.AddScoped<ISignalGenerator, SignalGeneratorService>();
+        services.AddScoped<IOrderManager, OrderManagerService>();
+        return services;
+    }
+}

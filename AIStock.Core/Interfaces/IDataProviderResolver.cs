@@ -32,4 +32,10 @@ public interface IDataProviderResolver
     /// </summary>
     /// <returns>所有数据提供者</returns>
     IEnumerable<IDataProvider> GetAllProviders();
+
+    /// <summary>
+    /// 获取默认数据提供者
+    /// </summary>
+    /// <returns>默认数据提供者</returns>
+    IDataProvider GetDefaultProvider();
 }

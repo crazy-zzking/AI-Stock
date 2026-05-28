@@ -5,11 +5,15 @@ using AIStock.Data.Providers.Sanhu;
 using AIStock.Data.Providers.Tencent;
 using AIStock.Data.Providers.Tdx;
 using AIStock.EventEngine;
+using AIStock.Execution;
+using AIStock.Feature;
 using AIStock.Infrastructure.Database.Context;
 using AIStock.Infrastructure.MessageBus;
 using AIStock.Intelligence;
 using AIStock.Knowledge;
 using AIStock.LLM;
+using AIStock.Risk;
+using AIStock.Strategy;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
 using StackExchange.Redis;
@@ -59,6 +63,18 @@ builder.Services.AddEventEngineServices();
 
 // 注册知识图谱服务
 builder.Services.AddKnowledgeServices();
+
+// 注册特征工程服务
+builder.Services.AddFeatureServices();
+
+// 注册策略服务
+builder.Services.AddStrategyServices();
+
+// 注册风控服务
+builder.Services.AddRiskServices();
+
+// 注册执行服务
+builder.Services.AddExecutionServices();
 
 // 注册数据源Provider
 builder.Services.AddSingleton<IDataProviderResolver, DataProviderResolver>();

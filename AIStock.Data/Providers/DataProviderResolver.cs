@@ -81,4 +81,15 @@ public class DataProviderResolver : IDataProviderResolver
             return _providers.ToList();
         }
     }
+
+    /// <summary>
+    /// 获取默认数据提供者
+    /// </summary>
+    public IDataProvider GetDefaultProvider()
+    {
+        lock (_lock)
+        {
+            return _providers.FirstOrDefault() ?? throw new InvalidOperationException("No data provider registered");
+        }
+    }
 }

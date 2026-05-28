@@ -123,38 +123,38 @@ Portfolio Engine → Risk Engine → OMS → Execution Engine → SanhuQuant API
 
 | 模块 | 功能 | 优先级 | 状态 |
 |------|------|--------|------|
-| 传统因子 | MA/MACD/RSI/VWAP/波动率 | P0 | ⏳ 阶段四 |
-| AI特征 | Order Flow Embedding/新闻Embedding | P1 | ⏳ 阶段四 |
-| 市场状态 | 牛熊/震荡/极端状态识别 | P1 | ⏳ 阶段四 |
-| Feature Store | 统一特征存储 | P1 | ⏳ 阶段四 |
+| 传统因子 | MA/MACD/RSI/VWAP/波动率 | P0 | ✅ 完成 |
+| AI特征 | Order Flow Embedding/新闻Embedding | P1 | ⏳ 阶段五 |
+| 市场状态 | 牛熊/震荡/极端状态识别 | P1 | ✅ 完成 |
+| Feature Store | 统一特征存储 | P1 | ✅ 完成 |
 
 ### 第8层：策略层
 
 | 模块 | 功能 | 优先级 | 状态 |
 |------|------|--------|------|
-| 回测引擎 | 手续费/滑点/冲击成本/涨跌停 | P0 | ⏳ 阶段四 |
-| 规则策略 | 均线突破/网格/配对交易 | P0 | ⏳ 阶段四 |
-| ML策略 | XGBoost/LightGBM | P1 | ⏳ 阶段四 |
-| DL策略 | LSTM/Transformer/PatchTST | P1 | ⏳ 阶段五 |
-| RL策略 | PPO/SAC/DQN动态仓位 | P2 | ⏳ 阶段五 |
-| Multi-Agent | Research/Theme/Alpha/Risk/Execution | P3 | ⏳ 阶段五 |
+| 回测引擎 | 手续费/滑点/冲击成本/涨跌停 | P0 | ✅ 完成 |
+| 规则策略 | 均线突破/网格/配对交易 | P0 | ✅ 完成 |
+| ML策略 | XGBoost/LightGBM | P1 | ⏳ 阶段五 |
+| DL策略 | LSTM/Transformer/PatchTST | P1 | ⏳ 阶段六 |
+| RL策略 | PPO/SAC/DQN动态仓位 | P2 | ⏳ 阶段六 |
+| Multi-Agent | Research/Theme/Alpha/Risk/Execution | P3 | ⏳ 阶段六 |
 
 ### 第9层：风控层
 
 | 模块 | 功能 | 优先级 | 状态 |
 |------|------|--------|------|
-| 仓位控制 | Kelly/风险平价/波动率目标 | P0 | ⏳ 阶段四 |
-| 止损系统 | ATR止损/固定止损/动态止盈 | P0 | ⏳ 阶段四 |
-| 风险暴露 | 单票/板块/Beta/杠杆限制 | P0 | ⏳ 阶段四 |
-| 黑天鹅保护 | 熔断/波动率异常/极端行情检测 | P1 | ⏳ 阶段五 |
+| 仓位控制 | Kelly/风险平价/波动率目标 | P0 | ✅ 完成 |
+| 止损系统 | ATR止损/固定止损/动态止盈 | P0 | ✅ 完成 |
+| 风险暴露 | 单票/板块/Beta/杠杆限制 | P0 | ✅ 完成 |
+| 黑天鹅保护 | 熔断/波动率异常/极端行情检测 | P1 | ⏳ 阶段六 |
 
 ### 第10层：执行层
 
 | 模块 | 功能 | 优先级 | 状态 |
 |------|------|--------|------|
-| 信号生成 | 多策略信号融合 | P0 | ⏳ 阶段四 |
-| 订单管理 | 下单/撤单/改单（SanhuQuant） | P0 | ⏳ 阶段四 |
-| 执行算法 | TWAP/VWAP/冰山单 | P1 | ⏳ 阶段五 |
+| 信号生成 | 多策略信号融合 | P0 | ✅ 完成 |
+| 订单管理 | 下单/撤单/改单（SanhuQuant） | P0 | ✅ 完成 |
+| 执行算法 | TWAP/VWAP/冰山单 | P1 | ⏳ 阶段六 |
 
 ### 第11层：监控层
 
@@ -318,7 +318,7 @@ Portfolio Engine → Risk Engine → OMS → Execution Engine → SanhuQuant API
 
 ---
 
-### 阶段四：策略+回测（待开发）
+### 阶段四：策略+回测（已完成 ✅）
 
 **工期：** 4-5周
 
@@ -326,23 +326,50 @@ Portfolio Engine → Risk Engine → OMS → Execution Engine → SanhuQuant API
 
 #### 任务清单
 
-| 任务 | 优先级 | 说明 |
-|------|--------|------|
-| Feature Store | P1 | Redis + MySQL统一特征存储 |
-| 传统因子计算 | P0 | MA/MACD/RSI/VWAP/波动率 |
-| AI特征工程 | P1 | Order Flow Embedding/新闻Embedding |
-| 回测引擎 | P0 | 手续费/滑点/冲击成本/涨跌停模拟 |
-| 规则策略 | P0 | 均线突破/网格/配对交易 |
-| ML策略 | P1 | XGBoost/LightGBM |
-| Alpha Engine | P0 | 交易信号生成 |
-| Portfolio Engine | P0 | 组合管理/仓位分配 |
-| Risk Engine | P0 | 风控检查 |
-| 仓位控制 | P0 | Kelly/风险平价/波动率目标 |
-| 止损系统 | P0 | ATR止损/固定止损/动态止盈 |
+| 任务 | 优先级 | 说明 | 状态 |
+|------|--------|------|------|
+| Feature Store | P1 | Redis + MySQL统一特征存储 | ✅ 完成 |
+| 传统因子计算 | P0 | MA/MACD/RSI/VWAP/波动率 | ✅ 完成 |
+| AI特征工程 | P1 | Order Flow Embedding/新闻Embedding | ⏳ 阶段五 |
+| 回测引擎 | P0 | 手续费/滑点/冲击成本/涨跌停模拟 | ✅ 完成 |
+| 规则策略 | P0 | 均线突破/网格/配对交易 | ✅ 完成 |
+| ML策略 | P1 | XGBoost/LightGBM | ⏳ 阶段五 |
+| Alpha Engine | P0 | 交易信号生成 | ✅ 完成 |
+| Portfolio Engine | P0 | 组合管理/仓位分配 | ✅ 完成 |
+| Risk Engine | P0 | 风控检查 | ✅ 完成 |
+| 仓位控制 | P0 | Kelly/风险平价/波动率目标 | ✅ 完成 |
+| 止损系统 | P0 | ATR止损/固定止损/动态止盈 | ✅ 完成 |
+
+#### 已实现API
+
+| 接口 | 方法 | 说明 |
+|------|------|------|
+| `/api/feature/{code}/indicators` | GET | 计算股票技术指标 |
+| `/api/feature/{code}/latest` | GET | 获取最新特征 |
+| `/api/feature/{code}/history` | GET | 获取历史特征 |
+| `/api/feature/market/state` | GET | 检测市场状态 |
+| `/api/feature/market/sentiment` | GET | 获取市场情绪 |
+| `/api/feature/market/extreme` | GET | 检测极端行情 |
+| `/api/strategy/backtest` | POST | 运行回测 |
+| `/api/strategy/signal/merge` | POST | 信号融合 |
+| `/api/strategy/portfolio/positions` | POST | 计算目标仓位 |
+| `/api/strategy/portfolio/rebalance` | POST | 组合再平衡 |
+| `/api/risk/check` | POST | 风控检查 |
+| `/api/risk/position-size` | POST | 计算仓位大小 |
+| `/api/risk/kelly` | POST | Kelly公式计算 |
+| `/api/risk/stop-loss` | POST | 计算止损价 |
+| `/api/risk/take-profit` | POST | 计算止盈价 |
+| `/api/risk/atr-stop-loss` | POST | ATR止损计算 |
+| `/api/risk/fixed-stop-loss` | POST | 固定止损计算 |
+| `/api/risk/trailing-stop` | POST | 动态止盈计算 |
+| `/api/execution/order` | POST | 下单 |
+| `/api/execution/order/{orderId}` | DELETE | 撤单 |
+| `/api/execution/order/{orderId}/status` | GET | 查询订单状态 |
+| `/api/execution/orders` | GET | 获取订单列表 |
 
 ---
 
-### 阶段五：风控+执行（待开发）
+### 阶段五：风控+执行（部分完成）
 
 **工期：** 3-4周
 
@@ -350,16 +377,16 @@ Portfolio Engine → Risk Engine → OMS → Execution Engine → SanhuQuant API
 
 #### 任务清单
 
-| 任务 | 优先级 | 说明 |
-|------|--------|------|
-| Risk Engine | P0 | 风控引擎核心 |
-| 仓位控制 | P0 | Kelly/风险平价/波动率目标 |
-| 止损系统 | P0 | ATR止损/固定止损/动态止盈 |
-| 风险暴露控制 | P0 | 单票/板块/Beta/杠杆限制 |
-| 黑天鹅保护 | P1 | 熔断/波动率异常检测 |
-| OMS订单管理 | P0 | 下单/撤单/改单/状态同步 |
-| 执行算法 | P1 | TWAP/VWAP/冰山单 |
-| SanhuQuant集成 | P0 | 实盘交易接口对接 |
+| 任务 | 优先级 | 说明 | 状态 |
+|------|--------|------|------|
+| Risk Engine | P0 | 风控引擎核心 | ✅ 完成 |
+| 仓位控制 | P0 | Kelly/风险平价/波动率目标 | ✅ 完成 |
+| 止损系统 | P0 | ATR止损/固定止损/动态止盈 | ✅ 完成 |
+| 风险暴露控制 | P0 | 单票/板块/Beta/杠杆限制 | ✅ 完成 |
+| 黑天鹅保护 | P1 | 熔断/波动率异常检测 | ⏳ 阶段六 |
+| OMS订单管理 | P0 | 下单/撤单/改单/状态同步 | ✅ 完成 |
+| 执行算法 | P1 | TWAP/VWAP/冰山单 | ⏳ 阶段六 |
+| SanhuQuant集成 | P0 | 实盘交易接口对接 | ⏳ 阶段六 |
 
 ---
 
@@ -515,8 +542,8 @@ curl http://localhost:5172/api/health
 | 阶段一 | 3-4周 | 4周 | ✅ 完成 |
 | 阶段二 | 4-5周 | 9周 | ✅ 完成 |
 | 阶段三 | 3-4周 | 13周 | ✅ 完成 |
-| 阶段四 | 4-5周 | 18周 | ⏳ 待开发 |
-| 阶段五 | 3-4周 | 22周 | ⏳ 待开发 |
+| 阶段四 | 4-5周 | 18周 | ✅ 完成 |
+| 阶段五 | 3-4周 | 22周 | ⏳ 部分完成 |
 | 阶段六 | 4-5周 | 27周 | ⏳ 待开发 |
 | 阶段七 | 3-4周 | 31周 | ⏳ 待开发 |
 | **总计** | **28-35周** | | |
@@ -535,3 +562,4 @@ curl http://localhost:5172/api/health
 | 2026-05-28 | v1.5 | 修正阶段划分：新增阶段五（风控+执行），原阶段五改为阶段六，原阶段六改为阶段七 |
 | 2026-05-28 | v2.0 | 完成阶段二：情报+NLP（LLM Gateway、研报/新闻采集、事件抽取、情绪分析、强度评分） |
 | 2026-05-28 | v3.0 | 完成阶段三：知识图谱+传播分析（公司关系图谱、产业链图谱、概念扩散、标的筛选、真假识别、传播链分析、小作文分析、数据源记录） |
+| 2026-05-28 | v4.0 | 完成阶段四：策略+回测（Feature Store、传统因子计算、回测引擎、规则策略、Alpha Engine、Portfolio Engine、Risk Engine、仓位控制、止损系统） |
