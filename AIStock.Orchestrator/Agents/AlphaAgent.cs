@@ -1,5 +1,6 @@
 using AIStock.Core.Interfaces;
 using AIStock.Core.Models;
+using AIStock.Memory;
 using Microsoft.Extensions.Logging;
 
 namespace AIStock.Orchestrator.Agents;
@@ -13,17 +14,20 @@ public class AlphaAgent : IAgent
     private readonly IFeatureCalculator _featureCalculator;
     private readonly IDataProviderResolver _dataProviderResolver;
     private readonly ILogger<AlphaAgent> _logger;
+    private readonly IAgentMemory? _memory;
 
     public AlphaAgent(
         IAlphaEngine alphaEngine,
         IFeatureCalculator featureCalculator,
         IDataProviderResolver dataProviderResolver,
-        ILogger<AlphaAgent> logger)
+        ILogger<AlphaAgent> logger,
+        IAgentMemory? memory = null)
     {
         _alphaEngine = alphaEngine;
         _featureCalculator = featureCalculator;
         _dataProviderResolver = dataProviderResolver;
         _logger = logger;
+        _memory = memory;
     }
 
     public string AgentId => "alpha-agent";
@@ -33,11 +37,12 @@ public class AlphaAgent : IAgent
     public async Task<AgentResult> ExecuteAsync(AgentTask task)
     {
         var startTime = DateTime.UtcNow;
+        AgentResult result;
 
         try
         {
             var taskType = task.TaskType.ToLower();
-            return taskType switch
+            result = taskType switch
             {
                 "generate-signal" => await GenerateSignalAsync(task),
                 "merge-signals" => await MergeSignalsAsync(task),
@@ -47,13 +52,20 @@ public class AlphaAgent : IAgent
         catch (Exception ex)
         {
             _logger.LogError(ex, "Alpha agent execution failed");
-            return new AgentResult
+            result = new AgentResult
             {
                 Success = false,
                 Message = ex.Message,
                 ExecutionTime = (long)(DateTime.UtcNow - startTime).TotalMilliseconds
             };
         }
+
+        if (_memory != null)
+        {
+            _ = _memory.SaveAsync(AgentId, task, result);
+        }
+
+        return result;
     }
 
     public Task<AgentStatus> GetStatusAsync()

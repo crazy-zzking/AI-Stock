@@ -67,6 +67,11 @@ public class AIStockDbContext : DbContext
     /// </summary>
     public DbSet<EventConceptRelationEntity> EventConceptRelation { get; set; }
 
+    /// <summary>
+    /// Agent记忆
+    /// </summary>
+    public DbSet<AgentMemoryEntity> AgentMemory { get; set; }
+
     public override int SaveChanges()
     {
         UpdateTimestamps();
@@ -196,6 +201,15 @@ public class AIStockDbContext : DbContext
                   .WithMany()
                   .HasForeignKey(e => e.EventId)
                   .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // Agent记忆
+        modelBuilder.Entity<AgentMemoryEntity>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => new { e.AgentId, e.StockCode, e.CreatedAt });
+            entity.HasIndex(e => e.AgentId);
+            entity.HasIndex(e => e.CreatedAt);
         });
     }
 }

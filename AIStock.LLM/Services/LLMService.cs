@@ -2,6 +2,7 @@ using AIStock.Core.Interfaces;
 using AIStock.Core.Models;
 using AIStock.Infrastructure.Database.Context;
 using AIStock.Infrastructure.Database.Entities;
+using AIStock.Prompt;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
@@ -17,6 +18,7 @@ public class LLMService : ILLMService
     private readonly ILLMProvider _llmProvider;
     private readonly IMemoryCache _cache;
     private readonly ILogger<LLMService> _logger;
+    private readonly IPromptRegistry? _promptRegistry;
 
     private const string CacheKey = "LLM_Model_Configs";
     private static readonly TimeSpan CacheExpiry = TimeSpan.FromMinutes(5);
@@ -25,12 +27,14 @@ public class LLMService : ILLMService
         AIStockDbContext dbContext,
         ILLMProvider llmProvider,
         IMemoryCache cache,
-        ILogger<LLMService> logger)
+        ILogger<LLMService> logger,
+        IPromptRegistry? promptRegistry = null)
     {
         _dbContext = dbContext;
         _llmProvider = llmProvider;
         _cache = cache;
         _logger = logger;
+        _promptRegistry = promptRegistry;
     }
 
     public async Task<LLMResponse> SendAsync(LLMRequest request, CancellationToken cancellationToken = default)

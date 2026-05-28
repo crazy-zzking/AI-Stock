@@ -14,6 +14,7 @@
     <ProjectReference Include="..\AIStock.Strategy\AIStock.Strategy.csproj" />
     <ProjectReference Include="..\AIStock.Risk\AIStock.Risk.csproj" />
     <ProjectReference Include="..\AIStock.Execution\AIStock.Execution.csproj" />
+    <ProjectReference Include="..\AIStock.Memory\AIStock.Memory.csproj" />
   </ItemGroup>
 
 </Project>

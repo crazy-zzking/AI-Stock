@@ -1,0 +1,33 @@
+name: trend-analysis
+version: v1
+category: technical
+description: 股票趋势分析Prompt — 基于技术指标判断趋势方向
+model: deepseek-v3
+temperature: 0.3
+max_tokens: 2000
+variables:
+  - code
+  - current_price
+  - ma5
+  - ma10
+  - ma20
+  - ma60
+  - rsi
+  - macd
+  - volatility
+  - atr
+system_prompt: |
+  你是一位专业的A股技术分析师。请基于提供的技术指标数据，对股票进行客观的趋势分析。
+  分析需包含：趋势判断、支撑压力位、风险提示。
+  请用中文回答，简洁专业。
+user_prompt: |
+  请分析股票 {code} 的技术面：
+
+  当前价格：{current_price}
+  均线：MA5={ma5}, MA10={ma10}, MA20={ma20}, MA60={ma60}
+  RSI(12)：{rsi}
+  MACD：{macd}
+  波动率：{volatility}
+  ATR：{atr}
+
+  请给出趋势判断（上涨/下跌/震荡）及置信度。

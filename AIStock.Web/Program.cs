@@ -12,7 +12,10 @@ using AIStock.Infrastructure.MessageBus;
 using AIStock.Intelligence;
 using AIStock.Knowledge;
 using AIStock.LLM;
+using AIStock.Memory;
 using AIStock.Orchestrator;
+using AIStock.Prompt;
+using AIStock.Prompt.Services;
 using AIStock.Risk;
 using AIStock.Strategy;
 using Microsoft.EntityFrameworkCore;
@@ -79,6 +82,16 @@ builder.Services.AddExecutionServices();
 
 // 注册编排服务
 builder.Services.AddOrchestratorServices();
+
+// 注册Prompt Registry服务
+builder.Services.AddPromptServices();
+builder.Services.Configure<PromptRegistryOptions>(options =>
+{
+    options.RootPath = builder.Configuration.GetValue<string>("PromptRegistry:RootPath") ?? "prompts";
+});
+
+// 注册Agent Memory服务
+builder.Services.AddMemoryServices();
 
 // 注册数据源Provider
 builder.Services.AddSingleton<IDataProviderResolver, DataProviderResolver>();

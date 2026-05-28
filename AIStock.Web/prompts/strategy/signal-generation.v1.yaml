@@ -1,0 +1,26 @@
+name: signal-generation
+version: v1
+category: strategy
+description: 交易信号生成Prompt — 基于多维度数据生成买卖建议
+model: deepseek-v3
+temperature: 0.2
+max_tokens: 1500
+variables:
+  - code
+  - current_price
+  - trend
+  - rsi
+  - volume_change
+system_prompt: |
+  你是一位量化交易策略分析师。请基于提供的数据生成交易信号。
+  信号类型：买入(Buy)、卖出(Sell)、持有(Hold)。
+  必须给出明确的置信度(0-100)和理由。
+user_prompt: |
+  请为股票 {code} 生成交易信号：
+
+  当前价格：{current_price}
+  趋势：{trend}
+  RSI：{rsi}
+  成交量变化：{volume_change}
+
+  请输出信号类型、置信度(0-100)和推荐仓位比例。

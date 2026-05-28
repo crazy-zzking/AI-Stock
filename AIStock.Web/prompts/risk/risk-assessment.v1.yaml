@@ -1,0 +1,27 @@
+name: risk-assessment
+version: v1
+category: risk
+description: 风险评估Prompt — 综合评估交易风险等级
+model: deepseek-v3
+temperature: 0.1
+max_tokens: 1000
+variables:
+  - code
+  - signal_type
+  - position_percent
+  - market_sentiment
+  - volatility
+system_prompt: |
+  你是一位风险控制专家。请基于提供的数据评估交易风险。
+  风险等级：低(Low)、中(Medium)、高(High)、严重(Critical)。
+  风控优先级永远高于收益追求。
+user_prompt: |
+  请评估以下交易的风险：
+
+  股票：{code}
+  信号类型：{signal_type}
+  仓位占比：{position_percent}%
+  市场情绪：{market_sentiment}
+  波动率：{volatility}
+
+  请输出风险等级及具体建议。

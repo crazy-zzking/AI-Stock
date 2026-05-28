@@ -45,61 +45,56 @@ public class AgentOrchestrator : IAgentOrchestrator
 
         try
         {
-            var completedSteps = new HashSet<string>();
-            var stepResults = new Dictionary<string, AgentResult>();
-
+            // 验证所有 Agent 存在
             foreach (var step in workflow.Steps)
             {
-                if (!step.DependsOn.All(d => completedSteps.Contains(d)))
-                {
-                    continue;
-                }
-
-                var agent = GetAgent(step.AgentId);
-                if (agent == null)
+                if (!_agents.ContainsKey(step.AgentId))
                 {
                     result.Success = false;
                     result.FinalOutput["error"] = $"Agent not found: {step.AgentId}";
                     return result;
                 }
+            }
 
-                var task = new AgentTask
-                {
-                    TaskType = step.TaskType,
-                    Parameters = new Dictionary<string, object>(step.Parameters)
-                };
+            // 拓扑排序：将步骤按依赖关系分组为层级
+            var levels = TopologicalSort(workflow.Steps);
+            if (levels == null)
+            {
+                result.Success = false;
+                result.FinalOutput["error"] = "Workflow contains circular dependency";
+                return result;
+            }
 
-                foreach (var dep in step.DependsOn)
+            var stepResults = new Dictionary<string, AgentResult>();
+
+            foreach (var level in levels)
+            {
+                // 同层级并行执行
+                var levelTasks = level.Select(step => ExecuteStepAsync(step, stepResults));
+                var levelResults = await Task.WhenAll(levelTasks);
+
+                foreach (var (stepId, agentResult) in levelResults)
                 {
-                    if (stepResults.TryGetValue(dep, out var depResult))
+                    stepResults[stepId] = agentResult;
+
+                    if (!agentResult.Success)
                     {
-                        foreach (var output in depResult.Output)
-                        {
-                            task.Parameters[$"dep_{dep}_{output.Key}"] = output.Value;
-                        }
+                        result.Success = false;
+                        result.StepResults = stepResults;
+                        result.FinalOutput["error"] = $"Step {stepId} failed: {agentResult.Message}";
+                        result.TotalExecutionTime = (long)(DateTime.UtcNow - startTime).TotalMilliseconds;
+                        return result;
                     }
-                }
-
-                var agentResult = await agent.ExecuteAsync(task);
-                stepResults[step.StepId] = agentResult;
-                completedSteps.Add(step.StepId);
-
-                if (!agentResult.Success)
-                {
-                    result.Success = false;
-                    result.StepResults = stepResults;
-                    result.FinalOutput["error"] = $"Step {step.StepId} failed: {agentResult.Message}";
-                    return result;
                 }
             }
 
             result.Success = true;
             result.StepResults = stepResults;
 
-            var lastResult = stepResults.Values.LastOrDefault();
-            if (lastResult != null)
+            var lastStep = workflow.Steps.Last();
+            if (stepResults.TryGetValue(lastStep.StepId, out var finalResult))
             {
-                result.FinalOutput = lastResult.Output;
+                result.FinalOutput = finalResult.Output;
             }
         }
         catch (Exception ex)
@@ -111,6 +106,90 @@ public class AgentOrchestrator : IAgentOrchestrator
 
         result.TotalExecutionTime = (long)(DateTime.UtcNow - startTime).TotalMilliseconds;
         return result;
+    }
+
+    private async Task<(string StepId, AgentResult Result)> ExecuteStepAsync(
+        WorkflowStep step, Dictionary<string, AgentResult> stepResults)
+    {
+        var agent = _agents[step.AgentId];
+
+        var task = new AgentTask
+        {
+            TaskType = step.TaskType,
+            Parameters = new Dictionary<string, object>(step.Parameters)
+        };
+
+        // 注入依赖步骤的输出
+        foreach (var dep in step.DependsOn)
+        {
+            if (stepResults.TryGetValue(dep, out var depResult))
+            {
+                foreach (var output in depResult.Output)
+                {
+                    task.Parameters[$"dep_{dep}_{output.Key}"] = output.Value;
+                }
+            }
+        }
+
+        _logger.LogDebug("Executing step {StepId} via agent {AgentId}", step.StepId, step.AgentId);
+        var agentResult = await agent.ExecuteAsync(task);
+        _logger.LogDebug("Step {StepId} completed: Success={Success}", step.StepId, agentResult.Success);
+
+        return (step.StepId, agentResult);
+    }
+
+    /// <summary>
+    /// 拓扑排序：将步骤按 DependsOn 分组为层级，同层级步骤无相互依赖，可并行执行。
+    /// 返回 null 表示检测到循环依赖。
+    /// </summary>
+    private static List<List<WorkflowStep>>? TopologicalSort(List<WorkflowStep> steps)
+    {
+        var stepMap = steps.ToDictionary(s => s.StepId);
+        var inDegree = steps.ToDictionary(s => s.StepId, _ => 0);
+        var dependents = steps.ToDictionary(s => s.StepId, _ => new List<string>());
+
+        // 计算入度和反向依赖
+        foreach (var step in steps)
+        {
+            foreach (var depId in step.DependsOn)
+            {
+                if (!stepMap.ContainsKey(depId))
+                    continue;
+                inDegree[step.StepId]++;
+                dependents[depId].Add(step.StepId);
+            }
+        }
+
+        var levels = new List<List<WorkflowStep>>();
+        var queue = new Queue<string>(inDegree.Where(kv => kv.Value == 0).Select(kv => kv.Key));
+        var processed = 0;
+
+        while (queue.Count > 0)
+        {
+            var levelSize = queue.Count;
+            var level = new List<WorkflowStep>();
+
+            for (int i = 0; i < levelSize; i++)
+            {
+                var stepId = queue.Dequeue();
+                level.Add(stepMap[stepId]);
+                processed++;
+
+                foreach (var dependentId in dependents[stepId])
+                {
+                    inDegree[dependentId]--;
+                    if (inDegree[dependentId] == 0)
+                    {
+                        queue.Enqueue(dependentId);
+                    }
+                }
+            }
+
+            levels.Add(level);
+        }
+
+        // 如果处理数量不等于步骤总数，说明存在循环依赖
+        return processed == steps.Count ? levels : null;
     }
 
     public async Task<List<AgentStatus>> GetAllAgentStatusAsync()

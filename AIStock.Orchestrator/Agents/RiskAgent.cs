@@ -1,5 +1,6 @@
 using AIStock.Core.Interfaces;
 using AIStock.Core.Models;
+using AIStock.Memory;
 using Microsoft.Extensions.Logging;
 
 namespace AIStock.Orchestrator.Agents;
@@ -12,15 +13,18 @@ public class RiskAgent : IAgent
     private readonly IRiskEngine _riskEngine;
     private readonly IStopLossSystem _stopLossSystem;
     private readonly ILogger<RiskAgent> _logger;
+    private readonly IAgentMemory? _memory;
 
     public RiskAgent(
         IRiskEngine riskEngine,
         IStopLossSystem stopLossSystem,
-        ILogger<RiskAgent> logger)
+        ILogger<RiskAgent> logger,
+        IAgentMemory? memory = null)
     {
         _riskEngine = riskEngine;
         _stopLossSystem = stopLossSystem;
         _logger = logger;
+        _memory = memory;
     }
 
     public string AgentId => "risk-agent";
@@ -30,11 +34,12 @@ public class RiskAgent : IAgent
     public async Task<AgentResult> ExecuteAsync(AgentTask task)
     {
         var startTime = DateTime.UtcNow;
+        AgentResult result;
 
         try
         {
             var taskType = task.TaskType.ToLower();
-            return taskType switch
+            result = taskType switch
             {
                 "check-risk" => await CheckRiskAsync(task),
                 "calculate-stop-loss" => await CalculateStopLossAsync(task),
@@ -44,13 +49,20 @@ public class RiskAgent : IAgent
         catch (Exception ex)
         {
             _logger.LogError(ex, "Risk agent execution failed");
-            return new AgentResult
+            result = new AgentResult
             {
                 Success = false,
                 Message = ex.Message,
                 ExecutionTime = (long)(DateTime.UtcNow - startTime).TotalMilliseconds
             };
         }
+
+        if (_memory != null)
+        {
+            _ = _memory.SaveAsync(AgentId, task, result);
+        }
+
+        return result;
     }
 
     public Task<AgentStatus> GetStatusAsync()
