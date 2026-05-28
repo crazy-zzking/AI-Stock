@@ -16,7 +16,8 @@ public class EastmoneyProvider : BaseProvider
     private const string QuoteUrl = "https://push2.eastmoney.com/api/qt/stock/get";
     private const string KlineUrl = "https://push2his.eastmoney.com/api/qt/stock/kline/get";
     private const string IntradayUrl = "https://push2.eastmoney.com/api/qt/stock/trends2/get";
-    private const string CapitalFlowUrl = "https://push2.eastmoney.com/api/qt/stock/fflow/daykline/get";
+    private const string CapitalFlowUrl = "https://push2.eastmoney.com/api/qt/stock/fflow/kline/get";
+    private const string UserToken = "fa5fd1943c7b386f172d6893dbfba10b";
 
     private readonly HttpClient _httpClient;
 
@@ -82,7 +83,7 @@ public class EastmoneyProvider : BaseProvider
             var url = $"{QuoteUrl}?secid={secid}&fields=f43,f44,f45,f46,f47,f48,f50,f51,f52,f55,f57,f58,f60,f116,f117,f170";
             Logger.LogDebug("Requesting quote from: {Url}", url);
             
-            var response = await SendRequestAsync(url);
+            var response = await SendEastmoneyRequestAsync(url);
 
             if (response == null)
             {
@@ -161,8 +162,8 @@ public class EastmoneyProvider : BaseProvider
         {
             var secid = GetMarketCode(code);
             var klt = GetKlineInterval(interval);
-            var url = $"{KlineUrl}?secid={secid}&klt={klt}&fqt=1&lmt={count}&fields1=f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,f11,f12,f13&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61";
-            var response = await SendRequestAsync(url);
+            var url = $"{KlineUrl}?fields1=f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,f11,f12,f13&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61&beg=0&end=20500101&ut={UserToken}&rtntype=6&secid={secid}&klt={klt}&fqt=1&lmt={count}";
+            var response = await SendEastmoneyRequestAsync(url);
 
             if (response == null)
                 return new List<KlineData>();
@@ -219,8 +220,8 @@ public class EastmoneyProvider : BaseProvider
         try
         {
             var secid = GetMarketCode(code);
-            var url = $"{IntradayUrl}?secid={secid}&fields1=f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,f11,f12,f13&fields2=f51,f52,f53,f54,f55,f56,f57,f58";
-            var response = await SendRequestAsync(url);
+            var url = $"{IntradayUrl}?fields1=f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,f11,f12,f13&fields2=f51,f52,f53,f54,f55,f56,f57,f58&ut={UserToken}&secid={secid}&ndays=1&iscr=1&iscca=0";
+            var response = await SendEastmoneyRequestAsync(url);
 
             if (response == null)
                 return new List<IntradayData>();
@@ -273,8 +274,8 @@ public class EastmoneyProvider : BaseProvider
         try
         {
             var secid = GetMarketCode(code);
-            var url = $"{CapitalFlowUrl}?secid={secid}&fields1=f1,f2,f3,f7&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61,f62,f63,f64,f65";
-            var response = await SendRequestAsync(url);
+            var url = $"{CapitalFlowUrl}?lmt=0&klt=1&secid={secid}&fields1=f1,f2,f3,f7&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61,f62,f63,f64,f65";
+            var response = await SendEastmoneyRequestAsync(url);
 
             if (response == null)
                 return null;
@@ -323,12 +324,35 @@ public class EastmoneyProvider : BaseProvider
         try
         {
             var url = $"{QuoteUrl}?secid=1.600519&fields=f43";
-            var response = await SendRequestAsync(url);
+            var response = await SendEastmoneyRequestAsync(url);
             return response != null;
         }
         catch
         {
             return false;
+        }
+    }
+
+    /// <summary>
+    /// 发送带东方财富所需请求头的 HTTP 请求
+    /// </summary>
+    private async Task<string?> SendEastmoneyRequestAsync(string url, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Get, url);
+            request.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
+            request.Headers.Add("Referer", "https://quote.eastmoney.com/");
+            request.Headers.Add("Accept", "application/json, text/plain, */*");
+
+            var response = await HttpClient.SendAsync(request, cancellationToken);
+            response.EnsureSuccessStatusCode();
+            return await response.Content.ReadAsStringAsync(cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to send Eastmoney request to {Url}", url);
+            return null;
         }
     }
 
