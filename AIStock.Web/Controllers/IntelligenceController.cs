@@ -14,23 +14,29 @@ public class IntelligenceController : ControllerBase
 {
     private readonly IReportCollector _reportCollector;
     private readonly INewsCollector _newsCollector;
+    private readonly IKnowledgeStarCollector _knowledgeStarCollector;
     private readonly IReportAnalyzer _reportAnalyzer;
     private readonly IPolicyAnalyzer _policyAnalyzer;
+    private readonly IEssayAnalyzer _essayAnalyzer;
     private readonly EventEngineService _eventEngine;
     private readonly ILogger<IntelligenceController> _logger;
 
     public IntelligenceController(
         IReportCollector reportCollector,
         INewsCollector newsCollector,
+        IKnowledgeStarCollector knowledgeStarCollector,
         IReportAnalyzer reportAnalyzer,
         IPolicyAnalyzer policyAnalyzer,
+        IEssayAnalyzer essayAnalyzer,
         EventEngineService eventEngine,
         ILogger<IntelligenceController> logger)
     {
         _reportCollector = reportCollector;
         _newsCollector = newsCollector;
+        _knowledgeStarCollector = knowledgeStarCollector;
         _reportAnalyzer = reportAnalyzer;
         _policyAnalyzer = policyAnalyzer;
+        _essayAnalyzer = essayAnalyzer;
         _eventEngine = eventEngine;
         _logger = logger;
     }
@@ -134,6 +140,86 @@ public class IntelligenceController : ControllerBase
         var eventRecord = await _eventEngine.ProcessPolicyAsync(request.Title, request.Content, request.Source);
         return Ok(eventRecord);
     }
+
+    #region 小作文分析
+
+    /// <summary>
+    /// 分析文本内容（小作文）
+    /// </summary>
+    [HttpPost("essay/analyze")]
+    public async Task<IActionResult> AnalyzeEssay([FromBody] EssayAnalysisRequest request)
+    {
+        if (string.IsNullOrEmpty(request.Text))
+            return BadRequest(new { error = "Text is required" });
+
+        var result = await _essayAnalyzer.AnalyzeTextAsync(request.Text);
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// 分析图片内容（OCR）
+    /// </summary>
+    [HttpPost("essay/analyze/image")]
+    public async Task<IActionResult> AnalyzeEssayImage([FromBody] EssayImageAnalysisRequest request)
+    {
+        if (string.IsNullOrEmpty(request.ImageUrl))
+            return BadRequest(new { error = "ImageUrl is required" });
+
+        var result = await _essayAnalyzer.AnalyzeImageAsync(request.ImageUrl);
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// 分析音频内容（ASR）
+    /// </summary>
+    [HttpPost("essay/analyze/audio")]
+    public async Task<IActionResult> AnalyzeEssayAudio([FromBody] EssayAudioAnalysisRequest request)
+    {
+        if (string.IsNullOrEmpty(request.AudioUrl))
+            return BadRequest(new { error = "AudioUrl is required" });
+
+        var result = await _essayAnalyzer.AnalyzeAudioAsync(request.AudioUrl);
+        return Ok(result);
+    }
+
+    #endregion
+
+    #region 知识星球
+
+    /// <summary>
+    /// 获取知识星球最新内容
+    /// </summary>
+    [HttpGet("knowledge-star")]
+    public async Task<IActionResult> GetKnowledgeStarContent([FromQuery] int count = 20)
+    {
+        var content = await _knowledgeStarCollector.GetLatestContentAsync(count);
+        return Ok(content);
+    }
+
+    /// <summary>
+    /// 获取指定知识星球的内容
+    /// </summary>
+    [HttpGet("knowledge-star/{groupId}")]
+    public async Task<IActionResult> GetKnowledgeStarGroupContent(string groupId, [FromQuery] int count = 20)
+    {
+        var content = await _knowledgeStarCollector.GetGroupContentAsync(groupId, count);
+        return Ok(content);
+    }
+
+    /// <summary>
+    /// 搜索知识星球内容
+    /// </summary>
+    [HttpGet("knowledge-star/search")]
+    public async Task<IActionResult> SearchKnowledgeStarContent([FromQuery] string keyword, [FromQuery] int count = 20)
+    {
+        if (string.IsNullOrEmpty(keyword))
+            return BadRequest(new { error = "Keyword is required" });
+
+        var content = await _knowledgeStarCollector.SearchContentAsync(keyword, count);
+        return Ok(content);
+    }
+
+    #endregion
 }
 
 /// <summary>
@@ -155,4 +241,37 @@ public class PolicyAnalysisRequest
     /// 来源
     /// </summary>
     public string? Source { get; set; }
+}
+
+/// <summary>
+/// 小作文分析请求
+/// </summary>
+public class EssayAnalysisRequest
+{
+    /// <summary>
+    /// 文本内容
+    /// </summary>
+    public string Text { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// 小作文图片分析请求
+/// </summary>
+public class EssayImageAnalysisRequest
+{
+    /// <summary>
+    /// 图片URL
+    /// </summary>
+    public string ImageUrl { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// 小作文音频分析请求
+/// </summary>
+public class EssayAudioAnalysisRequest
+{
+    /// <summary>
+    /// 音频URL
+    /// </summary>
+    public string AudioUrl { get; set; } = string.Empty;
 }

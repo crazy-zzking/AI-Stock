@@ -22,6 +22,7 @@ public static class DependencyInjection
         // 采集器
         services.AddScoped<IReportCollector, EastmoneyReportCollector>();
         services.AddScoped<INewsCollector, NewsCollectorService>();
+        services.AddScoped<IKnowledgeStarCollector, KnowledgeStarCollectorService>();
 
         // 分析服务
         services.AddScoped<IReportAnalyzer, ReportAnalyzerAgent>();
@@ -31,6 +32,7 @@ public static class DependencyInjection
         services.AddScoped<IIntensityScorer, IntensityScorerService>();
         services.AddScoped<ICredibilityAnalyzer, CredibilityAnalyzerService>();
         services.AddScoped<ISpreadAnalyzer, SpreadAnalyzerService>();
+        services.AddScoped<IEssayAnalyzer, EssayAnalyzerService>();
 
         return services;
     }
