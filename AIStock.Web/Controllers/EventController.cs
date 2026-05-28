@@ -16,6 +16,8 @@ public class EventController : ControllerBase
     private readonly IEventExtractor _eventExtractor;
     private readonly ISentimentAnalyzer _sentimentAnalyzer;
     private readonly IIntensityScorer _intensityScorer;
+    private readonly ICredibilityAnalyzer _credibilityAnalyzer;
+    private readonly ISpreadAnalyzer _spreadAnalyzer;
     private readonly ILogger<EventController> _logger;
 
     public EventController(
@@ -23,12 +25,16 @@ public class EventController : ControllerBase
         IEventExtractor eventExtractor,
         ISentimentAnalyzer sentimentAnalyzer,
         IIntensityScorer intensityScorer,
+        ICredibilityAnalyzer credibilityAnalyzer,
+        ISpreadAnalyzer spreadAnalyzer,
         ILogger<EventController> logger)
     {
         _eventEngine = eventEngine;
         _eventExtractor = eventExtractor;
         _sentimentAnalyzer = sentimentAnalyzer;
         _intensityScorer = intensityScorer;
+        _credibilityAnalyzer = credibilityAnalyzer;
+        _spreadAnalyzer = spreadAnalyzer;
         _logger = logger;
     }
 
@@ -112,6 +118,29 @@ public class EventController : ControllerBase
     {
         var score = await _intensityScorer.ScoreAsync(eventData);
         return Ok(score);
+    }
+
+    /// <summary>
+    /// 真假识别
+    /// </summary>
+    [HttpPost("credibility")]
+    public async Task<IActionResult> AnalyzeCredibility([FromBody] EventData eventData)
+    {
+        var result = await _credibilityAnalyzer.AnalyzeAsync(eventData);
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// 传播链分析
+    /// </summary>
+    [HttpGet("spread")]
+    public async Task<IActionResult> AnalyzeSpread([FromQuery] string keyword)
+    {
+        if (string.IsNullOrEmpty(keyword))
+            return BadRequest(new { error = "Keyword is required" });
+
+        var result = await _spreadAnalyzer.AnalyzeSpreadAsync(keyword);
+        return Ok(result);
     }
 }
 

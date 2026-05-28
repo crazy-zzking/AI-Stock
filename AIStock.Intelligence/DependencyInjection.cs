@@ -29,6 +29,8 @@ public static class DependencyInjection
         services.AddScoped<IEventExtractor, EventExtractorService>();
         services.AddScoped<ISentimentAnalyzer, SentimentAnalysisService>();
         services.AddScoped<IIntensityScorer, IntensityScorerService>();
+        services.AddScoped<ICredibilityAnalyzer, CredibilityAnalyzerService>();
+        services.AddScoped<ISpreadAnalyzer, SpreadAnalyzerService>();
 
         return services;
     }
