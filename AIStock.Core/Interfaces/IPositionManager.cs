@@ -8,29 +8,14 @@ namespace AIStock.Core.Interfaces;
 public interface IPositionManager
 {
     /// <summary>
-    /// 获取所有持仓
+    /// 获取持仓和账户信息
     /// </summary>
-    Task<List<PortfolioPosition>> GetPositionsAsync();
+    Task<PositionSummary> GetPositionSummaryAsync();
 
     /// <summary>
     /// 获取指定股票持仓
     /// </summary>
     Task<PortfolioPosition?> GetPositionAsync(string code);
-
-    /// <summary>
-    /// 更新持仓
-    /// </summary>
-    Task UpdatePositionAsync(PortfolioPosition position);
-
-    /// <summary>
-    /// 删除持仓
-    /// </summary>
-    Task RemovePositionAsync(string code);
-
-    /// <summary>
-    /// 获取持仓汇总
-    /// </summary>
-    Task<PositionSummary> GetSummaryAsync();
 }
 
 /// <summary>
@@ -39,9 +24,19 @@ public interface IPositionManager
 public class PositionSummary
 {
     /// <summary>
-    /// 总市值
+    /// 总资产
     /// </summary>
-    public decimal TotalMarketValue { get; set; }
+    public decimal TotalAssets { get; set; }
+
+    /// <summary>
+    /// 可用资金
+    /// </summary>
+    public decimal AvailableBalance { get; set; }
+
+    /// <summary>
+    /// 持仓市值
+    /// </summary>
+    public decimal PositionValue { get; set; }
 
     /// <summary>
     /// 总盈亏

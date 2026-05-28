@@ -27,6 +27,30 @@ public class ExecutionController : ControllerBase
     }
 
     /// <summary>
+    /// 获取持仓和账户信息
+    /// </summary>
+    [HttpGet("positions")]
+    public async Task<ActionResult<PositionSummary>> GetPositions()
+    {
+        var summary = await _positionManager.GetPositionSummaryAsync();
+        return Ok(summary);
+    }
+
+    /// <summary>
+    /// 获取指定股票持仓
+    /// </summary>
+    [HttpGet("positions/{code}")]
+    public async Task<ActionResult<PortfolioPosition>> GetPosition(string code)
+    {
+        var position = await _positionManager.GetPositionAsync(code);
+        if (position == null)
+        {
+            return NotFound($"No position found for {code}");
+        }
+        return Ok(position);
+    }
+
+    /// <summary>
     /// 下单
     /// </summary>
     [HttpPost("order")]
@@ -82,59 +106,5 @@ public class ExecutionController : ControllerBase
     {
         var orders = await _orderManager.GetOrdersAsync(startTime, endTime);
         return Ok(orders);
-    }
-
-    /// <summary>
-    /// 获取所有持仓
-    /// </summary>
-    [HttpGet("positions")]
-    public async Task<ActionResult<List<PortfolioPosition>>> GetPositions()
-    {
-        var positions = await _positionManager.GetPositionsAsync();
-        return Ok(positions);
-    }
-
-    /// <summary>
-    /// 获取指定股票持仓
-    /// </summary>
-    [HttpGet("positions/{code}")]
-    public async Task<ActionResult<PortfolioPosition>> GetPosition(string code)
-    {
-        var position = await _positionManager.GetPositionAsync(code);
-        if (position == null)
-        {
-            return NotFound($"No position found for {code}");
-        }
-        return Ok(position);
-    }
-
-    /// <summary>
-    /// 获取持仓汇总
-    /// </summary>
-    [HttpGet("positions/summary")]
-    public async Task<ActionResult<PositionSummary>> GetPositionSummary()
-    {
-        var summary = await _positionManager.GetSummaryAsync();
-        return Ok(summary);
-    }
-
-    /// <summary>
-    /// 更新持仓
-    /// </summary>
-    [HttpPut("positions")]
-    public async Task<ActionResult> UpdatePosition([FromBody] PortfolioPosition position)
-    {
-        await _positionManager.UpdatePositionAsync(position);
-        return Ok();
-    }
-
-    /// <summary>
-    /// 删除持仓
-    /// </summary>
-    [HttpDelete("positions/{code}")]
-    public async Task<ActionResult> RemovePosition(string code)
-    {
-        await _positionManager.RemovePositionAsync(code);
-        return Ok();
     }
 }

@@ -20,14 +20,15 @@ public class PositionManagerService : IPositionManager
         _logger = logger;
     }
 
-    public async Task<List<PortfolioPosition>> GetPositionsAsync()
+    public async Task<PositionSummary> GetPositionSummaryAsync()
     {
         try
         {
             var provider = _dataProviderResolver.GetDefaultProvider();
             var positions = await provider.GetAccountPositionsAsync();
+            var balance = await provider.GetAccountBalanceAsync();
 
-            return positions.Select(p => new PortfolioPosition
+            var portfolioPositions = positions.Select(p => new PortfolioPosition
             {
                 Code = p.Code,
                 Name = p.Name,
@@ -38,50 +39,32 @@ public class PositionManagerService : IPositionManager
                 Profit = p.Profit,
                 ProfitRate = p.ProfitRate
             }).ToList();
+
+            return new PositionSummary
+            {
+                TotalAssets = balance?.TotalAssets ?? 0,
+                AvailableBalance = balance?.AvailableBalance ?? 0,
+                PositionValue = balance?.PositionValue ?? 0,
+                TotalProfit = portfolioPositions.Sum(p => p.Profit),
+                TotalProfitRate = portfolioPositions.Sum(p => p.MarketValue) > 0 
+                    ? portfolioPositions.Sum(p => p.Profit) / portfolioPositions.Sum(p => p.MarketValue) * 100 
+                    : 0,
+                PositionCount = portfolioPositions.Count,
+                ProfitCount = portfolioPositions.Count(p => p.Profit > 0),
+                LossCount = portfolioPositions.Count(p => p.Profit < 0),
+                Positions = portfolioPositions
+            };
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to get positions");
-            return new List<PortfolioPosition>();
+            _logger.LogError(ex, "Failed to get position summary");
+            return new PositionSummary();
         }
     }
 
     public async Task<PortfolioPosition?> GetPositionAsync(string code)
     {
-        var positions = await GetPositionsAsync();
-        return positions.FirstOrDefault(p => p.Code == code);
-    }
-
-    public Task UpdatePositionAsync(PortfolioPosition position)
-    {
-        _logger.LogWarning("UpdatePosition not supported for real trading");
-        return Task.CompletedTask;
-    }
-
-    public Task RemovePositionAsync(string code)
-    {
-        _logger.LogWarning("RemovePosition not supported for real trading");
-        return Task.CompletedTask;
-    }
-
-    public async Task<PositionSummary> GetSummaryAsync()
-    {
-        var positions = await GetPositionsAsync();
-        var summary = new PositionSummary
-        {
-            TotalMarketValue = positions.Sum(p => p.MarketValue),
-            TotalProfit = positions.Sum(p => p.Profit),
-            PositionCount = positions.Count,
-            ProfitCount = positions.Count(p => p.Profit > 0),
-            LossCount = positions.Count(p => p.Profit < 0),
-            Positions = positions
-        };
-
-        if (summary.TotalMarketValue > 0)
-        {
-            summary.TotalProfitRate = summary.TotalProfit / summary.TotalMarketValue * 100;
-        }
-
-        return summary;
+        var summary = await GetPositionSummaryAsync();
+        return summary.Positions.FirstOrDefault(p => p.Code == code);
     }
 }
