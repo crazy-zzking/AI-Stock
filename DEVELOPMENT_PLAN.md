@@ -269,7 +269,7 @@ Portfolio Engine → Risk Engine → OMS → Execution Engine → SanhuQuant API
 
 ---
 
-### 阶段三：知识图谱+传播分析（待开发）
+### 阶段三：知识图谱+传播分析（已完成 ✅）
 
 **工期：** 3-4周
 
@@ -277,16 +277,44 @@ Portfolio Engine → Risk Engine → OMS → Execution Engine → SanhuQuant API
 
 #### 任务清单
 
-| 任务 | 优先级 | 说明 |
-|------|--------|------|
-| 公司关系图谱 | P1 | MySQL存储客户/供应商/控股关系 |
-| 产业链图谱 | P1 | 上下游关系建模 |
-| 概念扩散引擎 | P0 | 从核心事件推演产业链 |
-| 标的筛选器 | P0 | 市值小/弹性大/未启动/机构少 |
-| 小作文分析Agent | P2 | OCR/ASR解析/可信度分析 |
-| 知识星球抓取 | P2 | Playwright抓取 |
-| 真假识别 | P1 | 历史重复/逻辑闭环/资金配合 |
-| 传播链分析 | P2 | 首发源/传播路径/热度斜率 |
+| 任务 | 优先级 | 说明 | 状态 |
+|------|--------|------|------|
+| 公司关系图谱 | P1 | MySQL存储客户/供应商/控股关系 | ✅ 完成 |
+| 产业链图谱 | P1 | 上下游关系建模 | ✅ 完成 |
+| 概念扩散引擎 | P0 | 从核心事件推演产业链 | ✅ 完成 |
+| 标的筛选器 | P0 | 市值小/弹性大/未启动/机构少 | ✅ 完成 |
+| 小作文分析Agent | P2 | OCR/ASR解析/可信度分析 | ✅ 完成 |
+| 知识星球抓取 | P2 | Playwright抓取 | ✅ 完成 |
+| 真假识别 | P1 | 历史重复/逻辑闭环/资金配合 | ✅ 完成 |
+| 传播链分析 | P2 | 首发源/传播路径/热度斜率 | ✅ 完成 |
+| 数据源记录 | P0 | 分析结果记录数据来源 | ✅ 完成 |
+
+#### 已实现API
+
+| 接口 | 方法 | 说明 |
+|------|------|------|
+| `/api/knowledge/company/relation` | POST | 添加公司关系 |
+| `/api/knowledge/company/relations` | POST | 批量添加公司关系 |
+| `/api/knowledge/company/{code}/relations` | GET | 获取公司关系 |
+| `/api/knowledge/company/{code}/suppliers` | GET | 获取供应商 |
+| `/api/knowledge/company/{code}/customers` | GET | 获取客户 |
+| `/api/knowledge/company/path` | GET | 查找关系路径 |
+| `/api/knowledge/chain/node` | POST | 添加产业链节点 |
+| `/api/knowledge/chain/company` | POST | 添加公司-产业链关联 |
+| `/api/knowledge/chain/{name}` | GET | 获取产业链结构 |
+| `/api/knowledge/chain/{name}/companies` | GET | 获取产业链公司 |
+| `/api/knowledge/chains` | GET | 获取所有产业链 |
+| `/api/knowledge/chain/diffuse` | POST | 概念扩散推演 |
+| `/api/knowledge/filter` | POST | 条件筛选标的 |
+| `/api/knowledge/filter/concepts` | POST | 概念筛选标的 |
+| `/api/knowledge/filter/chain` | POST | 产业链筛选标的 |
+| `/api/event/credibility` | POST | 真假识别 |
+| `/api/event/spread` | GET | 传播链分析 |
+| `/api/intelligence/essay/analyze` | POST | 小作文分析 |
+| `/api/intelligence/essay/analyze/image` | POST | 图片分析(OCR) |
+| `/api/intelligence/essay/analyze/audio` | POST | 音频分析(ASR) |
+| `/api/intelligence/knowledge-star` | GET | 知识星球内容 |
+| `/api/intelligence/knowledge-star/search` | GET | 搜索知识星球 |
 
 ---
 
@@ -486,7 +514,7 @@ curl http://localhost:5172/api/health
 |------|------|------|------|
 | 阶段一 | 3-4周 | 4周 | ✅ 完成 |
 | 阶段二 | 4-5周 | 9周 | ✅ 完成 |
-| 阶段三 | 3-4周 | 13周 | ⏳ 待开发 |
+| 阶段三 | 3-4周 | 13周 | ✅ 完成 |
 | 阶段四 | 4-5周 | 18周 | ⏳ 待开发 |
 | 阶段五 | 3-4周 | 22周 | ⏳ 待开发 |
 | 阶段六 | 4-5周 | 27周 | ⏳ 待开发 |
@@ -506,3 +534,4 @@ curl http://localhost:5172/api/health
 | 2026-05-28 | v1.4 | 新增参股关系图谱功能设计（上市公司/未上市龙头参股关系挖掘） |
 | 2026-05-28 | v1.5 | 修正阶段划分：新增阶段五（风控+执行），原阶段五改为阶段六，原阶段六改为阶段七 |
 | 2026-05-28 | v2.0 | 完成阶段二：情报+NLP（LLM Gateway、研报/新闻采集、事件抽取、情绪分析、强度评分） |
+| 2026-05-28 | v3.0 | 完成阶段三：知识图谱+传播分析（公司关系图谱、产业链图谱、概念扩散、标的筛选、真假识别、传播链分析、小作文分析、数据源记录） |
