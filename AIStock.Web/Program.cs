@@ -12,6 +12,7 @@ using AIStock.Infrastructure.MessageBus;
 using AIStock.Intelligence;
 using AIStock.Knowledge;
 using AIStock.LLM;
+using AIStock.Orchestrator;
 using AIStock.Risk;
 using AIStock.Strategy;
 using Microsoft.EntityFrameworkCore;
@@ -75,6 +76,9 @@ builder.Services.AddRiskServices();
 
 // 注册执行服务
 builder.Services.AddExecutionServices();
+
+// 注册编排服务
+builder.Services.AddOrchestratorServices();
 
 // 注册数据源Provider
 builder.Services.AddSingleton<IDataProviderResolver, DataProviderResolver>();
