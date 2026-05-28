@@ -24,7 +24,15 @@ public class PositionManagerService : IPositionManager
     {
         try
         {
-            var provider = _dataProviderResolver.GetDefaultProvider();
+            var provider = _dataProviderResolver.GetAllProviders()
+                .FirstOrDefault(p => p.ProviderId == "sanhu");
+            
+            if (provider == null)
+            {
+                _logger.LogWarning("Sanhu provider not found");
+                return new PositionSummary();
+            }
+
             var positions = await provider.GetAccountPositionsAsync();
 
             var portfolioPositions = positions.Select(p => new PortfolioPosition

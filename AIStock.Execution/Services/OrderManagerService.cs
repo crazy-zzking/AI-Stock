@@ -12,7 +12,6 @@ public class OrderManagerService : IOrderManager
 {
     private readonly IDataProviderResolver _dataProviderResolver;
     private readonly ILogger<OrderManagerService> _logger;
-    private readonly Dictionary<string, OrderInfo> _orders = new();
 
     public OrderManagerService(
         IDataProviderResolver dataProviderResolver,
@@ -22,17 +21,23 @@ public class OrderManagerService : IOrderManager
         _logger = logger;
     }
 
+    private SanhuProvider? GetSanhuProvider()
+    {
+        return _dataProviderResolver.GetAllProviders()
+            .FirstOrDefault(p => p.ProviderId == "sanhu") as SanhuProvider;
+    }
+
     public async Task<OrderResult> PlaceOrderAsync(OrderRequest request)
     {
         try
         {
-            var provider = _dataProviderResolver.GetDefaultProvider() as SanhuProvider;
+            var provider = GetSanhuProvider();
             if (provider == null)
             {
                 return new OrderResult
                 {
                     Success = false,
-                    Message = "不支持的交易接口",
+                    Message = "散户量化Provider未配置",
                     Status = OrderStatus.Failed
                 };
             }
@@ -63,18 +68,6 @@ public class OrderManagerService : IOrderManager
                          result.IsCompleted ? OrderStatus.Filled :
                          result.IsFailed ? OrderStatus.Failed :
                          OrderStatus.Pending;
-
-            _orders[orderId] = new OrderInfo
-            {
-                OrderId = orderId,
-                Code = request.Code,
-                Side = request.Side,
-                Price = request.Price,
-                Volume = request.Volume,
-                Status = status,
-                CreateTime = DateTime.UtcNow,
-                UpdateTime = DateTime.UtcNow
-            };
 
             return new OrderResult
             {
@@ -109,7 +102,7 @@ public class OrderManagerService : IOrderManager
             if (!long.TryParse(orderId, out var orderIdLong))
                 return OrderStatus.Failed;
 
-            var provider = _dataProviderResolver.GetDefaultProvider() as SanhuProvider;
+            var provider = GetSanhuProvider();
             if (provider == null)
                 return OrderStatus.Failed;
 
@@ -133,7 +126,7 @@ public class OrderManagerService : IOrderManager
     {
         try
         {
-            var provider = _dataProviderResolver.GetDefaultProvider() as SanhuProvider;
+            var provider = GetSanhuProvider();
             if (provider == null)
                 return new List<OrderInfo>();
 
