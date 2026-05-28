@@ -97,11 +97,6 @@ public interface IDataProvider
     /// 获取账户持仓
     /// </summary>
     Task<List<AccountPosition>> GetAccountPositionsAsync();
-
-    /// <summary>
-    /// 获取账户资金
-    /// </summary>
-    Task<AccountBalance?> GetAccountBalanceAsync();
 }
 
 /// <summary>
@@ -153,30 +148,4 @@ public class AccountPosition
     /// 盈亏比例
     /// </summary>
     public decimal ProfitRate { get; set; }
-}
-
-/// <summary>
-/// 账户资金
-/// </summary>
-public class AccountBalance
-{
-    /// <summary>
-    /// 总资产
-    /// </summary>
-    public decimal TotalAssets { get; set; }
-
-    /// <summary>
-    /// 可用资金
-    /// </summary>
-    public decimal AvailableBalance { get; set; }
-
-    /// <summary>
-    /// 持仓市值
-    /// </summary>
-    public decimal PositionValue { get; set; }
-
-    /// <summary>
-    /// 冻结资金
-    /// </summary>
-    public decimal FrozenBalance { get; set; }
 }

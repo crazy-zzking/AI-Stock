@@ -26,7 +26,6 @@ public class PositionManagerService : IPositionManager
         {
             var provider = _dataProviderResolver.GetDefaultProvider();
             var positions = await provider.GetAccountPositionsAsync();
-            var balance = await provider.GetAccountBalanceAsync();
 
             var portfolioPositions = positions.Select(p => new PortfolioPosition
             {
@@ -40,15 +39,15 @@ public class PositionManagerService : IPositionManager
                 ProfitRate = p.ProfitRate
             }).ToList();
 
+            var totalProfit = portfolioPositions.Sum(p => p.Profit);
+            var totalMarketValue = portfolioPositions.Sum(p => p.MarketValue);
+
             return new PositionSummary
             {
-                TotalAssets = balance?.TotalAssets ?? 0,
-                AvailableBalance = balance?.AvailableBalance ?? 0,
-                PositionValue = balance?.PositionValue ?? 0,
-                TotalProfit = portfolioPositions.Sum(p => p.Profit),
-                TotalProfitRate = portfolioPositions.Sum(p => p.MarketValue) > 0 
-                    ? portfolioPositions.Sum(p => p.Profit) / portfolioPositions.Sum(p => p.MarketValue) * 100 
-                    : 0,
+                TotalAssets = totalMarketValue,
+                PositionValue = totalMarketValue,
+                TotalProfit = totalProfit,
+                TotalProfitRate = totalMarketValue > 0 ? totalProfit / totalMarketValue * 100 : 0,
                 PositionCount = portfolioPositions.Count,
                 ProfitCount = portfolioPositions.Count(p => p.Profit > 0),
                 LossCount = portfolioPositions.Count(p => p.Profit < 0),

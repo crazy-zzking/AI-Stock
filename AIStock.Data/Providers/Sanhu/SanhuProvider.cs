@@ -266,7 +266,7 @@ public class SanhuProvider : BaseProvider
     }
 
     /// <summary>
-    /// 获取账户持仓
+    /// 获取账户持仓（包含资金）
     /// </summary>
     public override async Task<List<AccountPosition>> GetAccountPositionsAsync()
     {
@@ -310,45 +310,6 @@ public class SanhuProvider : BaseProvider
         {
             Logger.LogError(ex, "Failed to get account positions");
             return new List<AccountPosition>();
-        }
-    }
-
-    /// <summary>
-    /// 获取账户资金
-    /// </summary>
-    public override async Task<AccountBalance?> GetAccountBalanceAsync()
-    {
-        try
-        {
-            var url = $"{_baseUrl}/v1/jycx_chicang?token={_token}";
-            var response = await SendRequestAsync(url);
-
-            if (response == null)
-                return null;
-
-            var jsonDoc = JsonDocument.Parse(response);
-            var root = jsonDoc.RootElement;
-
-            if (root.GetProperty("ret").GetInt32() != 200)
-                return null;
-
-            var baseData = root.GetProperty("base");
-            var totalAssets = baseData.GetProperty("ZongZhi").GetDecimal();
-            var profit = baseData.GetProperty("YingLi").GetDecimal();
-            var availableCash = baseData.GetProperty("ZiJin").GetDecimal();
-
-            return new AccountBalance
-            {
-                TotalAssets = totalAssets,
-                AvailableBalance = availableCash,
-                PositionValue = totalAssets - availableCash,
-                FrozenBalance = 0
-            };
-        }
-        catch (Exception ex)
-        {
-            Logger.LogError(ex, "Failed to get account balance");
-            return null;
         }
     }
 
