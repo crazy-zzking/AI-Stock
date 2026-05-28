@@ -446,7 +446,7 @@ Portfolio Engine → Risk Engine → OMS → Execution Engine → SanhuQuant API
 
 ---
 
-### 阶段七：Web平台+监控（待开发）
+### 阶段七：Web平台+监控（进行中）
 
 **工期：** 3-4周
 
@@ -454,16 +454,25 @@ Portfolio Engine → Risk Engine → OMS → Execution Engine → SanhuQuant API
 
 #### 任务清单
 
-| 任务 | 优先级 | 说明 |
-|------|--------|------|
-| React项目初始化 | P0 | React + Ant Design Pro |
-| Dashboard页面 | P0 | PnL/持仓/信号/日志 |
-| 策略管理界面 | P0 | 策略配置/回测/启动 |
-| 持仓收益查看 | P0 | 实时持仓/盈亏 |
-| 多模型对比界面 | P1 | LLM模型对比 |
-| 告警系统 | P1 | 企业微信/钉钉/Telegram |
-| 模型监控 | P2 | 漂移检测/性能衰减 |
-| Docker部署优化 | P1 | 生产环境配置 |
+| 任务 | 优先级 | 说明 | 状态 |
+|------|--------|------|------|
+| React项目初始化 | P0 | React + Ant Design Pro | ✅ 完成 |
+| Dashboard页面 | P0 | PnL/持仓/信号/日志 | ✅ 完成 |
+| 策略管理界面 | P0 | 策略配置/回测/启动 | ✅ 完成 |
+| 持仓收益查看 | P0 | 实时持仓/盈亏 | ✅ 完成 |
+| Agent监控 | P1 | Agent状态/执行任务 | ✅ 完成 |
+| 告警系统 | P1 | 企业微信/钉钉/Telegram | ⏳ 待开发 |
+| 模型监控 | P2 | 漂移检测/性能衰减 | ⏳ 待开发 |
+| Docker部署优化 | P1 | 生产环境配置 | ⏳ 待开发 |
+
+#### 页面列表
+
+| 页面 | 路由 | 说明 |
+|------|------|------|
+| Dashboard | `/` | 总览页面 |
+| 持仓管理 | `/positions` | 持仓查看 |
+| Agent监控 | `/agents` | Agent状态和执行任务 |
+| 策略管理 | `/strategy` | 回测配置和执行 |
 
 ---
 
@@ -607,3 +616,4 @@ curl http://localhost:5172/api/health
 | 2026-05-28 | v4.3 | 移除GetAccountBalanceAsync，统一使用GetAccountPositionsAsync |
 | 2026-05-28 | v5.0 | 阶段六：Multi-Agent框架（ResearchAgent、AlphaAgent、RiskAgent、AgentOrchestrator） |
 | 2026-05-28 | v5.1 | 新增自主决策系统（AutonomousDecisionSystem） |
+| 2026-05-28 | v6.0 | 阶段七：Web前端（React + Ant Design，Dashboard/持仓/Agent/策略页面） |
