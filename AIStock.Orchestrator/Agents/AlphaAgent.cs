@@ -13,6 +13,7 @@ public class AlphaAgent : IAgent
     private readonly IAlphaEngine _alphaEngine;
     private readonly IFeatureCalculator _featureCalculator;
     private readonly IDataProviderResolver _dataProviderResolver;
+    private readonly IEnumerable<IStrategy> _strategies;
     private readonly ILogger<AlphaAgent> _logger;
     private readonly IAgentMemory? _memory;
 
@@ -20,12 +21,14 @@ public class AlphaAgent : IAgent
         IAlphaEngine alphaEngine,
         IFeatureCalculator featureCalculator,
         IDataProviderResolver dataProviderResolver,
+        IEnumerable<IStrategy> strategies,
         ILogger<AlphaAgent> logger,
         IAgentMemory? memory = null)
     {
         _alphaEngine = alphaEngine;
         _featureCalculator = featureCalculator;
         _dataProviderResolver = dataProviderResolver;
+        _strategies = strategies;
         _logger = logger;
         _memory = memory;
     }
@@ -98,46 +101,44 @@ public class AlphaAgent : IAgent
         var indicators = _featureCalculator.CalculateAll(code, klines);
         var currentPrice = klines.Last().Close;
 
-        var signals = new List<TradeSignal>();
-
-        if (indicators.MA?.MA5 > indicators.MA?.MA20 && currentPrice > indicators.MA?.MA5)
+        // 运行所有已注册策略，收集原始信号（含买/卖，带止损止盈）
+        var rawSignals = new List<TradeSignal>();
+        foreach (var strategy in _strategies)
         {
-            signals.Add(new TradeSignal
+            try
             {
-                Code = code,
-                SignalType = Core.Enums.SignalType.Buy,
-                Strength = 70,
-                Price = currentPrice,
-                StrategyName = "MASignal",
-                Reason = "MA5 > MA20, price above MA5"
-            });
+                var signal = await strategy.GenerateSignalAsync(code, klines, indicators);
+                if (signal != null && signal.SignalType != Core.Enums.SignalType.Hold)
+                    rawSignals.Add(signal);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Strategy {Strategy} failed for {Code}", strategy.Name, code);
+            }
         }
 
-        if (indicators.RSI?.RSI12 < 30)
-        {
-            signals.Add(new TradeSignal
-            {
-                Code = code,
-                SignalType = Core.Enums.SignalType.Buy,
-                Strength = 65,
-                Price = currentPrice,
-                StrategyName = "RSISignal",
-                Reason = "RSI oversold"
-            });
-        }
+        // 多策略融合为单一综合信号（含多空判定）
+        var composite = await _alphaEngine.GenerateCompositeSignalAsync(code, rawSignals);
+
+        // 仅当综合信号可执行（买/卖）时才作为可下单信号输出，Hold 不下单
+        var actionable = composite.SignalType != Core.Enums.SignalType.Hold
+            ? new List<TradeSignal> { composite }
+            : new List<TradeSignal>();
 
         var result = new Dictionary<string, object>
         {
             ["code"] = code,
             ["currentPrice"] = currentPrice,
-            ["signals"] = signals
+            ["signals"] = actionable,
+            ["rawSignals"] = rawSignals,
+            ["composite"] = composite
         };
 
         return new AgentResult
         {
             Success = true,
             Output = result,
-            Message = $"Generated {signals.Count} signals for {code}",
+            Message = $"{_strategies.Count()} strategies → {rawSignals.Count} raw signals → composite {composite.SignalType} (strength {composite.Strength})",
             ExecutionTime = (long)(DateTime.UtcNow - startTime).TotalMilliseconds
         };
     }

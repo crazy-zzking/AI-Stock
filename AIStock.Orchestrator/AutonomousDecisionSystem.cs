@@ -212,10 +212,17 @@ public class AutonomousDecisionSystem
             };
         }
 
+        var side = ResolveSide(signal.SignalType);
+        if (side == null)
+        {
+            _logger.LogInformation("Signal type {Type} for {Code} is not actionable, skipping order", signal.SignalType, signal.Code);
+            return new OrderResult { Success = false, Message = $"Signal {signal.SignalType} not actionable, order skipped" };
+        }
+
         var orderRequest = new OrderRequest
         {
             Code = signal.Code,
-            Side = signal.SignalType.ToString().ToLower(),
+            Side = side,
             OrderType = Core.Enums.OrderType.Limit,
             Price = signal.Price,
             Volume = volume,
@@ -225,6 +232,16 @@ public class AutonomousDecisionSystem
 
         return await _orderManager.PlaceOrderAsync(orderRequest);
     }
+
+    /// <summary>
+    /// 将信号类型映射为下单方向。Buy/StrongBuy → buy，Sell/StrongSell → sell，Hold/未知 → null（不下单）。
+    /// </summary>
+    private static string? ResolveSide(SignalType signalType) => signalType switch
+    {
+        SignalType.Buy or SignalType.StrongBuy => "buy",
+        SignalType.Sell or SignalType.StrongSell => "sell",
+        _ => null
+    };
 
     private static List<TradeSignal> ExtractSignals(AgentResult signalResult)
     {
