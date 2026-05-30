@@ -30,4 +30,16 @@ public class DataSyncOptions
 
     /// <summary>每只股票K线请求之间的节流间隔（毫秒），避免压垮数据源</summary>
     public int KlineThrottleMs { get; set; } = 200;
+
+    /// <summary>是否同步股票明细（行业 + 概念，来自东财 F10 / 同花顺）</summary>
+    public bool SyncDetails { get; set; } = true;
+
+    /// <summary>明细同步本轮最多处理多少只（0 = 全部）</summary>
+    public int DetailMaxStocks { get; set; } = 0;
+
+    /// <summary>明细同步批大小（批内并发）</summary>
+    public int DetailBatchSize { get; set; } = 10;
+
+    /// <summary>明细同步批间延迟（毫秒）</summary>
+    public int DetailBatchDelayMs { get; set; } = 50;
 }

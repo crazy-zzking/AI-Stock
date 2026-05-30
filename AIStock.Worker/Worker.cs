@@ -59,6 +59,9 @@ public class Worker : BackgroundService
             _logger.LogInformation("开始数据同步周期");
             await _syncService.SyncStockBaseAsync(ct);
 
+            if (_options.SyncDetails)
+                await _syncService.SyncStockDetailsAsync(ct);
+
             if (_options.SyncKlines)
                 await _syncService.SyncKlinesAsync(ct);
 

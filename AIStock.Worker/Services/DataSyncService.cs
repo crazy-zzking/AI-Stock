@@ -15,7 +15,7 @@ namespace AIStock.Worker.Services;
 /// 数据同步服务 — 将股票池与日K落库到 stock_base / kline_data。
 /// 股票池来自 DataSync:StockCodesUrl 接口，K线来自数据源 Provider。
 /// </summary>
-public class DataSyncService
+public partial class DataSyncService
 {
     private readonly IDataProviderResolver _resolver;
     private readonly IServiceScopeFactory _scopeFactory;

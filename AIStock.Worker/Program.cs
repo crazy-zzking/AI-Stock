@@ -8,6 +8,7 @@ using AIStock.Core.Interfaces;
 using AIStock.Worker;
 using AIStock.Worker.Services;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Serilog;
 using StackExchange.Redis;
 
@@ -64,6 +65,13 @@ builder.Services.AddSingleton<IntelligenceSyncService>();
 builder.Services.AddHostedService<IntelligenceWorker>();
 
 var host = builder.Build();
+
+// 启动时应用数据库迁移（确保表结构最新）
+using (var scope = host.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<AIStockDbContext>();
+    await db.Database.MigrateAsync();
+}
 
 // 启动时将 Provider 灌入 Resolver
 host.Services.InitializeDataProviders();
