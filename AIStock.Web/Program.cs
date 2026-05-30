@@ -1,4 +1,5 @@
 using AIStock.Core.Interfaces;
+using AIStock.Data;
 using AIStock.Data.Providers;
 using AIStock.Data.Providers.Eastmoney;
 using AIStock.Data.Providers.Sanhu;
@@ -143,80 +144,8 @@ builder.Services.AddPromptServices();
 // 注册Agent Memory服务
 builder.Services.AddMemoryServices();
 
-// 注册数据源Provider
-builder.Services.AddSingleton<IDataProviderResolver, DataProviderResolver>();
-
-// 注册HttpClient（带重试策略）
-builder.Services.AddHttpClient("default")
-    .AddStandardResilienceHandler(options =>
-    {
-        options.Retry.MaxRetryAttempts = 3;
-        options.Retry.BackoffType = Polly.DelayBackoffType.Exponential;
-        options.Retry.Delay = TimeSpan.FromSeconds(1);
-        options.AttemptTimeout.Timeout = TimeSpan.FromSeconds(30);
-        options.CircuitBreaker.SamplingDuration = TimeSpan.FromMinutes(1);
-        options.CircuitBreaker.FailureRatio = 0.5;
-        options.CircuitBreaker.MinimumThroughput = 10;
-    });
-
-// 注册各数据源Provider
-builder.Services.AddSingleton<IDataProvider>(sp =>
-{
-    var logger = sp.GetRequiredService<ILogger<SanhuProvider>>();
-    var httpClient = sp.GetRequiredService<IHttpClientFactory>().CreateClient();
-    var config = builder.Configuration.GetSection("DataProviders:Sanhu");
-    return new SanhuProvider(
-        logger,
-        httpClient,
-        config["BaseUrl"]!,
-        config["Token"]!,
-        config["MyKey"] ?? "");
-});
-
-builder.Services.AddSingleton<IDataProvider>(sp =>
-{
-    var logger = sp.GetRequiredService<ILogger<EastmoneyProvider>>();
-    var config = builder.Configuration.GetSection("Proxy");
-    
-    // 检查是否启用隧道代理
-    var useTunnelProxy = config.GetValue<bool>("UseTunnelProxy");
-    HttpClient httpClient;
-    
-    if (useTunnelProxy)
-    {
-        var tunnelHost = config["TunnelHost"] ?? "c360.kdltps.com";
-        var tunnelPort = config.GetValue<int>("TunnelPort", 15818);
-        var tunnelUsername = config["TunnelUsername"] ?? "";
-        var tunnelPassword = config["TunnelPassword"] ?? "";
-        
-        httpClient = EastmoneyProvider.CreateHttpClientWithTunnelProxy(
-            tunnelHost, tunnelPort, tunnelUsername, tunnelPassword);
-        
-        logger.LogInformation("Eastmoney provider using tunnel proxy: {Host}:{Port}", tunnelHost, tunnelPort);
-    }
-    else
-    {
-        httpClient = sp.GetRequiredService<IHttpClientFactory>().CreateClient();
-    }
-    
-    return new EastmoneyProvider(logger, httpClient);
-});
-
-builder.Services.AddSingleton<IDataProvider>(sp =>
-{
-    var logger = sp.GetRequiredService<ILogger<TencentProvider>>();
-    var httpClient = sp.GetRequiredService<IHttpClientFactory>().CreateClient();
-    return new TencentProvider(logger, httpClient);
-});
-
-builder.Services.AddSingleton<IDataProvider>(sp =>
-{
-    var logger = sp.GetRequiredService<ILogger<TdxProvider>>();
-    // 通达信服务器配置（可从配置文件读取）
-    var host = builder.Configuration["Tdx:Host"] ?? "119.147.212.81";
-    var port = builder.Configuration.GetValue<int>("Tdx:Port", 7709);
-    return new TdxProvider(logger, host, port);
-});
+// 注册数据源Provider（HttpClient/Resolver/各Provider，统一扩展，与 Worker 共用）
+builder.Services.AddDataProviders(builder.Configuration);
 
 // 配置CORS
 builder.Services.AddCors(options =>
@@ -277,15 +206,7 @@ using (var scope = app.Services.CreateScope())
 }
 
 // 注册Provider到Resolver
-using (var scope = app.Services.CreateScope())
-{
-    var resolver = scope.ServiceProvider.GetRequiredService<IDataProviderResolver>();
-    var providers = scope.ServiceProvider.GetServices<IDataProvider>();
-    foreach (var provider in providers)
-    {
-        resolver.RegisterProvider(provider);
-    }
-}
+app.Services.InitializeDataProviders();
 
 // 检查 Playwright 是否已安装（可选）
 if (builder.Configuration.GetValue<bool>("Playwright:CheckOnStartup"))
