@@ -33,6 +33,10 @@ Log.Logger = new LoggerConfiguration()
 
 builder.Services.AddSerilog();
 
+// 防崩溃连带：单个 BackgroundService 未捕获异常默认会停掉整个宿主，改为忽略（仅该服务受影响）
+builder.Services.Configure<HostOptions>(o =>
+    o.BackgroundServiceExceptionBehavior = BackgroundServiceExceptionBehavior.Ignore);
+
 // 配置 MySQL
 var connectionString = builder.Configuration.GetConnectionString("MySQL");
 builder.Services.AddDbContext<AIStockDbContext>(options =>
