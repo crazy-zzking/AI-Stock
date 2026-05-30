@@ -1,22 +1,30 @@
 using AIStock.Core.Enums;
 using AIStock.Core.Interfaces;
+using AIStock.Core.Models;
 using Microsoft.Extensions.Logging;
 
 namespace AIStock.Execution.Services;
 
 /// <summary>
-/// 订单管理实现 - 通过IDataProvider接口解耦
+/// 订单管理实现 - 通过IDataProvider接口解耦。
+/// 所有下单路径（自主决策/手动API/Worker）均经此处，安全护栏在此统一强制执行。
 /// </summary>
 public class OrderManagerService : IOrderManager
 {
     private readonly IDataProviderResolver _dataProviderResolver;
+    private readonly ITradingGate _tradingGate;
+    private readonly TradingGuardOptions _guard;
     private readonly ILogger<OrderManagerService> _logger;
 
     public OrderManagerService(
         IDataProviderResolver dataProviderResolver,
+        ITradingGate tradingGate,
+        Microsoft.Extensions.Options.IOptions<TradingGuardOptions> guardOptions,
         ILogger<OrderManagerService> logger)
     {
         _dataProviderResolver = dataProviderResolver;
+        _tradingGate = tradingGate;
+        _guard = guardOptions.Value;
         _logger = logger;
     }
 
@@ -47,6 +55,42 @@ public class OrderManagerService : IOrderManager
                     Success = false,
                     Message = "下单数量不足1手(100股)",
                     Status = OrderStatus.Failed
+                };
+            }
+
+            // ===== 安全护栏 =====
+            // 1. 单笔金额上限
+            var orderValue = request.Price * request.Volume;
+            if (_guard.MaxOrderValue > 0 && orderValue > _guard.MaxOrderValue)
+            {
+                return Rejected($"单笔金额 {orderValue:N0} 超过上限 {_guard.MaxOrderValue:N0}", request);
+            }
+
+            // 2. kill-switch + 每日下单次数
+            if (!_tradingGate.TryReserveOrderSlot(out var rejectReason))
+            {
+                return Rejected(rejectReason ?? "交易闸门拒绝", request);
+            }
+
+            // 3. 下单前账户校验（买入查可用资金，卖出查可用持仓）
+            var accountCheck = await CheckAccountAsync(provider, request, orderValue);
+            if (accountCheck != null)
+            {
+                return accountCheck;
+            }
+
+            // 4. DryRun 模式：不调用券商接口，仅记录意向单
+            if (_tradingGate.Mode == TradingMode.DryRun)
+            {
+                _logger.LogInformation(
+                    "[DryRun] 模拟下单 {Side} {Code} {Volume}@{Price} (金额 {Value:N0})，未发送至券商",
+                    request.Side, request.Code, request.Volume, request.Price, orderValue);
+                return new OrderResult
+                {
+                    OrderId = $"DRYRUN-{Guid.NewGuid():N}",
+                    Success = true,
+                    Message = "[DryRun] 模拟下单成功，未真实成交",
+                    Status = OrderStatus.Submitted
                 };
             }
 
@@ -84,6 +128,56 @@ public class OrderManagerService : IOrderManager
                 Status = OrderStatus.Failed
             };
         }
+    }
+
+    private OrderResult Rejected(string reason, OrderRequest request)
+    {
+        _logger.LogWarning("下单被护栏拒绝 {Code} {Side} {Volume}@{Price}: {Reason}",
+            request.Code, request.Side, request.Volume, request.Price, reason);
+        return new OrderResult
+        {
+            Success = false,
+            Message = $"下单被拒绝: {reason}",
+            Status = OrderStatus.Failed
+        };
+    }
+
+    /// <summary>
+    /// 下单前账户校验。通过返回 null，不通过返回拒绝结果。
+    /// </summary>
+    private async Task<OrderResult?> CheckAccountAsync(IDataProvider provider, OrderRequest request, decimal orderValue)
+    {
+        AccountInfo account;
+        try
+        {
+            account = await provider.GetAccountInfoAsync();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "下单前账户查询失败，保守拒单 {Code}", request.Code);
+            return Rejected("账户查询失败，保守拒单", request);
+        }
+
+        if (request.Side.ToLower() == "buy")
+        {
+            if (account.AvailableBalance < orderValue)
+            {
+                return Rejected(
+                    $"可用资金不足: 需 {orderValue:N0}，可用 {account.AvailableBalance:N0}", request);
+            }
+        }
+        else
+        {
+            var position = account.Positions.FirstOrDefault(p => p.Code == request.Code);
+            var available = position?.AvailableVolume ?? 0;
+            if (available < request.Volume)
+            {
+                return Rejected(
+                    $"可用持仓不足: 需卖 {request.Volume}，可用 {available}", request);
+            }
+        }
+
+        return null;
     }
 
     public async Task<bool> CancelOrderAsync(string orderId)

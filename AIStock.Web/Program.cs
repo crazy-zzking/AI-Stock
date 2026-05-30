@@ -132,7 +132,7 @@ builder.Services.AddStrategyServices();
 builder.Services.AddRiskServices();
 
 // 注册执行服务
-builder.Services.AddExecutionServices();
+builder.Services.AddExecutionServices(builder.Configuration);
 
 // 注册编排服务
 builder.Services.AddOrchestratorServices();

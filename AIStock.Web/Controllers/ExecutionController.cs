@@ -14,16 +14,53 @@ public class ExecutionController : ControllerBase
 {
     private readonly IOrderManager _orderManager;
     private readonly IPositionManager _positionManager;
+    private readonly ITradingGate _tradingGate;
     private readonly ILogger<ExecutionController> _logger;
 
     public ExecutionController(
         IOrderManager orderManager,
         IPositionManager positionManager,
+        ITradingGate tradingGate,
         ILogger<ExecutionController> logger)
     {
         _orderManager = orderManager;
         _positionManager = positionManager;
+        _tradingGate = tradingGate;
         _logger = logger;
+    }
+
+    /// <summary>
+    /// 交易闸门状态（模式/熔断/今日下单数）
+    /// </summary>
+    [HttpGet("trading/status")]
+    public ActionResult GetTradingStatus()
+    {
+        return Ok(new
+        {
+            mode = _tradingGate.Mode.ToString(),
+            halted = _tradingGate.IsHalted,
+            todayOrderCount = _tradingGate.TodayOrderCount
+        });
+    }
+
+    /// <summary>
+    /// 触发熔断 — 立即停止所有自动下单（kill-switch）
+    /// </summary>
+    [HttpPost("trading/halt")]
+    public ActionResult Halt([FromQuery] string? reason = null)
+    {
+        _tradingGate.Halt(reason ?? "手动触发");
+        return Ok(new { halted = true, mode = _tradingGate.Mode.ToString() });
+    }
+
+    /// <summary>
+    /// 解除熔断
+    /// </summary>
+    [HttpPost("trading/resume")]
+    public ActionResult Resume()
+    {
+        _tradingGate.Resume();
+        return Ok(new { halted = _tradingGate.IsHalted });
     }
 
     /// <summary>
