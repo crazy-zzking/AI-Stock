@@ -148,39 +148,55 @@ public class CredibilityAnalyzerService : ICredibilityAnalyzer
         const string interval = "Daily"; // 与落库 Interval 一致（大小写敏感）
         var eventDate = eventData.EventTime == default ? DateTime.Now.Date : eventData.EventTime.Date;
 
-        var abnormal = new List<string>();
+        const int preWindowDays = 5;   // 发布前窗口（主力提前建仓）
+        const double preThreshold = 1.8;
+        const double postThreshold = 2.0;
+
+        var preSignals = new List<string>();   // 提前放量（更可疑）
+        var postSignals = new List<string>();  // 当日放量
         var analyzed = 0;
 
         foreach (var code in codes.Take(5))
         {
-            // 取消息日期前后一段的日K（含发布日后的几天）
+            // 取消息日期前后一段日K（发布日后几天 + 之前约30日）
             var klines = await _dbContext.KlineData
                 .Where(k => k.Code == code && k.Interval == interval && k.DateTime <= eventDate.AddDays(5))
                 .OrderByDescending(k => k.DateTime)
-                .Take(25)
+                .Take(40)
                 .ToListAsync(cancellationToken);
 
-            if (klines.Count < 6) continue; // 数据不足
+            if (klines.Count < 10) continue; // 数据不足
             analyzed++;
 
-            // 发布日当天或之后最近一个交易日成交量 vs 之前约20日均量
+            // 发布日当天/之后首个交易日
             var post = klines.Where(k => k.DateTime.Date >= eventDate).OrderBy(k => k.DateTime).FirstOrDefault()
                        ?? klines.First();
-            var prior = klines.Where(k => k.DateTime < post.DateTime).Take(20).ToList();
-            if (prior.Count < 3) continue;
+            // 发布前窗口（紧邻发布日的前几个交易日）— 主力提前进场
+            var preWindow = klines.Where(k => k.DateTime < post.DateTime).Take(preWindowDays).ToList();
+            // 基线（更早的约20个交易日）
+            var baseline = klines.Where(k => k.DateTime < post.DateTime).Skip(preWindowDays).Take(20).ToList();
+            if (baseline.Count < 5 || preWindow.Count < 2) continue;
 
-            var avgVolume = prior.Average(k => (double)k.Volume);
-            if (avgVolume > 0 && post.Volume > avgVolume * 2)
-                abnormal.Add($"{code}(放量{post.Volume / avgVolume:F1}倍)");
+            var baseAvg = baseline.Average(k => (double)k.Volume);
+            if (baseAvg <= 0) continue;
+
+            var preAvg = preWindow.Average(k => (double)k.Volume);
+            if (preAvg > baseAvg * preThreshold)
+                preSignals.Add($"{code}(发布前{preWindowDays}日均量放大{preAvg / baseAvg:F1}倍)");
+            else if (post.Volume > baseAvg * postThreshold)
+                postSignals.Add($"{code}(发布当日放量{post.Volume / baseAvg:F1}倍)");
         }
 
         if (analyzed == 0)
             return (50, "关联股票无足够K线数据，无法验证资金配合");
 
-        if (abnormal.Count > 0)
-            return (75, $"消息发布前后检测到异常放量：{string.Join("、", abnormal)}，需警惕资金配合炒作");
+        // 提前放量最可疑（主力先知先行），其次当日放量
+        if (preSignals.Count > 0)
+            return (80, $"消息发布前已现异常放量（疑主力提前进场）：{string.Join("、", preSignals)}");
+        if (postSignals.Count > 0)
+            return (72, $"消息发布当日放量：{string.Join("、", postSignals)}，需警惕资金配合");
 
-        return (60, $"已核{analyzed}只关联股票，发布前后未见明显放量异动");
+        return (60, $"已核{analyzed}只关联股票，发布前后未见明显资金异动");
     }
 
     private int CalculateCredibilityScore(CredibilityResult result)
