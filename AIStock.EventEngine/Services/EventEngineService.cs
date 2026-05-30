@@ -42,6 +42,18 @@ public class EventEngineService
     {
         try
         {
+            // 0. 去重：同 Url 已处理过则跳过
+            if (!string.IsNullOrEmpty(report.Url))
+            {
+                var existing = await _dbContext.EventRecord
+                    .FirstOrDefaultAsync(e => e.Url == report.Url, cancellationToken);
+                if (existing != null)
+                {
+                    _logger.LogDebug("跳过重复研报：{Title}", report.Title);
+                    return existing;
+                }
+            }
+
             // 1. 抽取事件
             var eventData = await _eventExtractor.ExtractFromReportAsync(report, cancellationToken);
 
@@ -108,6 +120,18 @@ public class EventEngineService
     {
         try
         {
+            // 0. 去重：同 Url 已处理过则跳过（避免重复采集重复入库 + 节省 LLM 调用）
+            if (!string.IsNullOrEmpty(news.Url))
+            {
+                var existing = await _dbContext.EventRecord
+                    .FirstOrDefaultAsync(e => e.Url == news.Url, cancellationToken);
+                if (existing != null)
+                {
+                    _logger.LogDebug("跳过重复新闻：{Title}", news.Title);
+                    return existing;
+                }
+            }
+
             // 1. 抽取事件
             var eventData = await _eventExtractor.ExtractFromNewsAsync(news, cancellationToken);
 
