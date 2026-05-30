@@ -16,6 +16,9 @@ var builder = Host.CreateApplicationBuilder(args);
 
 // 加载用户配置文件（如果存在）
 builder.Configuration.AddJsonFile("appsettings.user.json", optional: true, reloadOnChange: true);
+// 重新追加环境变量与命令行，确保其优先级高于 user.json（命令行最高）
+builder.Configuration.AddEnvironmentVariables();
+builder.Configuration.AddCommandLine(args);
 
 // 配置 Serilog
 Log.Logger = new LoggerConfiguration()
