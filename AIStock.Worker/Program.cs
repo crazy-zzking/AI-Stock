@@ -66,6 +66,8 @@ builder.Services.AddEventEngineServices();
 builder.Services.Configure<DataSyncOptions>(builder.Configuration.GetSection(DataSyncOptions.SectionName));
 builder.Services.AddSingleton<DataSyncService>();
 builder.Services.Configure<IntelligenceSyncOptions>(builder.Configuration.GetSection(IntelligenceSyncOptions.SectionName));
+builder.Services.Configure<AIStock.Intelligence.KnowledgeStarOptions>(
+    builder.Configuration.GetSection(AIStock.Intelligence.KnowledgeStarOptions.SectionName));
 builder.Services.AddSingleton<IntelligenceSyncService>();
 
 // 调度：每个后台任务独立注册，调度参数由 Jobs:<Name> 配置
@@ -77,6 +79,7 @@ builder.Services.AddSingleton<IScheduledJob, KlineSyncJob>();
 builder.Services.AddSingleton<IScheduledJob, NewsCollectJob>();
 builder.Services.AddSingleton<IScheduledJob, AnnouncementCollectJob>();
 builder.Services.AddSingleton<IScheduledJob, ReportCollectJob>();
+builder.Services.AddSingleton<IScheduledJob, KnowledgeStarCollectJob>();
 builder.Services.AddHostedService<JobScheduler>();
 
 var host = builder.Build();

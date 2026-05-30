@@ -81,3 +81,12 @@ public class ReportCollectJob : IScheduledJob
     public string Name => "report";
     public Task ExecuteAsync(CancellationToken ct) => _sync.SyncReportsAsync(ct);
 }
+
+/// <summary>知识星球采集任务（低频，防封）</summary>
+public class KnowledgeStarCollectJob : IScheduledJob
+{
+    private readonly IntelligenceSyncService _sync;
+    public KnowledgeStarCollectJob(IntelligenceSyncService sync) => _sync = sync;
+    public string Name => "knowledge-star";
+    public Task ExecuteAsync(CancellationToken ct) => _sync.SyncKnowledgeStarAsync(ct);
+}

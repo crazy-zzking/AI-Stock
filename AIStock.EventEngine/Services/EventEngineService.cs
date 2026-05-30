@@ -319,6 +319,65 @@ public class EventEngineService
             await _dbContext.SaveChangesAsync(cancellationToken);
     }
 
+    /// <summary>事件是否已存在（按 Url 去重，供采集前预判，避免无谓的 LLM 调用）</summary>
+    public async Task<bool> ExistsByUrlAsync(string url, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrEmpty(url)) return false;
+        return await _dbContext.EventRecord.AnyAsync(e => e.Url == url, cancellationToken);
+    }
+
+    /// <summary>
+    /// 保存知识星球内容事件（已由小作文分析器分析过的结果）。
+    /// </summary>
+    public async Task<EventRecordEntity?> SaveKnowledgeStarEventAsync(
+        KnowledgeStarContent content, EssayAnalysisResult essay, CancellationToken cancellationToken = default)
+    {
+        if (!string.IsNullOrEmpty(content.Url) && await ExistsByUrlAsync(content.Url, cancellationToken))
+            return null;
+
+        var stocks = content.RelatedStocks.Union(essay.RelatedCompanies).Distinct().ToList();
+        var concepts = content.RelatedConcepts.Union(essay.RelatedConcepts).Distinct().ToList();
+
+        var entity = new EventRecordEntity
+        {
+            EventType = "knowledge-star",
+            Title = content.Title,
+            Content = content.Content,
+            Source = "知识星球",
+            Url = content.Url,
+            Sentiment = essay.Sentiment,
+            SentimentScore = essay.SentimentScore,
+            Credibility = essay.CredibilityScore,
+            RelatedStocks = string.Join(",", stocks),
+            RelatedConcepts = string.Join(",", concepts),
+            LLMAnalysis = System.Text.Json.JsonSerializer.Serialize(new
+            {
+                essay.CredibilityScore,
+                essay.Summary,
+                essay.Conclusion,
+                essay.RiskWarnings,
+                content.Author
+            }),
+            EventTime = content.PublishTime
+        };
+
+        _dbContext.EventRecord.Add(entity);
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        await SaveEventRelationsAsync(entity.Id, stocks, concepts, cancellationToken);
+
+        await _messageBus.PublishAsync("events", new
+        {
+            EventId = entity.Id,
+            EventType = "knowledge-star",
+            content.Title,
+            essay.Sentiment,
+            essay.CredibilityScore
+        });
+
+        _logger.LogInformation("知识星球事件入库：{Title}（可信度 {Cred}）", content.Title, essay.CredibilityScore);
+        return entity;
+    }
+
     /// <summary>按股票精确查询关联事件（用关联表 JOIN，替代逗号字符串 LIKE）</summary>
     public async Task<List<EventRecordEntity>> GetEventsByStockAsync(string stockCode, int count = 50, CancellationToken cancellationToken = default)
     {

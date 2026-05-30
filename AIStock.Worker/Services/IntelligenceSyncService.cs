@@ -109,6 +109,49 @@ public class IntelligenceSyncService
     }
 
     /// <summary>
+    /// 采集知识星球内容并经小作文可信度分析后入库。采集前按 URL 去重，避免重复 LLM 分析。
+    /// </summary>
+    public async Task<int> SyncKnowledgeStarAsync(CancellationToken ct = default)
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var collector = scope.ServiceProvider.GetRequiredService<IKnowledgeStarCollector>();
+        var essay = scope.ServiceProvider.GetRequiredService<IEssayAnalyzer>();
+        var engine = scope.ServiceProvider.GetRequiredService<EventEngineService>();
+
+        var items = await collector.GetLatestContentAsync(20, ct);
+        if (items.Count == 0)
+        {
+            _logger.LogInformation("知识星球无新内容（或未配置 token/groups）");
+            return 0;
+        }
+
+        var ok = 0;
+        foreach (var item in items)
+        {
+            if (ct.IsCancellationRequested) break;
+            try
+            {
+                if (string.IsNullOrWhiteSpace(item.Content)) continue;
+                if (await engine.ExistsByUrlAsync(item.Url, ct)) continue; // 去重前置，省 LLM
+
+                var result = await essay.AnalyzeTextAsync(item.Content, ct);
+                var saved = await engine.SaveKnowledgeStarEventAsync(item, result, ct);
+                if (saved != null) ok++;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "知识星球内容处理失败：{Title}", item.Title);
+            }
+
+            if (_options.ItemThrottleMs > 0)
+                await Task.Delay(_options.ItemThrottleMs, ct);
+        }
+
+        _logger.LogInformation("知识星球入库完成：{Ok}/{Total}", ok, items.Count);
+        return ok;
+    }
+
+    /// <summary>
     /// 采集研报并处理入库。返回成功处理的条数。
     /// </summary>
     public async Task<int> SyncReportsAsync(CancellationToken ct = default)
