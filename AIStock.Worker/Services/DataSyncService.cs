@@ -211,20 +211,48 @@ public partial class DataSyncService
     /// </summary>
     public async Task<DateTime> GetLastClosedTradingDayAsync(int closeHour, CancellationToken ct = default)
     {
-        var provider = _resolver.GetDefaultProvider();
         var now = DateTime.Now;
         var day = now.Date;
         if (now.Hour < closeHour) day = day.AddDays(-1); // 今日尚未收盘，从昨天起找
 
-        for (int i = 0; i < 14; i++)
+        // 拉取一段窗口的交易日集合（接口判断），再回溯找最近交易日
+        var tradingDays = await FetchTradingDaysAsync(day.AddDays(-25), now.Date, ct);
+
+        for (int i = 0; i < 25; i++)
         {
-            bool isTradingDay;
-            try { isTradingDay = await provider.IsTradingDayAsync(day); }
-            catch { isTradingDay = day.DayOfWeek != DayOfWeek.Saturday && day.DayOfWeek != DayOfWeek.Sunday; }
+            bool isTradingDay = tradingDays.Count > 0
+                ? tradingDays.Contains(day)
+                : day.DayOfWeek != DayOfWeek.Saturday && day.DayOfWeek != DayOfWeek.Sunday; // 接口不可用时降级为周末判断
             if (isTradingDay) return day;
             day = day.AddDays(-1);
         }
         return day;
+    }
+
+    /// <summary>从交易日接口获取区间内的交易日集合</summary>
+    private async Task<HashSet<DateTime>> FetchTradingDaysAsync(DateTime start, DateTime end, CancellationToken ct)
+    {
+        try
+        {
+            var client = _httpClientFactory.CreateClient("default");
+            var url = $"{_options.WorkdayUrl}?start={start:yyyyMMdd}&end={end:yyyyMMdd}";
+            var json = await client.GetStringAsync(url, ct);
+            var resp = JsonSerializer.Deserialize<WorkdayResponse>(json);
+            var list = resp?.Data?.List;
+            if (list == null) return new HashSet<DateTime>();
+            return list
+                .Where(x => !string.IsNullOrEmpty(x.Numeric))
+                .Select(x => DateTime.TryParseExact(x.Numeric, "yyyyMMdd", null,
+                    System.Globalization.DateTimeStyles.None, out var d) ? d : (DateTime?)null)
+                .Where(d => d.HasValue)
+                .Select(d => d!.Value.Date)
+                .ToHashSet();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "交易日接口获取失败，降级为周末判断");
+            return new HashSet<DateTime>();
+        }
     }
 
     /// <summary>
@@ -258,4 +286,23 @@ public class StockCodeDto
     [JsonPropertyName("code")] public string? Code { get; set; }
     [JsonPropertyName("exchange")] public string? Exchange { get; set; }
     [JsonPropertyName("name")] public string? Name { get; set; }
+}
+
+/// <summary>交易日接口响应</summary>
+public class WorkdayResponse
+{
+    [JsonPropertyName("code")] public int Code { get; set; }
+    [JsonPropertyName("data")] public WorkdayData? Data { get; set; }
+}
+
+public class WorkdayData
+{
+    [JsonPropertyName("count")] public int Count { get; set; }
+    [JsonPropertyName("list")] public List<WorkdayItem>? List { get; set; }
+}
+
+public class WorkdayItem
+{
+    [JsonPropertyName("iso")] public string? Iso { get; set; }
+    [JsonPropertyName("numeric")] public string? Numeric { get; set; }
 }

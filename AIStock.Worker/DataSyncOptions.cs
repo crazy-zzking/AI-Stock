@@ -13,6 +13,9 @@ public class DataSyncOptions
     /// <summary>股票池接口地址（返回全市场代码）</summary>
     public string StockCodesUrl { get; set; } = "http://115.29.178.22:8080/api/codes";
 
+    /// <summary>交易日接口地址（range 查询，判断收盘后是否需同步）</summary>
+    public string WorkdayUrl { get; set; } = "http://115.29.178.22:8080/api/workday/range";
+
     /// <summary>收盘同步时刻（小时，24制）。交易日此时刻后同步当日K线</summary>
     public int SyncHour { get; set; } = 16;
 
