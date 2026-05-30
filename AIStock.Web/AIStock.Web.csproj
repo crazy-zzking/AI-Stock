@@ -36,6 +36,7 @@
     <ProjectReference Include="..\AIStock.Orchestrator\AIStock.Orchestrator.csproj" />
     <ProjectReference Include="..\AIStock.Prompt\AIStock.Prompt.csproj" />
     <ProjectReference Include="..\AIStock.Memory\AIStock.Memory.csproj" />
+    <ProjectReference Include="..\AIStock.Monitor\AIStock.Monitor.csproj" />
   </ItemGroup>
 
 </Project>

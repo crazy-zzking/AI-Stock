@@ -15,6 +15,7 @@ using AIStock.Intelligence;
 using AIStock.Knowledge;
 using AIStock.LLM;
 using AIStock.Memory;
+using AIStock.Monitor;
 using AIStock.Orchestrator;
 using AIStock.Prompt;
 using AIStock.Prompt.Services;
@@ -143,6 +144,12 @@ builder.Services.AddPromptServices();
 
 // 注册Agent Memory服务
 builder.Services.AddMemoryServices();
+
+// 注册监控告警服务
+builder.Services.Configure<AIStock.Monitor.MonitorOptions>(
+    builder.Configuration.GetSection(AIStock.Monitor.MonitorOptions.SectionName));
+builder.Services.AddMonitorServices();
+builder.Services.AddHostedService<AIStock.Web.Services.MonitorBackgroundService>();
 
 // 注册数据源Provider（HttpClient/Resolver/各Provider，统一扩展，与 Worker 共用）
 builder.Services.AddDataProviders(builder.Configuration);
