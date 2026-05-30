@@ -20,6 +20,7 @@ public partial class DataSyncService
     private readonly IDataProviderResolver _resolver;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly IHttpClientFactory _httpClientFactory;
+    private readonly ITradingCalendar _tradingCalendar;
     private readonly DataSyncOptions _options;
     private readonly ILogger<DataSyncService> _logger;
 
@@ -27,12 +28,14 @@ public partial class DataSyncService
         IDataProviderResolver resolver,
         IServiceScopeFactory scopeFactory,
         IHttpClientFactory httpClientFactory,
+        ITradingCalendar tradingCalendar,
         IOptions<DataSyncOptions> options,
         ILogger<DataSyncService> logger)
     {
         _resolver = resolver;
         _scopeFactory = scopeFactory;
         _httpClientFactory = httpClientFactory;
+        _tradingCalendar = tradingCalendar;
         _options = options.Value;
         _logger = logger;
     }
@@ -216,7 +219,7 @@ public partial class DataSyncService
         if (now.Hour < closeHour) day = day.AddDays(-1); // 今日尚未收盘，从昨天起找
 
         // 拉取一段窗口的交易日集合（接口判断），再回溯找最近交易日
-        var tradingDays = await FetchTradingDaysAsync(day.AddDays(-25), now.Date, ct);
+        var tradingDays = await _tradingCalendar.FetchTradingDaysAsync(day.AddDays(-25), now.Date, ct);
 
         for (int i = 0; i < 25; i++)
         {
@@ -229,31 +232,7 @@ public partial class DataSyncService
         return day;
     }
 
-    /// <summary>从交易日接口获取区间内的交易日集合</summary>
-    private async Task<HashSet<DateTime>> FetchTradingDaysAsync(DateTime start, DateTime end, CancellationToken ct)
-    {
-        try
-        {
-            var client = _httpClientFactory.CreateClient("default");
-            var url = $"{_options.WorkdayUrl}?start={start:yyyyMMdd}&end={end:yyyyMMdd}";
-            var json = await client.GetStringAsync(url, ct);
-            var resp = JsonSerializer.Deserialize<WorkdayResponse>(json);
-            var list = resp?.Data?.List;
-            if (list == null) return new HashSet<DateTime>();
-            return list
-                .Where(x => !string.IsNullOrEmpty(x.Numeric))
-                .Select(x => DateTime.TryParseExact(x.Numeric, "yyyyMMdd", null,
-                    System.Globalization.DateTimeStyles.None, out var d) ? d : (DateTime?)null)
-                .Where(d => d.HasValue)
-                .Select(d => d!.Value.Date)
-                .ToHashSet();
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "交易日接口获取失败，降级为周末判断");
-            return new HashSet<DateTime>();
-        }
-    }
+    // FetchTradingDaysAsync 已抽取为共享 ITradingCalendar 服务
 
     /// <summary>
     /// 是否需要同步K线：库内最新K线日期落后于最近已收盘交易日，则需要（含库为空）。
@@ -288,21 +267,4 @@ public class StockCodeDto
     [JsonPropertyName("name")] public string? Name { get; set; }
 }
 
-/// <summary>交易日接口响应</summary>
-public class WorkdayResponse
-{
-    [JsonPropertyName("code")] public int Code { get; set; }
-    [JsonPropertyName("data")] public WorkdayData? Data { get; set; }
-}
-
-public class WorkdayData
-{
-    [JsonPropertyName("count")] public int Count { get; set; }
-    [JsonPropertyName("list")] public List<WorkdayItem>? List { get; set; }
-}
-
-public class WorkdayItem
-{
-    [JsonPropertyName("iso")] public string? Iso { get; set; }
-    [JsonPropertyName("numeric")] public string? Numeric { get; set; }
-}
+// WorkdayResponse / WorkdayData / WorkdayItem 已移至 AIStock.Data.Services.TradingCalendarService

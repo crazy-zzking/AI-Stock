@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { Card, Table, Statistic, Row, Col, Spin, message, Tag } from 'antd';
-import { getPositions } from '../api';
+import { Card, Table, Statistic, Row, Col, Spin, message, Tag, Button, Typography } from 'antd';
+import { SyncOutlined, ClockCircleOutlined } from '@ant-design/icons';
+import { getPositions, refreshPositions } from '../api';
 
 const Positions: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<any>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     loadPositions();
@@ -18,6 +20,20 @@ const Positions: React.FC = () => {
       message.error('加载持仓失败');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleRefreshPositions = async () => {
+    setRefreshing(true);
+    try {
+      await refreshPositions();
+      const res = await getPositions();
+      setData(res.data);
+      message.success('持仓已刷新');
+    } catch {
+      message.error('刷新持仓失败');
+    } finally {
+      setRefreshing(false);
     }
   };
 
@@ -65,13 +81,36 @@ const Positions: React.FC = () => {
     },
   ];
 
+  const formatUpdatedAt = (iso: string | null | undefined) => {
+    if (!iso) return null;
+    const d = new Date(iso);
+    return d.toLocaleString('zh-CN', { hour12: false });
+  };
+
   if (loading) {
     return <Spin size="large" style={{ display: 'block', margin: '100px auto' }} />;
   }
 
   return (
     <div>
-      <h2>持仓管理</h2>
+      <h2>
+        持仓管理
+        <Button
+          icon={<SyncOutlined spin={refreshing} />}
+          size="small"
+          style={{ marginLeft: 12 }}
+          loading={refreshing}
+          onClick={handleRefreshPositions}
+        >
+          主动刷新持仓
+        </Button>
+        {formatUpdatedAt(data?.updatedAt) && (
+          <Typography.Text type="secondary" style={{ marginLeft: 16, fontSize: 12 }}>
+            <ClockCircleOutlined style={{ marginRight: 4 }} />
+            缓存时间: {formatUpdatedAt(data?.updatedAt)}
+          </Typography.Text>
+        )}
+      </h2>
       <Row gutter={16} style={{ marginBottom: 16 }}>
         <Col span={6}>
           <Card>

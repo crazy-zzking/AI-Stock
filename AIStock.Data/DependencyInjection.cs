@@ -4,6 +4,7 @@ using AIStock.Data.Providers.Eastmoney;
 using AIStock.Data.Providers.Sanhu;
 using AIStock.Data.Providers.Tencent;
 using AIStock.Data.Providers.Tdx;
+using AIStock.Data.Services;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -18,6 +19,9 @@ public static class DependencyInjection
     public static IServiceCollection AddDataProviders(this IServiceCollection services, IConfiguration configuration)
     {
         services.AddSingleton<IDataProviderResolver, DataProviderResolver>();
+
+        // 交易日历
+        services.AddSingleton<ITradingCalendar, TradingCalendarService>();
 
         // 带重试/熔断的 HttpClient
         services.AddHttpClient("default")

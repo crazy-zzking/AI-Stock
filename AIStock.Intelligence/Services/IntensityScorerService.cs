@@ -104,16 +104,17 @@ public class IntensityScorerService : IIntensityScorer
     {
         try
         {
-            var jsonDoc = JsonDocument.Parse(response);
+            var jsonContent = Common.LLMResponseParser.CleanJsonResponse(response);
+            var jsonDoc = JsonDocument.Parse(jsonContent);
             var root = jsonDoc.RootElement;
 
             return new IntensityScore
             {
-                Importance = root.GetProperty("importance").GetInt32(),
-                Credibility = root.GetProperty("credibility").GetInt32(),
-                SpreadSpeed = root.GetProperty("spreadSpeed").GetInt32(),
-                OverallScore = root.GetProperty("overallScore").GetInt32(),
-                Reason = root.TryGetProperty("reason", out var reason) ? reason.GetString() : null
+                Importance = Common.LLMResponseParser.GetInt(root, "importance", 5),
+                Credibility = Common.LLMResponseParser.GetInt(root, "credibility", 5),
+                SpreadSpeed = Common.LLMResponseParser.GetInt(root, "spreadSpeed", 5),
+                OverallScore = Common.LLMResponseParser.GetInt(root, "overallScore", 5),
+                Reason = Common.LLMResponseParser.GetString(root, "reason")
             };
         }
         catch (Exception ex)

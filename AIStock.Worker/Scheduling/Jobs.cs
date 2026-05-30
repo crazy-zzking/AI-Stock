@@ -99,3 +99,12 @@ public class GraphPromoteJob : IScheduledJob
     public string Name => "graph-promote";
     public Task ExecuteAsync(CancellationToken ct) => _svc.PromoteAsync(ct);
 }
+
+/// <summary>持仓缓存刷新任务 — 定时从 Sanhu 拉取持仓写入 Redis</summary>
+public class PositionCacheJob : IScheduledJob
+{
+    private readonly PositionCacheService _svc;
+    public PositionCacheJob(PositionCacheService svc) => _svc = svc;
+    public string Name => "position-cache";
+    public Task ExecuteAsync(CancellationToken ct) => _svc.RefreshCacheAsync(ct);
+}

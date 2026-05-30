@@ -124,7 +124,7 @@ public class IntelligenceSyncService
             _logger.LogInformation("知识星球无新内容（或未配置 token/groups）");
             return 0;
         }
-
+        items.RemoveAll(x => x.ContentType == "text" && x.Content == "");
         var ok = 0;
         foreach (var item in items)
         {

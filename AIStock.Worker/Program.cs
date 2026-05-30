@@ -66,9 +66,9 @@ builder.Services.AddEventEngineServices();
 builder.Services.Configure<DataSyncOptions>(builder.Configuration.GetSection(DataSyncOptions.SectionName));
 builder.Services.AddSingleton<DataSyncService>();
 builder.Services.Configure<IntelligenceSyncOptions>(builder.Configuration.GetSection(IntelligenceSyncOptions.SectionName));
-builder.Services.Configure<AIStock.Intelligence.KnowledgeStarOptions>(
-    builder.Configuration.GetSection(AIStock.Intelligence.KnowledgeStarOptions.SectionName));
+builder.Services.Configure<KnowledgeStarOptions>(builder.Configuration.GetSection(KnowledgeStarOptions.SectionName));
 builder.Services.AddSingleton<IntelligenceSyncService>();
+builder.Services.AddSingleton<PositionCacheService>();
 
 // 调度：每个后台任务独立注册，调度参数由 Jobs:<Name> 配置
 builder.Services.Configure<JobSchedulerOptions>(o =>
@@ -81,8 +81,9 @@ builder.Services.AddSingleton<IScheduledJob, AnnouncementCollectJob>();
 builder.Services.AddSingleton<IScheduledJob, ReportCollectJob>();
 builder.Services.AddSingleton<IScheduledJob, KnowledgeStarCollectJob>();
 builder.Services.AddSingleton<IScheduledJob, GraphPromoteJob>();
-builder.Services.Configure<AIStock.EventEngine.GraphPromotionOptions>(
-    builder.Configuration.GetSection(AIStock.EventEngine.GraphPromotionOptions.SectionName));
+builder.Services.AddSingleton<IScheduledJob, PositionCacheJob>();
+builder.Services.Configure<GraphPromotionOptions>(
+    builder.Configuration.GetSection(GraphPromotionOptions.SectionName));
 builder.Services.AddHostedService<JobScheduler>();
 
 var host = builder.Build();

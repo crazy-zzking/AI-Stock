@@ -1,6 +1,7 @@
 using System.Text.Json;
 using AIStock.Core.Interfaces;
 using AIStock.Core.Models;
+using AIStock.Intelligence.Common;
 using Microsoft.Extensions.Logging;
 
 namespace AIStock.Intelligence.Services;
@@ -110,7 +111,8 @@ public class EventExtractorService : IEventExtractor
     {
         try
         {
-            var jsonDoc = JsonDocument.Parse(response);
+            var jsonContent = LLMResponseParser.CleanJsonResponse(response);
+            var jsonDoc = JsonDocument.Parse(jsonContent);
             var root = jsonDoc.RootElement;
 
             var eventData = new EventData

@@ -174,6 +174,7 @@ export interface PositionSummary {
   positionCount: number;
   profitCount: number;
   lossCount: number;
+  updatedAt: string | null;
   positions: PositionItem[];
 }
 

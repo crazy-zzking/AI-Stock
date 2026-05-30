@@ -13,11 +13,13 @@ namespace AIStock.Web.Controllers;
 public class StockController : ControllerBase
 {
     private readonly IDataProviderResolver _resolver;
+    private readonly ITradingCalendar _tradingCalendar;
     private readonly ILogger<StockController> _logger;
 
-    public StockController(IDataProviderResolver resolver, ILogger<StockController> logger)
+    public StockController(IDataProviderResolver resolver, ITradingCalendar tradingCalendar, ILogger<StockController> logger)
     {
         _resolver = resolver ?? throw new ArgumentNullException(nameof(resolver));
+        _tradingCalendar = tradingCalendar ?? throw new ArgumentNullException(nameof(tradingCalendar));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
@@ -196,11 +198,8 @@ public class StockController : ControllerBase
         try
         {
             var targetDate = date ?? DateTime.Today;
-            var provider = _resolver.GetPrimaryProvider(DataCapability.TradingCalendar);
-            if (provider == null)
-                return NotFound("No provider available for trading calendar");
 
-            var isTradingDay = await provider.IsTradingDayAsync(targetDate);
+            var isTradingDay = await _tradingCalendar.IsTradingDayAsync(targetDate);
             return Ok(isTradingDay);
         }
         catch (Exception ex)

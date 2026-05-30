@@ -44,3 +44,4 @@ Thumbs.db
 *.key
 *.crt
 secrets/
+/AIStock.Worker/appsettings.user.json

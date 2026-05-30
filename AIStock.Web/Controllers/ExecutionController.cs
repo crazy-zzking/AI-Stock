@@ -74,6 +74,17 @@ public class ExecutionController : ControllerBase
     }
 
     /// <summary>
+    /// 强制刷新持仓（从 Provider 重新拉取并写入 Redis）
+    /// </summary>
+    [HttpPost("positions/refresh")]
+    public async Task<ActionResult<PositionSummary>> RefreshPositions()
+    {
+        _logger.LogInformation("Manual position refresh requested");
+        var summary = await _positionManager.RefreshAsync();
+        return Ok(summary);
+    }
+
+    /// <summary>
     /// 获取指定股票持仓
     /// </summary>
     [HttpGet("positions/{code}")]
