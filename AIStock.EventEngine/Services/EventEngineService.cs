@@ -57,11 +57,12 @@ public class EventEngineService
             // 1. 抽取事件
             var eventData = await _eventExtractor.ExtractFromReportAsync(report, cancellationToken);
 
-            // 2. 情绪分析
-            var sentiment = await _sentimentAnalyzer.AnalyzeEventAsync(eventData, cancellationToken);
-
-            // 3. 强度评分
-            var intensity = await _intensityScorer.ScoreAsync(eventData, cancellationToken);
+            // 2+3. 情绪分析与强度评分并行（均只依赖 eventData，彼此独立）
+            var sentimentTask = _sentimentAnalyzer.AnalyzeEventAsync(eventData, cancellationToken);
+            var intensityTask = _intensityScorer.ScoreAsync(eventData, cancellationToken);
+            await Task.WhenAll(sentimentTask, intensityTask);
+            var sentiment = sentimentTask.Result;
+            var intensity = intensityTask.Result;
 
             // 4. 保存事件记录
             var eventRecord = new EventRecordEntity
@@ -135,11 +136,12 @@ public class EventEngineService
             // 1. 抽取事件
             var eventData = await _eventExtractor.ExtractFromNewsAsync(news, cancellationToken);
 
-            // 2. 情绪分析
-            var sentiment = await _sentimentAnalyzer.AnalyzeEventAsync(eventData, cancellationToken);
-
-            // 3. 强度评分
-            var intensity = await _intensityScorer.ScoreAsync(eventData, cancellationToken);
+            // 2+3. 情绪分析与强度评分并行（均只依赖 eventData，彼此独立）
+            var sentimentTask = _sentimentAnalyzer.AnalyzeEventAsync(eventData, cancellationToken);
+            var intensityTask = _intensityScorer.ScoreAsync(eventData, cancellationToken);
+            await Task.WhenAll(sentimentTask, intensityTask);
+            var sentiment = sentimentTask.Result;
+            var intensity = intensityTask.Result;
 
             // 4. 保存事件记录
             var eventRecord = new EventRecordEntity
@@ -203,11 +205,12 @@ public class EventEngineService
             eventData.Title = title;
             eventData.Source = source;
 
-            // 2. 情绪分析
-            var sentiment = await _sentimentAnalyzer.AnalyzeEventAsync(eventData, cancellationToken);
-
-            // 3. 强度评分
-            var intensity = await _intensityScorer.ScoreAsync(eventData, cancellationToken);
+            // 2+3. 情绪分析与强度评分并行（均只依赖 eventData，彼此独立）
+            var sentimentTask = _sentimentAnalyzer.AnalyzeEventAsync(eventData, cancellationToken);
+            var intensityTask = _intensityScorer.ScoreAsync(eventData, cancellationToken);
+            await Task.WhenAll(sentimentTask, intensityTask);
+            var sentiment = sentimentTask.Result;
+            var intensity = intensityTask.Result;
 
             // 4. 保存事件记录
             var eventRecord = new EventRecordEntity
