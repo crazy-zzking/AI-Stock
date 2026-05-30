@@ -160,10 +160,10 @@ public class OrderManagerService : IOrderManager
 
         if (request.Side.ToLower() == "buy")
         {
-            if (account.AvailableBalance < orderValue)
+            // 原子预留：将在途未结买单累计金额计入，防止并行批量下单叠加超配
+            if (!_tradingGate.TryReserveBuyValue(account.AvailableBalance, orderValue, out var reason))
             {
-                return Rejected(
-                    $"可用资金不足: 需 {orderValue:N0}，可用 {account.AvailableBalance:N0}", request);
+                return Rejected(reason ?? "买入敞口校验未通过", request);
             }
         }
         else

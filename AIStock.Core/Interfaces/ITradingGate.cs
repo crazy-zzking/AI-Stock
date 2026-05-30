@@ -36,4 +36,10 @@ public interface ITradingGate
     /// 校验是否允许再下一单（含每日次数上限）。不通过返回 false 与原因。
     /// </summary>
     bool TryReserveOrderSlot(out string? rejectReason);
+
+    /// <summary>
+    /// 原子预留买入金额：将在途未结买单的累计金额一并计入，防止并行下单叠加超出可用资金/总敞口上限。
+    /// 通过则记入预留（带 TTL 自动释放）并返回 true，否则返回 false 与原因。
+    /// </summary>
+    bool TryReserveBuyValue(decimal availableBalance, decimal orderValue, out string? rejectReason);
 }

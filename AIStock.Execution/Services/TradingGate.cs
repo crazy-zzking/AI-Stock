@@ -18,6 +18,9 @@ public class TradingGate : ITradingGate
     private DateOnly _countDate = DateOnly.FromDateTime(DateTime.Now);
     private int _orderCount;
 
+    // 在途买入预留（金额 + 过期时刻），用于跨并行订单的原子敞口控制
+    private readonly List<(DateTime Expiry, decimal Amount)> _buyReservations = new();
+
     public TradingGate(IOptions<TradingGuardOptions> options, ILogger<TradingGate> logger)
     {
         _options = options.Value;
@@ -82,6 +85,35 @@ public class TradingGate : ITradingGate
             }
 
             _orderCount++;
+            rejectReason = null;
+            return true;
+        }
+    }
+
+    public bool TryReserveBuyValue(decimal availableBalance, decimal orderValue, out string? rejectReason)
+    {
+        lock (_lock)
+        {
+            var now = DateTime.UtcNow;
+            _buyReservations.RemoveAll(r => r.Expiry <= now);
+            var reserved = _buyReservations.Sum(r => r.Amount);
+
+            // 1. 可用资金约束（含在途预留）
+            if (orderValue > availableBalance - reserved)
+            {
+                rejectReason = $"可用资金不足(含在途预留): 需 {orderValue:N0}，可用 {availableBalance:N0}，已预留 {reserved:N0}";
+                return false;
+            }
+
+            // 2. 总敞口上限（可选）
+            if (_options.MaxTotalExposure > 0 && reserved + orderValue > _options.MaxTotalExposure)
+            {
+                rejectReason = $"超过总买入敞口上限: 已预留 {reserved:N0} + 本单 {orderValue:N0} > {_options.MaxTotalExposure:N0}";
+                return false;
+            }
+
+            var ttl = TimeSpan.FromSeconds(_options.ReservationTtlSeconds > 0 ? _options.ReservationTtlSeconds : 120);
+            _buyReservations.Add((now.Add(ttl), orderValue));
             rejectReason = null;
             return true;
         }

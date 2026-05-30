@@ -42,4 +42,14 @@ public class TradingGuardOptions
     /// 每日最大下单次数。0 表示不限制。
     /// </summary>
     public int MaxOrdersPerDay { get; set; } = 50;
+
+    /// <summary>
+    /// 总买入敞口上限（元）。限制在途未结买单的累计金额，防止批量并行下单叠加超配。0 表示不限制（仅受可用资金约束）。
+    /// </summary>
+    public decimal MaxTotalExposure { get; set; } = 0m;
+
+    /// <summary>
+    /// 买入预留的存活时间（秒）。预留在此时间后自动释放（券商资金应已反映成交），用于自愈。
+    /// </summary>
+    public int ReservationTtlSeconds { get; set; } = 120;
 }
