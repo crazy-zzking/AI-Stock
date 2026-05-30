@@ -1,3 +1,5 @@
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using AIStock.Core.Enums;
 using AIStock.Core.Interfaces;
 using AIStock.Infrastructure.Database.Context;
@@ -10,25 +12,47 @@ using Microsoft.Extensions.Options;
 namespace AIStock.Worker.Services;
 
 /// <summary>
-/// 数据同步服务 — 将数据源的股票池与日K落库到 stock_base / kline_data。
+/// 数据同步服务 — 将股票池与日K落库到 stock_base / kline_data。
+/// 股票池来自 DataSync:StockCodesUrl 接口，K线来自数据源 Provider。
 /// </summary>
 public class DataSyncService
 {
     private readonly IDataProviderResolver _resolver;
     private readonly IServiceScopeFactory _scopeFactory;
+    private readonly IHttpClientFactory _httpClientFactory;
     private readonly DataSyncOptions _options;
     private readonly ILogger<DataSyncService> _logger;
 
     public DataSyncService(
         IDataProviderResolver resolver,
         IServiceScopeFactory scopeFactory,
+        IHttpClientFactory httpClientFactory,
         IOptions<DataSyncOptions> options,
         ILogger<DataSyncService> logger)
     {
         _resolver = resolver;
         _scopeFactory = scopeFactory;
+        _httpClientFactory = httpClientFactory;
         _options = options.Value;
         _logger = logger;
+    }
+
+    /// <summary>
+    /// 从股票池接口获取全市场代码。
+    /// </summary>
+    private async Task<List<StockCodeDto>> FetchStockUniverseAsync(CancellationToken ct)
+    {
+        var client = _httpClientFactory.CreateClient("default");
+        var json = await client.GetStringAsync(_options.StockCodesUrl, ct);
+
+        var resp = JsonSerializer.Deserialize<StockCodesResponse>(json);
+        if (resp == null || resp.Code != 0 || resp.Data?.Codes == null)
+        {
+            _logger.LogWarning("股票池接口返回异常: code={Code}, message={Message}", resp?.Code, resp?.Message);
+            return new List<StockCodeDto>();
+        }
+
+        return resp.Data.Codes;
     }
 
     /// <summary>
@@ -36,9 +60,8 @@ public class DataSyncService
     /// </summary>
     public async Task<int> SyncStockBaseAsync(CancellationToken ct = default)
     {
-        var provider = _resolver.GetDefaultProvider();
-        var stocks = await provider.GetStockListAsync();
-        if (stocks == null || stocks.Count == 0)
+        var stocks = await FetchStockUniverseAsync(ct);
+        if (stocks.Count == 0)
         {
             _logger.LogWarning("股票池为空，跳过 stock_base 同步");
             return 0;
@@ -55,13 +78,12 @@ public class DataSyncService
         {
             if (string.IsNullOrEmpty(s.Code)) continue;
 
+            var market = s.Exchange?.ToUpperInvariant() ?? string.Empty;
+
             if (existing.TryGetValue(s.Code, out var entity))
             {
-                entity.Name = s.Name;
-                entity.Market = s.Market;
-                if (!string.IsNullOrEmpty(s.Industry)) entity.Industry = s.Industry;
-                entity.ListDate = s.ListDate;
-                entity.IsDelisted = s.IsDelisted;
+                entity.Name = s.Name ?? entity.Name;
+                entity.Market = market;
                 entity.UpdatedAt = now;
             }
             else
@@ -69,11 +91,8 @@ public class DataSyncService
                 db.StockBase.Add(new StockBaseEntity
                 {
                     Code = s.Code,
-                    Name = s.Name,
-                    Market = s.Market,
-                    Industry = string.IsNullOrEmpty(s.Industry) ? null : s.Industry,
-                    ListDate = s.ListDate,
-                    IsDelisted = s.IsDelisted,
+                    Name = s.Name ?? string.Empty,
+                    Market = market,
                     CreatedAt = now,
                     UpdatedAt = now
                 });
@@ -159,4 +178,25 @@ public class DataSyncService
         _logger.LogInformation("kline_data 同步完成：{Stocks} 只股票，新增 {Rows} 条K线", codes.Count, totalInserted);
         return totalInserted;
     }
+}
+
+/// <summary>股票池接口响应</summary>
+public class StockCodesResponse
+{
+    [JsonPropertyName("code")] public int Code { get; set; }
+    [JsonPropertyName("message")] public string? Message { get; set; }
+    [JsonPropertyName("data")] public StockCodesData? Data { get; set; }
+}
+
+public class StockCodesData
+{
+    [JsonPropertyName("total")] public int Total { get; set; }
+    [JsonPropertyName("codes")] public List<StockCodeDto>? Codes { get; set; }
+}
+
+public class StockCodeDto
+{
+    [JsonPropertyName("code")] public string? Code { get; set; }
+    [JsonPropertyName("exchange")] public string? Exchange { get; set; }
+    [JsonPropertyName("name")] public string? Name { get; set; }
 }

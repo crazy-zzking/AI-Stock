@@ -10,6 +10,9 @@ public class DataSyncOptions
     /// <summary>是否启用数据同步</summary>
     public bool Enabled { get; set; } = true;
 
+    /// <summary>股票池接口地址（返回全市场代码）</summary>
+    public string StockCodesUrl { get; set; } = "http://115.29.178.22:8080/api/codes";
+
     /// <summary>启动时立即跑一次</summary>
     public bool RunOnStartup { get; set; } = true;
 
