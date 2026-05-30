@@ -80,6 +80,9 @@ builder.Services.AddSingleton<IScheduledJob, NewsCollectJob>();
 builder.Services.AddSingleton<IScheduledJob, AnnouncementCollectJob>();
 builder.Services.AddSingleton<IScheduledJob, ReportCollectJob>();
 builder.Services.AddSingleton<IScheduledJob, KnowledgeStarCollectJob>();
+builder.Services.AddSingleton<IScheduledJob, GraphPromoteJob>();
+builder.Services.Configure<AIStock.EventEngine.GraphPromotionOptions>(
+    builder.Configuration.GetSection(AIStock.EventEngine.GraphPromotionOptions.SectionName));
 builder.Services.AddHostedService<JobScheduler>();
 
 var host = builder.Build();

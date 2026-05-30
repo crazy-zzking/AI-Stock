@@ -90,3 +90,12 @@ public class KnowledgeStarCollectJob : IScheduledJob
     public string Name => "knowledge-star";
     public Task ExecuteAsync(CancellationToken ct) => _sync.SyncKnowledgeStarAsync(ct);
 }
+
+/// <summary>候选边晋升任务（达到阈值的候选边转入权威图谱）</summary>
+public class GraphPromoteJob : IScheduledJob
+{
+    private readonly AIStock.EventEngine.Services.GraphPromotionService _svc;
+    public GraphPromoteJob(AIStock.EventEngine.Services.GraphPromotionService svc) => _svc = svc;
+    public string Name => "graph-promote";
+    public Task ExecuteAsync(CancellationToken ct) => _svc.PromoteAsync(ct);
+}
