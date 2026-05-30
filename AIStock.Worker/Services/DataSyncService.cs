@@ -194,6 +194,49 @@ public partial class DataSyncService
         _logger.LogInformation("kline_data 同步完成：{Stocks} 只股票，新增 {Rows} 条K线", codes.Count, totalInserted);
         return totalInserted;
     }
+
+    /// <summary>库内最新日K日期（无数据返回 null）</summary>
+    public async Task<DateTime?> GetLastKlineDateAsync(CancellationToken ct = default)
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AIStockDbContext>();
+        var interval = nameof(KlineInterval.Daily);
+        return await db.KlineData
+            .Where(k => k.Interval == interval)
+            .MaxAsync(k => (DateTime?)k.DateTime, ct);
+    }
+
+    /// <summary>
+    /// 最近一个"已收盘"的交易日：今天若是交易日且已过收盘时刻则取今天，否则向前找最近交易日。
+    /// </summary>
+    public async Task<DateTime> GetLastClosedTradingDayAsync(int closeHour, CancellationToken ct = default)
+    {
+        var provider = _resolver.GetDefaultProvider();
+        var now = DateTime.Now;
+        var day = now.Date;
+        if (now.Hour < closeHour) day = day.AddDays(-1); // 今日尚未收盘，从昨天起找
+
+        for (int i = 0; i < 14; i++)
+        {
+            bool isTradingDay;
+            try { isTradingDay = await provider.IsTradingDayAsync(day); }
+            catch { isTradingDay = day.DayOfWeek != DayOfWeek.Saturday && day.DayOfWeek != DayOfWeek.Sunday; }
+            if (isTradingDay) return day;
+            day = day.AddDays(-1);
+        }
+        return day;
+    }
+
+    /// <summary>
+    /// 是否需要同步K线：库内最新K线日期落后于最近已收盘交易日，则需要（含库为空）。
+    /// </summary>
+    public async Task<(bool Need, DateTime? Last, DateTime Target)> ShouldSyncKlinesAsync(int closeHour, CancellationToken ct = default)
+    {
+        var last = await GetLastKlineDateAsync(ct);
+        var target = await GetLastClosedTradingDayAsync(closeHour, ct);
+        var need = last == null || last.Value.Date < target.Date;
+        return (need, last, target);
+    }
 }
 
 /// <summary>股票池接口响应</summary>

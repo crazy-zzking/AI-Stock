@@ -13,11 +13,8 @@ public class DataSyncOptions
     /// <summary>股票池接口地址（返回全市场代码）</summary>
     public string StockCodesUrl { get; set; } = "http://115.29.178.22:8080/api/codes";
 
-    /// <summary>启动时立即跑一次</summary>
-    public bool RunOnStartup { get; set; } = true;
-
-    /// <summary>同步周期（小时）</summary>
-    public int IntervalHours { get; set; } = 24;
+    /// <summary>收盘同步时刻（小时，24制）。交易日此时刻后同步当日K线</summary>
+    public int SyncHour { get; set; } = 16;
 
     /// <summary>是否同步K线</summary>
     public bool SyncKlines { get; set; } = true;

@@ -4,7 +4,7 @@ using Microsoft.Extensions.Options;
 namespace AIStock.Worker;
 
 /// <summary>
-/// 数据同步后台服务 — 按配置周期同步股票池与日K到数据库。
+/// 数据同步后台服务 — 交易日收盘后同步；启动时按库内最新K线日期判断是否补拉。
 /// </summary>
 public class Worker : BackgroundService
 {
@@ -31,25 +31,45 @@ public class Worker : BackgroundService
         }
 
         // 启动时延迟片刻，等待数据源 Provider 就绪
-        if (_options.RunOnStartup)
-            await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken);
+        await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken);
 
-        var interval = TimeSpan.FromHours(Math.Max(1, _options.IntervalHours));
+        var closeHour = Math.Clamp(_options.SyncHour, 0, 23);
 
         while (!stoppingToken.IsCancellationRequested)
         {
-            await RunSyncCycleAsync(stoppingToken);
-
-            _logger.LogInformation("下一轮数据同步将在 {Interval} 后执行", interval);
             try
             {
-                await Task.Delay(interval, stoppingToken);
+                // 检查库内最新K线日期 vs 最近已收盘交易日，落后才同步（启动补拉同理）
+                var (need, last, target) = await _syncService.ShouldSyncKlinesAsync(closeHour, stoppingToken);
+                if (need)
+                {
+                    _logger.LogInformation("需同步：库内最新K线 {Last}，目标交易日 {Target}",
+                        last?.ToString("yyyy-MM-dd") ?? "无", target.ToString("yyyy-MM-dd"));
+                    await RunSyncCycleAsync(stoppingToken);
+                }
+                else
+                {
+                    _logger.LogInformation("数据已最新（截至 {Last}），等待下次收盘后同步", last?.ToString("yyyy-MM-dd"));
+                }
             }
-            catch (OperationCanceledException)
-            {
-                break;
-            }
+            catch (OperationCanceledException) { break; }
+            catch (Exception ex) { _logger.LogError(ex, "同步调度异常"); }
+
+            // 睡到下一个收盘时刻（今日未到则今日，否则明日）；醒来再判定是否交易日/是否需要同步
+            var delay = TimeUntilNextClose(closeHour);
+            _logger.LogInformation("下次检查在 {Delay} 后（约 {Time}）", delay, DateTime.Now.Add(delay).ToString("MM-dd HH:mm"));
+            try { await Task.Delay(delay, stoppingToken); }
+            catch (OperationCanceledException) { break; }
         }
+    }
+
+    /// <summary>距离下一个收盘时刻的时长</summary>
+    private static TimeSpan TimeUntilNextClose(int closeHour)
+    {
+        var now = DateTime.Now;
+        var todayClose = now.Date.AddHours(closeHour);
+        var next = now < todayClose ? todayClose : todayClose.AddDays(1);
+        return next - now;
     }
 
     private async Task RunSyncCycleAsync(CancellationToken ct)
