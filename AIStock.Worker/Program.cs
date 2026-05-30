@@ -7,6 +7,7 @@ using AIStock.LLM;
 using AIStock.Core.Interfaces;
 using AIStock.Worker;
 using AIStock.Worker.Services;
+using AIStock.Worker.Scheduling;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Serilog;
@@ -61,15 +62,22 @@ builder.Services.AddLLMServices();
 builder.Services.AddIntelligenceServices();
 builder.Services.AddEventEngineServices();
 
-// 数据同步配置与服务
+// 业务参数配置与服务实现
 builder.Services.Configure<DataSyncOptions>(builder.Configuration.GetSection(DataSyncOptions.SectionName));
 builder.Services.AddSingleton<DataSyncService>();
-builder.Services.AddHostedService<Worker>();
-
-// 情报采集配置与服务
 builder.Services.Configure<IntelligenceSyncOptions>(builder.Configuration.GetSection(IntelligenceSyncOptions.SectionName));
 builder.Services.AddSingleton<IntelligenceSyncService>();
-builder.Services.AddHostedService<IntelligenceWorker>();
+
+// 调度：每个后台任务独立注册，调度参数由 Jobs:<Name> 配置
+builder.Services.Configure<JobSchedulerOptions>(o =>
+    builder.Configuration.GetSection(JobSchedulerOptions.SectionName).Bind(o.Items));
+builder.Services.AddSingleton<IScheduledJob, StockBaseSyncJob>();
+builder.Services.AddSingleton<IScheduledJob, StockDetailSyncJob>();
+builder.Services.AddSingleton<IScheduledJob, KlineSyncJob>();
+builder.Services.AddSingleton<IScheduledJob, NewsCollectJob>();
+builder.Services.AddSingleton<IScheduledJob, AnnouncementCollectJob>();
+builder.Services.AddSingleton<IScheduledJob, ReportCollectJob>();
+builder.Services.AddHostedService<JobScheduler>();
 
 var host = builder.Build();
 
