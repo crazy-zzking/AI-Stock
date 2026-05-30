@@ -371,6 +371,7 @@ public class EventEngineService
             }
         }
         await _dbContext.SaveChangesAsync(ct);
+        _logger.LogInformation("候选边写入：{Edges} 条（公司{Comp}×概念{Con}）", edges.Count, comps.Count, cons.Count);
     }
 
     /// <summary>事件是否已存在（按 Url 去重，供采集前预判，避免无谓的 LLM 调用）</summary>
