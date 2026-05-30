@@ -134,45 +134,53 @@ public class CredibilityAnalyzerService : ICredibilityAnalyzer
 
     private async Task<(int score, string analysis)> AnalyzeCapitalAsync(EventData eventData, CancellationToken cancellationToken)
     {
-        // 简化版资金分析，实际需要接入行情数据
-        var relatedStocks = eventData.RelatedCompanies.Keys.ToList();
+        // 关联公司字典为「公司名 -> 股票代码」，资金分析需用代码（Values）
+        var codes = eventData.RelatedCompanies.Values
+            .Where(c => !string.IsNullOrWhiteSpace(c))
+            .Distinct()
+            .ToList();
 
-        if (!relatedStocks.Any())
+        if (codes.Count == 0)
         {
-            return (50, "无关联股票，无法分析资金配合");
+            return (50, "无关联股票代码，无法分析资金配合");
         }
 
-        // 检查是否有异常资金流动
-        var hasCapitalFlow = false;
-        foreach (var stock in relatedStocks.Take(3))
+        const string interval = "Daily"; // 与落库 Interval 一致（大小写敏感）
+        var eventDate = eventData.EventTime == default ? DateTime.Now.Date : eventData.EventTime.Date;
+
+        var abnormal = new List<string>();
+        var analyzed = 0;
+
+        foreach (var code in codes.Take(5))
         {
-            var latestKline = await _dbContext.KlineData
-                .Where(k => k.Code == stock && k.Interval == "daily")
+            // 取消息日期前后一段的日K（含发布日后的几天）
+            var klines = await _dbContext.KlineData
+                .Where(k => k.Code == code && k.Interval == interval && k.DateTime <= eventDate.AddDays(5))
                 .OrderByDescending(k => k.DateTime)
-                .FirstOrDefaultAsync(cancellationToken);
+                .Take(25)
+                .ToListAsync(cancellationToken);
 
-            if (latestKline != null && latestKline.Volume > 0)
-            {
-                // 检查是否有放量
-                var avgVolume = await _dbContext.KlineData
-                    .Where(k => k.Code == stock && k.Interval == "daily")
-                    .OrderByDescending(k => k.DateTime)
-                    .Take(20)
-                    .AverageAsync(k => k.Volume, cancellationToken);
+            if (klines.Count < 6) continue; // 数据不足
+            analyzed++;
 
-                if (latestKline.Volume > avgVolume * 2)
-                {
-                    hasCapitalFlow = true;
-                }
-            }
+            // 发布日当天或之后最近一个交易日成交量 vs 之前约20日均量
+            var post = klines.Where(k => k.DateTime.Date >= eventDate).OrderBy(k => k.DateTime).FirstOrDefault()
+                       ?? klines.First();
+            var prior = klines.Where(k => k.DateTime < post.DateTime).Take(20).ToList();
+            if (prior.Count < 3) continue;
+
+            var avgVolume = prior.Average(k => (double)k.Volume);
+            if (avgVolume > 0 && post.Volume > avgVolume * 2)
+                abnormal.Add($"{code}(放量{post.Volume / avgVolume:F1}倍)");
         }
 
-        if (hasCapitalFlow)
-        {
-            return (70, "检测到异常资金流动，需警惕配合炒作");
-        }
+        if (analyzed == 0)
+            return (50, "关联股票无足够K线数据，无法验证资金配合");
 
-        return (60, "资金流动正常");
+        if (abnormal.Count > 0)
+            return (75, $"消息发布前后检测到异常放量：{string.Join("、", abnormal)}，需警惕资金配合炒作");
+
+        return (60, $"已核{analyzed}只关联股票，发布前后未见明显放量异动");
     }
 
     private int CalculateCredibilityScore(CredibilityResult result)
