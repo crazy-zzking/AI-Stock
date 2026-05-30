@@ -319,6 +319,60 @@ public class EventEngineService
             await _dbContext.SaveChangesAsync(cancellationToken);
     }
 
+    /// <summary>
+    /// 写入候选图谱边（隔离）：公司-概念归属 + 公司-公司共现。带可信度，多次提及累加。
+    /// 不写入权威图谱（CompanyRelation/IndustryChain），仅作线索。
+    /// </summary>
+    private async Task SaveCandidateEdgesAsync(
+        List<string> companies, List<string> concepts, int credibility, string? sourceUrl, CancellationToken ct)
+    {
+        var comps = companies.Where(c => !string.IsNullOrWhiteSpace(c)).Select(c => c.Trim()).Distinct().Take(6).ToList();
+        var cons = concepts.Where(c => !string.IsNullOrWhiteSpace(c)).Select(c => c.Trim()).Distinct().Take(8).ToList();
+        if (comps.Count == 0) return;
+
+        var edges = new List<(string From, string To, string Type)>();
+        // 公司 → 概念
+        foreach (var comp in comps)
+            foreach (var con in cons)
+                edges.Add((comp, con, "concept"));
+        // 公司 ↔ 公司共现（无向，按字典序定向去重）
+        for (int i = 0; i < comps.Count; i++)
+            for (int j = i + 1; j < comps.Count; j++)
+            {
+                var a = string.CompareOrdinal(comps[i], comps[j]) <= 0 ? comps[i] : comps[j];
+                var b = a == comps[i] ? comps[j] : comps[i];
+                edges.Add((a, b, "co-occur"));
+            }
+
+        foreach (var (from, to, type) in edges)
+        {
+            var existing = await _dbContext.GraphCandidateEdge
+                .FirstOrDefaultAsync(e => e.FromEntity == from && e.ToEntity == to && e.EdgeType == type, ct);
+            if (existing != null)
+            {
+                existing.MentionCount++;
+                existing.Credibility = Math.Max(existing.Credibility, credibility);
+                existing.LastSourceUrl = sourceUrl;
+                existing.UpdatedAt = DateTime.UtcNow;
+            }
+            else
+            {
+                _dbContext.GraphCandidateEdge.Add(new GraphCandidateEdgeEntity
+                {
+                    FromEntity = from,
+                    ToEntity = to,
+                    EdgeType = type,
+                    Credibility = credibility,
+                    MentionCount = 1,
+                    LastSourceUrl = sourceUrl,
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow
+                });
+            }
+        }
+        await _dbContext.SaveChangesAsync(ct);
+    }
+
     /// <summary>事件是否已存在（按 Url 去重，供采集前预判，避免无谓的 LLM 调用）</summary>
     public async Task<bool> ExistsByUrlAsync(string url, CancellationToken cancellationToken = default)
     {
@@ -364,6 +418,8 @@ public class EventEngineService
         _dbContext.EventRecord.Add(entity);
         await _dbContext.SaveChangesAsync(cancellationToken);
         await SaveEventRelationsAsync(entity.Id, stocks, concepts, cancellationToken);
+        // 候选边（隔离，带可信度），仅作线索
+        await SaveCandidateEdgesAsync(essay.RelatedCompanies, concepts, essay.CredibilityScore, content.Url, cancellationToken);
 
         await _messageBus.PublishAsync("events", new
         {
