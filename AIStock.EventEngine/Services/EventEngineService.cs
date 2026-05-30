@@ -92,6 +92,10 @@ public class EventEngineService
             _dbContext.EventRecord.Add(eventRecord);
             await _dbContext.SaveChangesAsync(cancellationToken);
 
+            // 4b. 规范化关联（关联表，供精确查询）
+            await SaveEventRelationsAsync(eventRecord.Id, report.RelatedStocks,
+                eventData.RelatedConcepts, cancellationToken);
+
             // 5. 发布到消息总线
             await _messageBus.PublishAsync("events", new
             {
@@ -171,6 +175,10 @@ public class EventEngineService
             _dbContext.EventRecord.Add(eventRecord);
             await _dbContext.SaveChangesAsync(cancellationToken);
 
+            // 4b. 规范化关联（关联表，供精确查询）
+            await SaveEventRelationsAsync(eventRecord.Id, news.RelatedStocks,
+                eventData.RelatedConcepts.Union(news.RelatedConcepts), cancellationToken);
+
             // 5. 发布到消息总线
             await _messageBus.PublishAsync("events", new
             {
@@ -238,6 +246,10 @@ public class EventEngineService
             _dbContext.EventRecord.Add(eventRecord);
             await _dbContext.SaveChangesAsync(cancellationToken);
 
+            // 4b. 规范化关联（政策无关联股票，仅概念）
+            await SaveEventRelationsAsync(eventRecord.Id, Array.Empty<string>(),
+                eventData.RelatedConcepts, cancellationToken);
+
             // 5. 发布到消息总线
             await _messageBus.PublishAsync("events", new
             {
@@ -289,6 +301,48 @@ public class EventEngineService
     /// <summary>
     /// 搜索事件
     /// </summary>
+    /// <summary>写入事件的股票/概念关联表（去重、忽略空值）</summary>
+    private async Task SaveEventRelationsAsync(long eventId, IEnumerable<string> stocks, IEnumerable<string> concepts, CancellationToken cancellationToken = default)
+    {
+        var added = false;
+        foreach (var code in stocks.Where(s => !string.IsNullOrWhiteSpace(s)).Distinct())
+        {
+            _dbContext.EventStockRelation.Add(new EventStockRelationEntity { EventId = eventId, StockCode = code.Trim() });
+            added = true;
+        }
+        foreach (var concept in concepts.Where(c => !string.IsNullOrWhiteSpace(c)).Distinct())
+        {
+            _dbContext.EventConceptRelation.Add(new EventConceptRelationEntity { EventId = eventId, ConceptName = concept.Trim() });
+            added = true;
+        }
+        if (added)
+            await _dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    /// <summary>按股票精确查询关联事件（用关联表 JOIN，替代逗号字符串 LIKE）</summary>
+    public async Task<List<EventRecordEntity>> GetEventsByStockAsync(string stockCode, int count = 50, CancellationToken cancellationToken = default)
+    {
+        return await (from r in _dbContext.EventStockRelation
+                      where r.StockCode == stockCode
+                      join e in _dbContext.EventRecord on r.EventId equals e.Id
+                      orderby e.EventTime descending
+                      select e)
+                     .Take(count)
+                     .ToListAsync(cancellationToken);
+    }
+
+    /// <summary>按概念精确查询关联事件</summary>
+    public async Task<List<EventRecordEntity>> GetEventsByConceptAsync(string concept, int count = 50, CancellationToken cancellationToken = default)
+    {
+        return await (from r in _dbContext.EventConceptRelation
+                      where r.ConceptName == concept
+                      join e in _dbContext.EventRecord on r.EventId equals e.Id
+                      orderby e.EventTime descending
+                      select e)
+                     .Take(count)
+                     .ToListAsync(cancellationToken);
+    }
+
     public async Task<List<EventRecordEntity>> SearchEventsAsync(string keyword, int count = 50, CancellationToken cancellationToken = default)
     {
         return await _dbContext.EventRecord

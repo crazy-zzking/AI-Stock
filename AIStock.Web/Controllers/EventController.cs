@@ -75,6 +75,26 @@ public class EventController : ControllerBase
     }
 
     /// <summary>
+    /// 按股票查询关联事件（关联表精确查询）
+    /// </summary>
+    [HttpGet("by-stock/{stockCode}")]
+    public async Task<IActionResult> GetEventsByStock(string stockCode, [FromQuery] int count = 50)
+    {
+        var events = await _eventEngine.GetEventsByStockAsync(stockCode, count);
+        return Ok(events);
+    }
+
+    /// <summary>
+    /// 按概念查询关联事件（关联表精确查询）
+    /// </summary>
+    [HttpGet("by-concept/{concept}")]
+    public async Task<IActionResult> GetEventsByConcept(string concept, [FromQuery] int count = 50)
+    {
+        var events = await _eventEngine.GetEventsByConceptAsync(concept, count);
+        return Ok(events);
+    }
+
+    /// <summary>
     /// 获取事件统计
     /// </summary>
     [HttpGet("statistics")]
