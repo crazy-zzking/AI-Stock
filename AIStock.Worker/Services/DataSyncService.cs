@@ -113,7 +113,7 @@ public class DataSyncService
         using var scope = _scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AIStockDbContext>();
 
-        var codesQuery = db.StockBase.Where(s => !s.IsDelisted).Select(s => s.Code);
+        var codesQuery = db.StockBase.Where(s => !s.IsDelisted).OrderBy(s => s.Code).Select(s => s.Code);
         if (_options.MaxStocks > 0)
             codesQuery = codesQuery.Take(_options.MaxStocks);
         var codes = await codesQuery.ToListAsync(ct);
@@ -124,9 +124,20 @@ public class DataSyncService
             return 0;
         }
 
-        var provider = _resolver.GetDefaultProvider();
+        // K线统一用东方财富抓取
+        var provider = _resolver.GetProviders(DataCapability.Kline)
+            .FirstOrDefault(p => p.ProviderName == "东方财富");
+        if (provider == null)
+        {
+            _logger.LogWarning("未找到东方财富数据源，跳过K线同步");
+            return 0;
+        }
+
         const string interval = nameof(KlineInterval.Daily);
         var totalInserted = 0;
+        var processed = 0;
+
+        _logger.LogInformation("开始K线同步：{Count} 只股票（数据源：东方财富）", codes.Count);
 
         foreach (var code in codes)
         {
@@ -154,6 +165,8 @@ public class DataSyncService
                         Low = k.Low,
                         Volume = k.Volume,
                         Amount = k.Amount,
+                        TurnoverRate = k.TurnoverRate,
+                        ChangePercent = k.ChangePercent,
                         Source = provider.ProviderName,
                         CreatedAt = DateTime.UtcNow
                     })
@@ -170,6 +183,9 @@ public class DataSyncService
             {
                 _logger.LogWarning(ex, "K线同步失败 {Code}", code);
             }
+
+            if (++processed % 50 == 0)
+                _logger.LogInformation("K线同步进度：{Processed}/{Total}，累计新增 {Rows} 条", processed, codes.Count, totalInserted);
 
             if (_options.KlineThrottleMs > 0)
                 await Task.Delay(_options.KlineThrottleMs, ct);
