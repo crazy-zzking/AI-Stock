@@ -42,6 +42,8 @@ public class IntelligenceWorker : BackgroundService
                 _logger.LogInformation("开始情报采集周期");
                 if (_options.CollectNews)
                     await _syncService.SyncNewsAsync(stoppingToken);
+                if (_options.CollectAnnouncements)
+                    await _syncService.SyncAnnouncementsAsync(stoppingToken);
                 if (_options.CollectReports)
                     await _syncService.SyncReportsAsync(stoppingToken);
                 _logger.LogInformation("情报采集周期完成");

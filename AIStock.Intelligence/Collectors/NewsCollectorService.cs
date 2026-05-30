@@ -23,7 +23,12 @@ public class NewsCollectorService : INewsCollector
         _logger = logger;
     }
 
+    /// <summary>采集最新财经新闻（默认财经栏目）</summary>
     public async Task<List<NewsData>> CollectLatestNewsAsync(int count = 50, CancellationToken cancellationToken = default)
+        => await CollectNewsByCategoryAsync("财经", count, cancellationToken);
+
+    /// <summary>采集最新上市公司公告</summary>
+    public async Task<List<NewsData>> CollectLatestAnnouncementsAsync(int count = 50, CancellationToken cancellationToken = default)
     {
         var newsList = new List<NewsData>();
 

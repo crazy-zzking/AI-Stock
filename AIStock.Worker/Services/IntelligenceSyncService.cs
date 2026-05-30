@@ -65,6 +65,50 @@ public class IntelligenceSyncService
     }
 
     /// <summary>
+    /// 采集公告并处理入库。仅标题含利好/利空关键字的公告才送 LLM 分析（省 token）。
+    /// </summary>
+    public async Task<int> SyncAnnouncementsAsync(CancellationToken ct = default)
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var collector = scope.ServiceProvider.GetRequiredService<INewsCollector>();
+        var engine = scope.ServiceProvider.GetRequiredService<EventEngineService>();
+
+        var list = await collector.CollectLatestAnnouncementsAsync(_options.AnnouncementCount, ct);
+        if (list.Count == 0)
+        {
+            _logger.LogWarning("未采集到公告");
+            return 0;
+        }
+
+        var keywords = _options.AnnouncementKeywords ?? new List<string>();
+        var filtered = keywords.Count == 0
+            ? list
+            : list.Where(a => keywords.Any(k => a.Title.Contains(k))).ToList();
+
+        _logger.LogInformation("采集到 {Total} 条公告，命中关键字 {Hit} 条，开始抽取入库", list.Count, filtered.Count);
+        var ok = 0;
+        foreach (var ann in filtered)
+        {
+            if (ct.IsCancellationRequested) break;
+            try
+            {
+                await engine.ProcessNewsAsync(ann, ct);
+                ok++;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "公告处理失败：{Title}", ann.Title);
+            }
+
+            if (_options.ItemThrottleMs > 0)
+                await Task.Delay(_options.ItemThrottleMs, ct);
+        }
+
+        _logger.LogInformation("公告入库完成：{Ok}/{Hit}（共采集 {Total}）", ok, filtered.Count, list.Count);
+        return ok;
+    }
+
+    /// <summary>
     /// 采集研报并处理入库。返回成功处理的条数。
     /// </summary>
     public async Task<int> SyncReportsAsync(CancellationToken ct = default)
