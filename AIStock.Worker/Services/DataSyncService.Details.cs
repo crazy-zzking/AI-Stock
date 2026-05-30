@@ -47,22 +47,30 @@ public partial class DataSyncService
 
             var tasks = batch.Select(async code =>
             {
-                var industry = await FetchIndustryAsync(client, code, ct);
+                var info = await FetchBaseInfoAsync(client, code, ct);
                 var concepts = await FetchConceptsAsync(client, code, ct);
-                return (code, industry, concepts);
+                return (code, info, concepts);
             });
             var results = await Task.WhenAll(tasks);
 
-            foreach (var (code, industry, concepts) in results)
+            foreach (var (code, info, concepts) in results)
             {
-                if (!string.IsNullOrEmpty(industry))
+                if (info != null)
                 {
                     var entity = await db.StockBase.FirstOrDefaultAsync(s => s.Code == code, ct);
                     if (entity != null)
                     {
-                        entity.Industry = industry;
+                        if (!string.IsNullOrEmpty(info.Industry)) { entity.Industry = info.Industry; industryUpdated++; }
+                        if (!string.IsNullOrEmpty(info.CompanyName)) entity.CompanyName = info.CompanyName;
+                        if (!string.IsNullOrEmpty(info.SubIndustry)) entity.SubIndustry = info.SubIndustry;
+                        if (!string.IsNullOrEmpty(info.MainBusiness)) entity.MainBusiness = info.MainBusiness;
+                        if (!string.IsNullOrEmpty(info.Profile)) entity.Profile = info.Profile;
+                        if (!string.IsNullOrEmpty(info.Province)) entity.Province = info.Province;
+                        if (!string.IsNullOrEmpty(info.Website)) entity.Website = info.Website;
+                        if (info.EmployeeCount.HasValue) entity.EmployeeCount = info.EmployeeCount;
+                        if (info.RegCapital.HasValue) entity.RegCapital = info.RegCapital;
+                        if (info.ListDate.HasValue) entity.ListDate = info.ListDate;
                         entity.UpdatedAt = DateTime.UtcNow;
-                        industryUpdated++;
                     }
                 }
 
@@ -109,8 +117,8 @@ public partial class DataSyncService
         }
     }
 
-    /// <summary>东财 F10 RPT_F10_BASIC_ORGINFO 取一级行业</summary>
-    private async Task<string?> FetchIndustryAsync(HttpClient client, string code, CancellationToken ct)
+    /// <summary>东财 F10 RPT_F10_BASIC_ORGINFO 取行业及公司基础信息</summary>
+    private async Task<StockBaseInfoDto?> FetchBaseInfoAsync(HttpClient client, string code, CancellationToken ct)
     {
         try
         {
@@ -118,18 +126,51 @@ public partial class DataSyncService
             var url = $"https://datacenter.eastmoney.com/securities/api/data/v1/get?reportName=RPT_F10_BASIC_ORGINFO&columns=ALL&quoteColumns=&filter=(SECUCODE%3D%22{secucode}%22)&pageNumber=1&pageSize=1&source=HSF10&client=PC";
             var json = await client.GetStringAsync(url, ct);
             var resp = JsonSerializer.Deserialize<EmF10Response>(json);
-            var industry = resp?.Result?.Data?.FirstOrDefault()?.IndustryCSRC1;
-            if (string.IsNullOrEmpty(industry)) return null;
-            // 格式如"制造业-专用设备制造业"，取一级
-            var parts = industry.Split('-');
-            return parts.Length > 0 ? parts[0].Trim() : industry.Trim();
+            var data = resp?.Result?.Data?.FirstOrDefault();
+            if (data == null) return null;
+
+            return new StockBaseInfoDto
+            {
+                Industry = ParseTop(data.IndustryCSRC1),           // 一级行业
+                SubIndustry = ParseLast(data.BoardNameLevel),       // 细分（取最后一级）
+                CompanyName = data.OrgName,
+                MainBusiness = data.MainBusiness,
+                Profile = data.OrgProfile,
+                Province = data.Province,
+                Website = data.OrgWeb,
+                EmployeeCount = data.EmpNum,
+                RegCapital = ParseDecimal(data.RegCapital),
+                ListDate = ParseDate(data.ListingDate)
+            };
         }
         catch (Exception ex)
         {
-            _logger.LogDebug(ex, "F10 行业获取失败 {Code}", code);
+            _logger.LogDebug(ex, "F10 基础信息获取失败 {Code}", code);
             return null;
         }
     }
+
+    private static string? ParseTop(string? s)
+        => string.IsNullOrEmpty(s) ? null : s.Split('-')[0].Trim();
+
+    private static string? ParseLast(string? s)
+        => string.IsNullOrEmpty(s) ? null : s.Split('-')[^1].Trim();
+
+    private static DateTime? ParseDate(string? s)
+        => DateTime.TryParse(s, out var d) ? d : null;
+
+    private static decimal? ParseDecimal(object? v) => v switch
+    {
+        null => null,
+        decimal d => d,
+        int i => i,
+        long l => l,
+        double db => (decimal)db,
+        string s when decimal.TryParse(s, out var p) => p,
+        JsonElement je when je.ValueKind == JsonValueKind.Number && je.TryGetDecimal(out var jp) => jp,
+        JsonElement je when je.ValueKind == JsonValueKind.String && decimal.TryParse(je.GetString(), out var sp) => sp,
+        _ => null
+    };
 
     /// <summary>同花顺概念列表</summary>
     private async Task<List<ConceptDto>> FetchConceptsAsync(HttpClient client, string code, CancellationToken ct)
@@ -189,6 +230,29 @@ public partial class DataSyncService
     private class EmF10Org
     {
         [JsonPropertyName("INDUSTRYCSRC1")] public string? IndustryCSRC1 { get; set; }
+        [JsonPropertyName("ORG_NAME")] public string? OrgName { get; set; }
+        [JsonPropertyName("ORG_PROFILE")] public string? OrgProfile { get; set; }
+        [JsonPropertyName("MAIN_BUSINESS")] public string? MainBusiness { get; set; }
+        [JsonPropertyName("PROVINCE")] public string? Province { get; set; }
+        [JsonPropertyName("ORG_WEB")] public string? OrgWeb { get; set; }
+        [JsonPropertyName("EMP_NUM")] public int? EmpNum { get; set; }
+        [JsonPropertyName("REG_CAPITAL")] public JsonElement? RegCapital { get; set; }
+        [JsonPropertyName("LISTING_DATE")] public string? ListingDate { get; set; }
+        [JsonPropertyName("BOARD_NAME_LEVEL")] public string? BoardNameLevel { get; set; }
+    }
+
+    private class StockBaseInfoDto
+    {
+        public string? Industry { get; set; }
+        public string? SubIndustry { get; set; }
+        public string? CompanyName { get; set; }
+        public string? MainBusiness { get; set; }
+        public string? Profile { get; set; }
+        public string? Province { get; set; }
+        public string? Website { get; set; }
+        public int? EmployeeCount { get; set; }
+        public decimal? RegCapital { get; set; }
+        public DateTime? ListDate { get; set; }
     }
 
     private class ThsConceptResponse

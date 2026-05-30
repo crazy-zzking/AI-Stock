@@ -44,6 +44,42 @@ public class StockBaseEntity
     [Column("list_date")]
     public DateTime? ListDate { get; set; }
 
+    /// <summary>公司全称</summary>
+    [Column("company_name")]
+    [StringLength(200)]
+    public string? CompanyName { get; set; }
+
+    /// <summary>子行业/细分行业</summary>
+    [Column("sub_industry")]
+    [StringLength(100)]
+    public string? SubIndustry { get; set; }
+
+    /// <summary>主营业务</summary>
+    [Column("main_business", TypeName = "text")]
+    public string? MainBusiness { get; set; }
+
+    /// <summary>公司简介</summary>
+    [Column("profile", TypeName = "text")]
+    public string? Profile { get; set; }
+
+    /// <summary>所在省份</summary>
+    [Column("province")]
+    [StringLength(50)]
+    public string? Province { get; set; }
+
+    /// <summary>公司官网</summary>
+    [Column("website")]
+    [StringLength(200)]
+    public string? Website { get; set; }
+
+    /// <summary>员工人数</summary>
+    [Column("employee_count")]
+    public int? EmployeeCount { get; set; }
+
+    /// <summary>注册资本</summary>
+    [Column("reg_capital")]
+    public decimal? RegCapital { get; set; }
+
     /// <summary>
     /// 是否退市
     /// </summary>
