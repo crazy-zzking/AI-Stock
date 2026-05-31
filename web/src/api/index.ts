@@ -89,6 +89,12 @@ export const getConcepts = (top = 60) =>
   api.get<{ concept: string; stockCount: number }[]>('/knowledge/concepts', { params: { top } });
 export const getConceptStocks = (name: string) =>
   api.get<{ code: string; name: string; industry: string }[]>(`/knowledge/concept/${encodeURIComponent(name)}/stocks`);
+export interface CandidateEdge {
+  from: string; to: string; edgeType: string;
+  credibility: number; mentionCount: number; promoted: boolean; sourceUrl?: string;
+}
+export const getCandidateEdges = (edgeType?: string, top = 300) =>
+  api.get<CandidateEdge[]>('/knowledge/candidate-edges', { params: { edgeType, top } });
 
 // ============ LLM ============
 export const getLLMModels = () => api.get<LLMModel[]>('/llm/models');

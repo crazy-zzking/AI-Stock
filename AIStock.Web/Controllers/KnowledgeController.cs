@@ -44,7 +44,6 @@ public class KnowledgeController : ControllerBase
             .GroupBy(c => c.ConceptName)
             .Select(g => new { concept = g.Key, stockCount = g.Count() })
             .OrderByDescending(x => x.stockCount)
-            .Take(top)
             .ToListAsync();
         return Ok(concepts);
     }
@@ -63,6 +62,33 @@ public class KnowledgeController : ControllerBase
             .Select(s => new { code = s.Code, name = s.Name, industry = s.Industry })
             .ToListAsync();
         return Ok(stocks);
+    }
+
+    /// <summary>
+    /// 知识图谱候选边（情报/小作文 LLM 推断的关系，含未晋升的线索）。
+    /// edgeType 可选 concept(公司-概念) / co-occur(公司-公司)；不传则全部。
+    /// </summary>
+    [HttpGet("candidate-edges")]
+    public async Task<IActionResult> GetCandidateEdges([FromQuery] string? edgeType = null, [FromQuery] int top = 300)
+    {
+        var q = _db.GraphCandidateEdge.AsQueryable();
+        if (!string.IsNullOrEmpty(edgeType)) q = q.Where(e => e.EdgeType == edgeType);
+        var edges = await q
+            .OrderByDescending(e => e.MentionCount)
+            .ThenByDescending(e => e.Credibility)
+            .Take(top)
+            .Select(e => new
+            {
+                from = e.FromEntity,
+                to = e.ToEntity,
+                edgeType = e.EdgeType,
+                credibility = e.Credibility,
+                mentionCount = e.MentionCount,
+                promoted = e.Promoted,
+                sourceUrl = e.LastSourceUrl,
+            })
+            .ToListAsync();
+        return Ok(edges);
     }
 
     #endregion

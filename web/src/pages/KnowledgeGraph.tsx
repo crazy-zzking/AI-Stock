@@ -2,10 +2,11 @@ import React, { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Card, Table, Tabs, Tag, message, Select, Empty, Row, Col, Input, Button, Space, List } from 'antd';
 import { ApartmentOutlined } from '@ant-design/icons';
-import { getChains, getChainCompanies, getCompanyRelations, getSuppliers, getCustomers, diffuseConcept, findRelationPath, getConcepts, getConceptStocks } from '../api';
+import { getChains, getChainCompanies, getCompanyRelations, getSuppliers, getCustomers, diffuseConcept, findRelationPath, getCandidateEdges } from '../api';
+import type { CandidateEdge } from '../api';
 import LoadingSkeleton from '../components/LoadingSkeleton';
 import RelationGraph from '../components/RelationGraph';
-import ConceptGraph from '../components/ConceptGraph';
+import CandidateGraph from '../components/CandidateGraph';
 import type { CompanyRelation } from '../types/models';
 
 /** [P1+P2-8] 知识图谱 — 产业链 + 公司关系可视化 */
@@ -28,30 +29,19 @@ const KnowledgeGraph: React.FC = () => {
   const [pathTo, setPathTo] = useState('');
   const [pathResult, setPathResult] = useState<any>(null);
 
-  // 题材概念
-  const [concepts, setConcepts] = useState<{ concept: string; stockCount: number }[]>([]);
-  const [selectedConcept, setSelectedConcept] = useState<string | null>(null);
-  const [conceptStocks, setConceptStocks] = useState<any[]>([]);
+  // 候选关系图谱（graph_candidate_edge）
+  const [candEdgeType, setCandEdgeType] = useState<string>('concept');
+  const [candidateEdges, setCandidateEdges] = useState<CandidateEdge[]>([]);
 
   useEffect(() => {
     loadChains();
-    loadConcepts();
   }, []);
 
-  const loadConcepts = async () => {
-    try {
-      const res = await getConcepts();
-      setConcepts(res.data || []);
-      if (res.data?.length > 0) setSelectedConcept(res.data[0].concept);
-    } catch { /* 概念表为空时静默 */ }
-  };
-
   useEffect(() => {
-    if (!selectedConcept) return;
-    getConceptStocks(selectedConcept)
-      .then((r) => setConceptStocks(r.data || []))
-      .catch(() => setConceptStocks([]));
-  }, [selectedConcept]);
+    getCandidateEdges(candEdgeType === 'all' ? undefined : candEdgeType)
+      .then((r) => setCandidateEdges(r.data || []))
+      .catch(() => setCandidateEdges([]));
+  }, [candEdgeType]);
 
   const loadChains = async () => {
     try {
@@ -124,27 +114,25 @@ const KnowledgeGraph: React.FC = () => {
     <div>
       <h2>知识图谱</h2>
 
-      {/* 题材概念 — 成分股网络 */}
-      <Card title="题材概念（成分股网络）" style={{ marginBottom: 16 }}>
+      {/* 候选关系图谱 — graph_candidate_edge（情报推断，含未晋升线索） */}
+      <Card title="候选关系图谱（情报推断 · graph_candidate_edge）" style={{ marginBottom: 16 }}>
         <Space style={{ marginBottom: 12 }}>
-          <span style={{ fontWeight: 500 }}>概念:</span>
+          <span style={{ fontWeight: 500 }}>边类型:</span>
           <Select
-            showSearch
-            value={selectedConcept}
-            onChange={setSelectedConcept}
-            style={{ width: 300 }}
-            placeholder="选择题材概念"
-            options={concepts.map((c) => ({ value: c.concept, label: `${c.concept}（${c.stockCount}只）` }))}
-            filterOption={(input, opt) => String(opt?.label ?? '').includes(input)}
-            notFoundContent={concepts.length === 0 ? '暂无概念数据（需 stock-detail 采集 / 候选边晋升）' : undefined}
+            value={candEdgeType}
+            onChange={setCandEdgeType}
+            style={{ width: 220 }}
+            options={[
+              { value: 'concept', label: '公司-概念 (concept)' },
+              { value: 'co-occur', label: '公司-公司共现 (co-occur)' },
+              { value: 'all', label: '全部' },
+            ]}
           />
-          <span style={{ color: '#999', fontSize: 12 }}>点成分股节点可看其关系图谱 ↓</span>
+          <span style={{ color: '#999', fontSize: 12 }}>
+            绿实线=已晋升权威图谱，灰虚线=候选中；线越粗提及越多
+          </span>
         </Space>
-        <ConceptGraph
-          concept={selectedConcept || ''}
-          stocks={conceptStocks}
-          onPick={(code) => loadCompanyDetail(code)}
-        />
+        <CandidateGraph edges={candidateEdges} />
       </Card>
 
       {/* 产业链选择 */}
