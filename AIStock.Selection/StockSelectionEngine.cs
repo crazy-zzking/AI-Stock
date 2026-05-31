@@ -1,3 +1,4 @@
+using System.Text.Json;
 using AIStock.Core.Models;
 using AIStock.Infrastructure.Database.Entities;
 using AIStock.Selection.Narration;
@@ -113,14 +114,39 @@ public class StockSelectionEngine
         _ => 50m             // 偏高（未超 MaxRise20d 才会到这）
     };
 
-    // 龙虎榜：上榜 + 机构 + 净买
+    // 知名/优质席位关键词（北向、外资、头部券商总部）。"机构专用"单独由 IsInstitution 计。
+    private static readonly string[] EliteSeatKeywords =
+        { "沪股通", "深股通", "QFII", "高盛", "摩根", "瑞银", "中金公司", "中信证券股份有限公司总部" };
+
+    // 龙虎榜阵容评分：上榜 + 净买 + 买方席位质量（机构/北向/外资/头部券商）
     private static decimal ScoreDragonTiger(DragonTigerEntity? dt)
     {
         if (dt == null) return 0;
-        decimal score = 60;
-        if (dt.HasInstitution) score += 25;
-        if (dt.NetBuyAmount > 0) score += 15;
+        decimal score = 50;                       // 上榜基础
+        if (dt.NetBuyAmount > 0) score += 10;     // 净买为正
+
+        var seats = ParseSeats(dt.BuySeatsJson);
+        if (seats.Count > 0)
+        {
+            var instCount = seats.Count(s => s.IsInstitution);
+            var eliteCount = seats.Count(s => !s.IsInstitution &&
+                EliteSeatKeywords.Any(k => s.SeatName.Contains(k)));
+            score += Math.Min(instCount * 15, 30); // 机构专用席位（最多 +30）
+            score += Math.Min(eliteCount * 8, 16); // 知名/北向/外资席位（最多 +16）
+        }
+        else if (dt.HasInstitution)
+        {
+            score += 25;                           // 无席位明细时退化到机构标记
+        }
+
         return Math.Min(score, 100m);
+    }
+
+    private static List<DragonTigerSeat> ParseSeats(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return new List<DragonTigerSeat>();
+        try { return JsonSerializer.Deserialize<List<DragonTigerSeat>>(json) ?? new List<DragonTigerSeat>(); }
+        catch { return new List<DragonTigerSeat>(); }
     }
 
     private static int ToStars(decimal total) => total switch
@@ -139,7 +165,12 @@ public class StockSelectionEngine
         if (s.MacdGoldenCross) tags.Add("MACD刚金叉");
         if (s.IsLimitUp) tags.Add("涨停");
         else if (activityFeatures.Contains("放量大涨")) tags.Add("放量大涨");
-        if (dt != null) tags.Add(dt.HasInstitution ? "龙虎榜·机构" : "龙虎榜");
+        if (dt != null)
+        {
+            var instCount = ParseSeats(dt.BuySeatsJson).Count(x => x.IsInstitution);
+            tags.Add(instCount > 0 ? $"龙虎榜·机构{instCount}席"
+                : dt.HasInstitution ? "龙虎榜·机构" : "龙虎榜");
+        }
         return tags;
     }
 

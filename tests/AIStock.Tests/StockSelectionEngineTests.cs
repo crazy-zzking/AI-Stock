@@ -1,3 +1,4 @@
+using System.Text.Json;
 using AIStock.Core.Models;
 using AIStock.Infrastructure.Database.Entities;
 using AIStock.Selection;
@@ -93,6 +94,34 @@ public class StockSelectionEngineTests
         Assert.Equal(0, no.Factors.DragonTiger);
         Assert.True(with.TotalScore > no.TotalScore);
         Assert.Contains(with.Tags, t => t.Contains("龙虎榜"));
+    }
+
+    [Fact]
+    public void Select_DragonTigerSeats_ScoresAndTagsByInstitution()
+    {
+        var s = Snap("A");
+        var seats = new List<DragonTigerSeat>
+        {
+            new() { SeatName = "机构专用", BuyAmount = 2_000_000m, IsInstitution = true },
+            new() { SeatName = "机构专用", BuyAmount = 1_500_000m, IsInstitution = true },
+            new() { SeatName = "沪股通专用", BuyAmount = 1_000_000m, IsInstitution = false },
+        };
+        var dragons = new Dictionary<string, DragonTigerEntity>
+        {
+            ["A"] = new()
+            {
+                Code = "A", Date = s.Date, NetBuyAmount = 30_000_000m,
+                BuySeatsJson = JsonSerializer.Serialize(seats)
+            }
+        };
+        var pool = new List<ActivityScreener.ActivityHit> { Hit(s) };
+
+        var results = NewEngine().Select(pool, dragons, new SelectionCriteria());
+
+        var r = Assert.Single(results);
+        // 50基础 + 10净买 + 30机构(2席×15封顶) + 8北向 = 98
+        Assert.True(r.Factors.DragonTiger >= 80);
+        Assert.Contains("龙虎榜·机构2席", r.Tags);
     }
 
     [Fact]
