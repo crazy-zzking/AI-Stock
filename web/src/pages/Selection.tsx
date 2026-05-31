@@ -11,7 +11,8 @@ interface FactorScores {
   dragonTiger: number; activity: number; form: number;
 }
 interface SelectionResult {
-  code: string; name: string; ratingStars: number; tags: string[];
+  code: string; name: string; industry: string; concepts: string[];
+  ratingStars: number; tags: string[];
   close: number; changePercent: number; totalMarketCap: number;
   rise20d: number; peTtm: number; mainNetInflow: number;
   totalScore: number; factors: FactorScores; coreLogic: string;
@@ -85,7 +86,8 @@ const Selection: React.FC = () => {
             <Row justify="space-between" align="middle" style={{ marginBottom: 8 }}>
               <Col>
                 <span style={{ fontSize: 18, fontWeight: 700, marginRight: 8 }}>{r.name}</span>
-                <Typography.Text type="secondary" style={{ marginRight: 12 }}>{r.code}</Typography.Text>
+                <Typography.Text type="secondary" style={{ marginRight: 8 }}>{r.code}</Typography.Text>
+                {r.industry && <Tag color="geekblue" style={{ marginRight: 8 }}>{r.industry}</Tag>}
                 <Rate disabled value={r.ratingStars} style={{ fontSize: 14 }} />
               </Col>
               <Col>
@@ -99,6 +101,13 @@ const Selection: React.FC = () => {
               {r.tags.map((t) => <Tag color="blue" key={t}>{t}</Tag>)}
               <Tag>评分 {r.totalScore}</Tag>
             </div>
+
+            {r.concepts.length > 0 && (
+              <div style={{ marginBottom: 12 }}>
+                <span style={{ fontSize: 12, color: '#999', marginRight: 6 }}>题材概念：</span>
+                {r.concepts.slice(0, 10).map((c) => <Tag color="orange" key={c}>{c}</Tag>)}
+              </div>
+            )}
 
             <Row gutter={8} style={{ marginBottom: 12 }}>
               <DataItem label="收盘价" value={(r.close ?? 0).toFixed(2)} />

@@ -59,6 +59,12 @@ public class StockSelectionResult
     public string Code { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
 
+    /// <summary>所属行业</summary>
+    public string Industry { get; set; } = string.Empty;
+
+    /// <summary>关联概念/题材</summary>
+    public List<string> Concepts { get; set; } = new();
+
     /// <summary>评级（1-5 星）</summary>
     public int RatingStars { get; set; }
 
