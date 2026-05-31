@@ -144,7 +144,7 @@ public class EastmoneyProvider : BaseProvider
                 ChangeAmount = GetDecimal(data.GetProperty("f116"), 100),
                 TurnoverRate = GetDecimal(data.GetProperty("f117"), 100),
                 VolumeRatio = GetDecimal(data.GetProperty("f50"), 100),
-                // 估值字段（东财 stock/get）。已联调校准（300820 英杰电气）：
+                // 估值字段（东财 stock/get）。已联调校准 ：
                 // f116 总市值=元(不除)、f117 流通市值=元(不除)、f162 PE(动)÷100、f167 PB÷100；取不到则为 0。
                 TotalMarketCap = data.TryGetProperty("f116", out var mcEl) ? GetDecimal(mcEl) : 0,
                 FloatMarketCap = data.TryGetProperty("f117", out var fmcEl) ? GetDecimal(fmcEl) : 0,

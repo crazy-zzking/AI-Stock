@@ -97,6 +97,11 @@ public class AIStockDbContext : DbContext
     /// </summary>
     public DbSet<DailyMarketSnapshotEntity> DailyMarketSnapshot { get; set; }
 
+    /// <summary>
+    /// 龙虎榜席位明细
+    /// </summary>
+    public DbSet<DragonTigerSeatEntity> DragonTigerSeat { get; set; }
+
     public override int SaveChanges()
     {
         UpdateTimestamps();
@@ -271,6 +276,15 @@ public class AIStockDbContext : DbContext
         {
             entity.HasKey(e => e.Id);
             entity.HasIndex(e => new { e.Code, e.Date }).IsUnique();
+            entity.HasIndex(e => e.Date);
+        });
+
+        // 龙虎榜席位明细（先删后插控制重复，不设唯一键；按席位/日期/代码查询）
+        modelBuilder.Entity<DragonTigerSeatEntity>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => new { e.Code, e.Date });
+            entity.HasIndex(e => e.SeatName);
             entity.HasIndex(e => e.Date);
         });
     }
