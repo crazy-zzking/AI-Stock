@@ -169,16 +169,17 @@ public class ExtremeDeclineRiskTests
     }
 
     [Fact]
-    public async Task CheckRisk_BuyOnExactThreshold_Passes()
+    public async Task CheckRisk_BuyOnExactThreshold_IsBlocked()
     {
         var svc = CreateService();
-        var signal = BuySignal(-9m); // 刚好等于阈值，不触发（>= 才触发）
+        // 跌幅恰好达到阈值 -9%：接近跌停，可能是主力砸盘出货，无法仅凭涨跌幅区分买盘/砸盘，保守拦截（>= 触发）
+        var signal = BuySignal(-9m);
 
         var result = await svc.CheckRiskAsync(signal, new(), 100_000m);
 
         var check = result.Checks.FirstOrDefault(c => c.Name == "极端下跌禁买");
         Assert.NotNull(check);
-        Assert.True(check.Passed);
+        Assert.False(check.Passed);
     }
 
     [Fact]

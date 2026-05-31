@@ -152,7 +152,7 @@ public class HealthController : ControllerBase
             var summary = await _positionManager.GetPositionSummaryAsync();
             checks["portfolio"] = new
             {
-                totalMarketValue = summary.TotalMarketValue,
+                totalMarketValue = summary.PositionValue,
                 positionCount = summary.Positions.Count,
                 totalProfit = summary.TotalProfit,
                 totalProfitRate = summary.TotalProfitRate

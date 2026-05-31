@@ -127,7 +127,7 @@ public class OpenAICompatibleProvider : ILLMProvider
                     ErrorMessage = $"API error: {httpResponse.StatusCode} - {responseJson}",
                     ModelId = config.Id,
                     ModelName = config.Name,
-                    ResponseTimeMs = stopwatch.ElapsedMilliseconds
+                    ResponseTimeMs = 0 // 由调用方覆盖
                 };
             }
 

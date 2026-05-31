@@ -195,12 +195,13 @@ public class RiskEngineServiceTests
     }
 
     [Fact]
-    public async Task CheckRisk_HasFourChecks()
+    public async Task CheckRisk_BuySignal_HasFiveChecks()
     {
         var svc = CreateService();
+        // 买入信号包含：极端下跌禁买、单笔交易、总仓位、单票仓位、板块集中度
         var result = await svc.CheckRiskAsync(MakeSignal(), EmptyPositions(), 100_000m);
 
-        Assert.Equal(4, result.Checks.Count);
+        Assert.Equal(5, result.Checks.Count);
     }
 
     [Fact]
