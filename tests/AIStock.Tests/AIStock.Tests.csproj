@@ -15,12 +15,15 @@
     <PackageReference Include="xunit.runner.visualstudio" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
     <PackageReference Include="Microsoft.Extensions.Options" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\..\AIStock.Core\AIStock.Core.csproj" />
     <ProjectReference Include="..\..\AIStock.Execution\AIStock.Execution.csproj" />
     <ProjectReference Include="..\..\AIStock.Risk\AIStock.Risk.csproj" />
+    <ProjectReference Include="..\..\AIStock.Intelligence\AIStock.Intelligence.csproj" />
+    <ProjectReference Include="..\..\AIStock.Infrastructure\AIStock.Infrastructure.csproj" />
   </ItemGroup>
 
   <ItemGroup>

@@ -144,7 +144,7 @@ Portfolio Engine → Risk Engine → OMS → Execution Engine → SanhuQuant API
 | 仓位控制 | Kelly/风险平价/波动率目标 | P0 | ✅ 完成 |
 | 止损系统 | ATR止损/固定止损/动态止盈 | P0 | ✅ 完成 |
 | 风险暴露 | 单票/板块/Beta/杠杆限制 | P0 | ✅ 完成 |
-| 黑天鹅保护 | 熔断/波动率异常/极端行情检测 | P1 | ⏳ 阶段六 |
+| 黑天鹅保护 | 熔断/波动率异常/极端行情检测 | P1 | ✅ 完成 |
 
 ### 第10层：执行层
 
@@ -158,8 +158,8 @@ Portfolio Engine → Risk Engine → OMS → Execution Engine → SanhuQuant API
 
 | 模块 | 功能 | 优先级 | 状态 |
 |------|------|--------|------|
-| Web Dashboard | PnL/持仓/信号/日志 | P0 | ⏳ 阶段六 |
-| 告警系统 | 企业微信/钉钉/Telegram | P1 | ⏳ 阶段六 |
+| Web Dashboard | PnL/持仓/信号/日志 | P0 | ✅ 完成 |
+| 告警系统 | 企业微信/钉钉 | P1 | ✅ 完成 |
 | 模型监控 | 漂移检测/性能衰减 | P2 | ⏳ 阶段六 |
 
 ---
@@ -382,7 +382,7 @@ Portfolio Engine → Risk Engine → OMS → Execution Engine → SanhuQuant API
 | 仓位控制 | P0 | Kelly/风险平价/波动率目标 | ✅ 完成 |
 | 止损系统 | P0 | ATR止损/固定止损/动态止盈 | ✅ 完成 |
 | 风险暴露控制 | P0 | 单票/板块/Beta/杠杆限制 | ✅ 完成 |
-| 黑天鹅保护 | P1 | 熔断/波动率异常检测 | ⏳ 阶段六 |
+| 黑天鹅保护 | P1 | 熔断/波动率异常检测 | ✅ 完成 |
 | OMS订单管理 | P0 | 下单/撤单/改单/状态同步 | ✅ 完成 |
 | 执行算法 | P1 | TWAP/VWAP/冰山单 | ⏳ 阶段六 |
 | SanhuQuant集成 | P0 | 实盘交易接口对接 | ✅ 完成 |
@@ -461,7 +461,7 @@ Portfolio Engine → Risk Engine → OMS → Execution Engine → SanhuQuant API
 | 策略管理界面 | P0 | 策略配置/回测/启动 | ✅ 完成 |
 | 持仓收益查看 | P0 | 实时持仓/盈亏 | ✅ 完成 |
 | Agent监控 | P1 | Agent状态/执行任务 | ✅ 完成 |
-| 告警系统 | P1 | 企业微信/钉钉/Telegram | ⏳ 待开发 |
+| 告警系统 | P1 | 企业微信/钉钉 | ✅ 完成 |
 | 模型监控 | P2 | 漂移检测/性能衰减 | ⏳ 待开发 |
 | Docker部署优化 | P1 | 生产环境配置 | ⏳ 待开发 |
 
@@ -617,3 +617,4 @@ curl http://localhost:5172/api/health
 | 2026-05-28 | v5.0 | 阶段六：Multi-Agent框架（ResearchAgent、AlphaAgent、RiskAgent、AgentOrchestrator） |
 | 2026-05-28 | v5.1 | 新增自主决策系统（AutonomousDecisionSystem） |
 | 2026-05-28 | v6.0 | 阶段七：Web前端（React + Ant Design，Dashboard/持仓/Agent/策略页面） |
+| 2026-05-31 | v6.1 | 对照代码修正过时状态：黑天鹅保护（熔断/极端行情检测）✅、Web Dashboard ✅、告警系统（企业微信/钉钉）✅；Telegram 通知不在范围内，已从需求移除 |
