@@ -83,6 +83,8 @@ export const getChainCompanies = (chainName: string, role?: string) =>
   api.get(`/knowledge/chain/${chainName}/companies`, { params: { role } });
 export const findRelationPath = (from: string, to: string, maxDepth = 3) =>
   api.get('/knowledge/company/path', { params: { from, to, maxDepth } });
+export const diffuseConcept = (coreEvent: string, relatedConcepts: string[]) =>
+  api.post('/knowledge/chain/diffuse', { coreEvent, relatedConcepts });
 
 // ============ LLM ============
 export const getLLMModels = () => api.get<LLMModel[]>('/llm/models');

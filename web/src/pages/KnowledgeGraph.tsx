@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Card, Table, Tabs, Tag, message, Select, Empty, Row, Col } from 'antd';
+import { Card, Table, Tabs, Tag, message, Select, Empty, Row, Col, Input, Button, Space, List } from 'antd';
 import { ApartmentOutlined } from '@ant-design/icons';
-import { getChains, getChainCompanies, getCompanyRelations, getSuppliers, getCustomers } from '../api';
+import { getChains, getChainCompanies, getCompanyRelations, getSuppliers, getCustomers, diffuseConcept, findRelationPath } from '../api';
 import LoadingSkeleton from '../components/LoadingSkeleton';
 import RelationGraph from '../components/RelationGraph';
 import type { CompanyRelation } from '../types/models';
@@ -18,6 +18,14 @@ const KnowledgeGraph: React.FC = () => {
   const [suppliers, setSuppliers] = useState<any[]>([]);
   const [customers, setCustomers] = useState<any[]>([]);
   const [searchParams] = useSearchParams();
+
+  // 概念扩散 / 关系路径
+  const [diffEvent, setDiffEvent] = useState('');
+  const [diffConcepts, setDiffConcepts] = useState('');
+  const [diffResult, setDiffResult] = useState<any>(null);
+  const [pathFrom, setPathFrom] = useState('');
+  const [pathTo, setPathTo] = useState('');
+  const [pathResult, setPathResult] = useState<any>(null);
 
   useEffect(() => {
     loadChains();
@@ -70,6 +78,23 @@ const KnowledgeGraph: React.FC = () => {
     if (code) loadCompanyDetail(code);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
+
+  const handleDiffuse = async () => {
+    if (!diffEvent.trim() || !diffConcepts.trim()) { message.warning('请填核心事件和关联概念'); return; }
+    try {
+      const concepts = diffConcepts.split(/[,，]/).map((s) => s.trim()).filter(Boolean);
+      const res = await diffuseConcept(diffEvent.trim(), concepts);
+      setDiffResult(res.data);
+    } catch { message.error('概念扩散失败'); }
+  };
+
+  const handleFindPath = async () => {
+    if (!pathFrom.trim() || !pathTo.trim()) { message.warning('请填起点和终点代码'); return; }
+    try {
+      const res = await findRelationPath(pathFrom.trim(), pathTo.trim());
+      setPathResult(res.data);
+    } catch { message.error('路径查找失败'); }
+  };
 
   if (loading) return <LoadingSkeleton />;
 
@@ -199,6 +224,52 @@ const KnowledgeGraph: React.FC = () => {
               <Empty description="点击左侧公司查看关联关系" />
             </Card>
           )}
+        </Col>
+      </Row>
+
+      {/* 概念扩散推演 + 关系路径查找 */}
+      <Row gutter={16} style={{ marginTop: 16 }}>
+        <Col span={12}>
+          <Card title="概念扩散推演" size="small">
+            <Space direction="vertical" style={{ width: '100%' }}>
+              <Input placeholder="核心事件（如：某政策利好半导体）" value={diffEvent} onChange={(e) => setDiffEvent(e.target.value)} />
+              <Input placeholder="关联概念，逗号分隔（如：半导体,国产替代）" value={diffConcepts} onChange={(e) => setDiffConcepts(e.target.value)} />
+              <Button type="primary" onClick={handleDiffuse}>推演扩散</Button>
+              {diffResult && (
+                <div>
+                  <div style={{ marginTop: 4 }}>
+                    <b>关联产业链：</b>
+                    {(diffResult.relatedChains || []).map((c: string) => <Tag color="purple" key={c}>{c}</Tag>)}
+                  </div>
+                  <div style={{ marginTop: 8 }}>
+                    <b>受益公司：</b>
+                    {(diffResult.beneficiaryCompanies || []).map((c: any, idx: number) =>
+                      <Tag color="green" key={c.code || c.name || idx}>{c.name || c.code || String(c)}</Tag>)}
+                  </div>
+                </div>
+              )}
+            </Space>
+          </Card>
+        </Col>
+        <Col span={12}>
+          <Card title="关系路径查找" size="small">
+            <Space direction="vertical" style={{ width: '100%' }}>
+              <Input placeholder="起点公司代码" value={pathFrom} onChange={(e) => setPathFrom(e.target.value)} />
+              <Input placeholder="终点公司代码" value={pathTo} onChange={(e) => setPathTo(e.target.value)} />
+              <Button type="primary" onClick={handleFindPath}>查找路径</Button>
+              {pathResult && (
+                Array.isArray(pathResult) && pathResult.length > 0 ? (
+                  <List
+                    size="small"
+                    dataSource={pathResult}
+                    renderItem={(p: any, idx: number) => (
+                      <List.Item>路径{idx + 1}：{Array.isArray(p) ? p.join(' → ') : JSON.stringify(p)}</List.Item>
+                    )}
+                  />
+                ) : <Empty description="无关联路径" />
+              )}
+            </Space>
+          </Card>
         </Col>
       </Row>
     </div>
