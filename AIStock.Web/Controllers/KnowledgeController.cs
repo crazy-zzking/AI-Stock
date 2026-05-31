@@ -1,7 +1,9 @@
 using System.ComponentModel.DataAnnotations;
 using AIStock.Core.Interfaces;
 using AIStock.Core.Models;
+using AIStock.Infrastructure.Database.Context;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 
 namespace AIStock.Web.Controllers;
 
@@ -15,19 +17,55 @@ public class KnowledgeController : ControllerBase
     private readonly ICompanyRelationGraph _companyGraph;
     private readonly IIndustryChainGraph _chainGraph;
     private readonly IStockFilter _stockFilter;
+    private readonly AIStockDbContext _db;
     private readonly ILogger<KnowledgeController> _logger;
 
     public KnowledgeController(
         ICompanyRelationGraph companyGraph,
         IIndustryChainGraph chainGraph,
         IStockFilter stockFilter,
+        AIStockDbContext db,
         ILogger<KnowledgeController> logger)
     {
         _companyGraph = companyGraph;
         _chainGraph = chainGraph;
         _stockFilter = stockFilter;
+        _db = db;
         _logger = logger;
     }
+
+    #region 概念题材
+
+    /// <summary>所有概念/题材（按成分股数降序）</summary>
+    [HttpGet("concepts")]
+    public async Task<IActionResult> GetConcepts([FromQuery] int top = 60)
+    {
+        var concepts = await _db.StockConceptRelation
+            .GroupBy(c => c.ConceptName)
+            .Select(g => new { concept = g.Key, stockCount = g.Count() })
+            .OrderByDescending(x => x.stockCount)
+            .Take(top)
+            .ToListAsync();
+        return Ok(concepts);
+    }
+
+    /// <summary>某概念/题材的成分股</summary>
+    [HttpGet("concept/{name}/stocks")]
+    public async Task<IActionResult> GetConceptStocks(string name)
+    {
+        var codes = await _db.StockConceptRelation
+            .Where(c => c.ConceptName == name)
+            .Select(c => c.StockCode)
+            .Distinct()
+            .ToListAsync();
+        var stocks = await _db.StockBase
+            .Where(s => codes.Contains(s.Code))
+            .Select(s => new { code = s.Code, name = s.Name, industry = s.Industry })
+            .ToListAsync();
+        return Ok(stocks);
+    }
+
+    #endregion
 
     #region 公司关系图谱
 

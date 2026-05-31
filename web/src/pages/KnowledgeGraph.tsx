@@ -2,9 +2,10 @@ import React, { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Card, Table, Tabs, Tag, message, Select, Empty, Row, Col, Input, Button, Space, List } from 'antd';
 import { ApartmentOutlined } from '@ant-design/icons';
-import { getChains, getChainCompanies, getCompanyRelations, getSuppliers, getCustomers, diffuseConcept, findRelationPath } from '../api';
+import { getChains, getChainCompanies, getCompanyRelations, getSuppliers, getCustomers, diffuseConcept, findRelationPath, getConcepts, getConceptStocks } from '../api';
 import LoadingSkeleton from '../components/LoadingSkeleton';
 import RelationGraph from '../components/RelationGraph';
+import ConceptGraph from '../components/ConceptGraph';
 import type { CompanyRelation } from '../types/models';
 
 /** [P1+P2-8] 知识图谱 — 产业链 + 公司关系可视化 */
@@ -27,9 +28,30 @@ const KnowledgeGraph: React.FC = () => {
   const [pathTo, setPathTo] = useState('');
   const [pathResult, setPathResult] = useState<any>(null);
 
+  // 题材概念
+  const [concepts, setConcepts] = useState<{ concept: string; stockCount: number }[]>([]);
+  const [selectedConcept, setSelectedConcept] = useState<string | null>(null);
+  const [conceptStocks, setConceptStocks] = useState<any[]>([]);
+
   useEffect(() => {
     loadChains();
+    loadConcepts();
   }, []);
+
+  const loadConcepts = async () => {
+    try {
+      const res = await getConcepts();
+      setConcepts(res.data || []);
+      if (res.data?.length > 0) setSelectedConcept(res.data[0].concept);
+    } catch { /* 概念表为空时静默 */ }
+  };
+
+  useEffect(() => {
+    if (!selectedConcept) return;
+    getConceptStocks(selectedConcept)
+      .then((r) => setConceptStocks(r.data || []))
+      .catch(() => setConceptStocks([]));
+  }, [selectedConcept]);
 
   const loadChains = async () => {
     try {
@@ -101,6 +123,29 @@ const KnowledgeGraph: React.FC = () => {
   return (
     <div>
       <h2>知识图谱</h2>
+
+      {/* 题材概念 — 成分股网络 */}
+      <Card title="题材概念（成分股网络）" style={{ marginBottom: 16 }}>
+        <Space style={{ marginBottom: 12 }}>
+          <span style={{ fontWeight: 500 }}>概念:</span>
+          <Select
+            showSearch
+            value={selectedConcept}
+            onChange={setSelectedConcept}
+            style={{ width: 300 }}
+            placeholder="选择题材概念"
+            options={concepts.map((c) => ({ value: c.concept, label: `${c.concept}（${c.stockCount}只）` }))}
+            filterOption={(input, opt) => String(opt?.label ?? '').includes(input)}
+            notFoundContent={concepts.length === 0 ? '暂无概念数据（需 stock-detail 采集 / 候选边晋升）' : undefined}
+          />
+          <span style={{ color: '#999', fontSize: 12 }}>点成分股节点可看其关系图谱 ↓</span>
+        </Space>
+        <ConceptGraph
+          concept={selectedConcept || ''}
+          stocks={conceptStocks}
+          onPick={(code) => loadCompanyDetail(code)}
+        />
+      </Card>
 
       {/* 产业链选择 */}
       <Card style={{ marginBottom: 16 }}>
