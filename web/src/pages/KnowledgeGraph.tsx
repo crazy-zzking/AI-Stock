@@ -1,8 +1,10 @@
 import React, { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Card, Table, Tabs, Tag, message, Select, Empty, Row, Col } from 'antd';
 import { ApartmentOutlined } from '@ant-design/icons';
 import { getChains, getChainCompanies, getCompanyRelations, getSuppliers, getCustomers } from '../api';
 import LoadingSkeleton from '../components/LoadingSkeleton';
+import RelationGraph from '../components/RelationGraph';
 import type { CompanyRelation } from '../types/models';
 
 /** [P1+P2-8] 知识图谱 — 产业链 + 公司关系可视化 */
@@ -15,6 +17,7 @@ const KnowledgeGraph: React.FC = () => {
   const [relations, setRelations] = useState<CompanyRelation[]>([]);
   const [suppliers, setSuppliers] = useState<any[]>([]);
   const [customers, setCustomers] = useState<any[]>([]);
+  const [searchParams] = useSearchParams();
 
   useEffect(() => {
     loadChains();
@@ -60,6 +63,13 @@ const KnowledgeGraph: React.FC = () => {
       message.error('加载公司关系失败');
     }
   };
+
+  // 选股页跳转带 ?code=xxx 时，直接加载该公司图谱
+  useEffect(() => {
+    const code = searchParams.get('code');
+    if (code) loadCompanyDetail(code);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
 
   if (loading) return <LoadingSkeleton />;
 
@@ -115,6 +125,18 @@ const KnowledgeGraph: React.FC = () => {
           {selectedCompany ? (
             <Tabs
               items={[
+                {
+                  key: 'graph',
+                  label: '关系图谱',
+                  children: (
+                    <RelationGraph
+                      center={selectedCompany}
+                      relations={relations as any}
+                      suppliers={suppliers}
+                      customers={customers}
+                    />
+                  ),
+                },
                 {
                   key: 'relations',
                   label: '关联关系',

@@ -4,6 +4,7 @@ import {
   InputNumber, Space, Typography, Tooltip,
 } from 'antd';
 import { ReloadOutlined } from '@ant-design/icons';
+import { useNavigate } from 'react-router-dom';
 import { getLatestSelection } from '../api';
 
 interface FactorScores {
@@ -32,6 +33,7 @@ const DataItem: React.FC<{ label: string; value: React.ReactNode; color?: string
 );
 
 const Selection: React.FC = () => {
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [topN, setTopN] = useState(5);
   const [list, setList] = useState<SelectionResult[]>([]);
@@ -90,10 +92,13 @@ const Selection: React.FC = () => {
                 {r.industry && <Tag color="geekblue" style={{ marginRight: 8 }}>{r.industry}</Tag>}
                 <Rate disabled value={r.ratingStars} style={{ fontSize: 14 }} />
               </Col>
-              <Col>
+              <Col style={{ textAlign: 'right' }}>
                 <Tooltip title={`资金${r.factors.capital}/技术${r.factors.technical}/位置${r.factors.position}/形态${r.factors.form}/龙虎${r.factors.dragonTiger}/活跃${r.factors.activity}`}>
                   <span style={{ fontSize: 22, fontWeight: 700, color: '#52c41a' }}>No.{i + 1}</span>
                 </Tooltip>
+                <div>
+                  <Button size="small" type="link" onClick={() => navigate(`/knowledge?code=${r.code}`)}>查看图谱</Button>
+                </div>
               </Col>
             </Row>
 
