@@ -6,6 +6,7 @@ import ErrorBoundary from './components/ErrorBoundary';
 import MainLayout from './layouts/MainLayout';
 import Dashboard from './pages/Dashboard';
 import Positions from './pages/Positions';
+import Selection from './pages/Selection';
 import Agents from './pages/Agents';
 import Strategy from './pages/Strategy';
 import AutoTrading from './pages/AutoTrading';
@@ -28,6 +29,7 @@ function App() {
               <Route index element={<Dashboard />} />
               <Route path="auto-trading" element={<AutoTrading />} />
               <Route path="positions" element={<Positions />} />
+              <Route path="selection" element={<Selection />} />
               <Route path="agents" element={<Agents />} />
               <Route path="strategy" element={<Strategy />} />
               <Route path="knowledge" element={<KnowledgeGraph />} />

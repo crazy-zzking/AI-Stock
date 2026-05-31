@@ -11,6 +11,7 @@ import {
   ControlOutlined,
   NodeIndexOutlined,
   SearchOutlined,
+  FundOutlined,
   MessageOutlined,
   FileTextOutlined,
 } from '@ant-design/icons';
@@ -33,6 +34,11 @@ const menuItems = [
     key: '/positions',
     icon: <StockOutlined />,
     label: '持仓',
+  },
+  {
+    key: '/selection',
+    icon: <FundOutlined />,
+    label: '选股',
   },
   {
     key: '/agents',

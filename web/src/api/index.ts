@@ -62,6 +62,13 @@ export const runBacktest = (config: Record<string, unknown>) =>
 export const checkRisk = (data: Record<string, unknown>) =>
   api.post('/risk/check', data);
 
+// ============ 选股 ============
+export const getLatestSelection = (topN = 5) =>
+  api.get(`/selection/latest`, { params: { topN } });
+export const screenSelection = (criteria?: Record<string, unknown>) =>
+  api.post('/selection/screen', criteria || {});
+export const getActivityPool = () => api.get('/selection/activity');
+
 // ============ 知识图谱 ============
 export const getChains = () => api.get<string[]>('/knowledge/chains');
 export const getChainStructure = (chainName: string) =>
