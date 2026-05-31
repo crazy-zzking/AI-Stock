@@ -62,8 +62,11 @@ public class StockSelectionResult
     /// <summary>所属行业</summary>
     public string Industry { get; set; } = string.Empty;
 
-    /// <summary>关联概念/题材</summary>
+    /// <summary>关联概念/题材（命中热门题材的优先排序）</summary>
     public List<string> Concepts { get; set; } = new();
+
+    /// <summary>命中当日热门题材的概念（活跃股集中的风口题材）</summary>
+    public List<string> HotConcepts { get; set; } = new();
 
     /// <summary>评级（1-5 星）</summary>
     public int RatingStars { get; set; }

@@ -11,7 +11,7 @@ interface FactorScores {
   dragonTiger: number; activity: number; form: number;
 }
 interface SelectionResult {
-  code: string; name: string; industry: string; concepts: string[];
+  code: string; name: string; industry: string; concepts: string[]; hotConcepts: string[];
   ratingStars: number; tags: string[];
   close: number; changePercent: number; totalMarketCap: number;
   rise20d: number; peTtm: number; mainNetInflow: number;
@@ -105,7 +105,11 @@ const Selection: React.FC = () => {
             {r.concepts.length > 0 && (
               <div style={{ marginBottom: 12 }}>
                 <span style={{ fontSize: 12, color: '#999', marginRight: 6 }}>题材概念：</span>
-                {r.concepts.slice(0, 10).map((c) => <Tag color="orange" key={c}>{c}</Tag>)}
+                {r.concepts.slice(0, 12).map((c) =>
+                  r.hotConcepts?.includes(c)
+                    ? <Tag color="red" key={c}>🔥 {c}</Tag>
+                    : <Tag color="orange" key={c}>{c}</Tag>
+                )}
               </div>
             )}
 

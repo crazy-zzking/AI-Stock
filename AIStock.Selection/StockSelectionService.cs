@@ -38,13 +38,42 @@ public class StockSelectionService
 
         var activePool = ActivityScreener.Screen(latest, criteria);
         var results = _engine.Select(activePool, dragonByCode, sequenceByCode, criteria);
-        await EnrichIndustryConceptsAsync(results, ct);
-        _logger.LogInformation("选股完成：活跃池 {Pool} 只，入选 TOP {Top}", activePool.Count, results.Count);
+        var hotConcepts = await ComputeHotConceptsAsync(latest, ct);
+        await EnrichIndustryConceptsAsync(results, hotConcepts, ct);
+        _logger.LogInformation("选股完成：活跃池 {Pool} 只，入选 TOP {Top}，当日热门题材 {Hot} 个",
+            activePool.Count, results.Count, hotConcepts.Count);
         return results;
     }
 
-    /// <summary>给选股结果补充行业（stock_base）与关联概念/题材（stock_concept_relation）。</summary>
-    private async Task EnrichIndustryConceptsAsync(List<StockSelectionResult> results, CancellationToken ct)
+    /// <summary>
+    /// 计算当日热门题材：当日活跃股（涨停/大涨/放量）扎堆的概念，活跃股越多越热。
+    /// 返回 概念→活跃股数。反映"当下市场在炒什么"。
+    /// </summary>
+    private async Task<Dictionary<string, int>> ComputeHotConceptsAsync(
+        List<DailyMarketSnapshotEntity> latest, CancellationToken ct)
+    {
+        var activeCodes = latest
+            .Where(s => s.IsLimitUp || s.ChangePercent >= 5m
+                || (s.VolumeRatio >= 2m && s.ChangePercent > 0))
+            .Select(s => s.Code)
+            .ToList();
+        if (activeCodes.Count == 0) return new Dictionary<string, int>();
+
+        var rel = await _db.StockConceptRelation
+            .Where(c => activeCodes.Contains(c.StockCode))
+            .Select(c => new { c.StockCode, c.ConceptName })
+            .ToListAsync(ct);
+
+        return rel
+            .GroupBy(c => c.ConceptName)
+            .Select(g => new { Concept = g.Key, Count = g.Select(x => x.StockCode).Distinct().Count() })
+            .Where(x => x.Count >= 2) // 至少 2 只活跃股才算成"题材"
+            .ToDictionary(x => x.Concept, x => x.Count);
+    }
+
+    /// <summary>补充行业、概念/题材；命中热门题材的概念优先排序并标记。</summary>
+    private async Task EnrichIndustryConceptsAsync(
+        List<StockSelectionResult> results, Dictionary<string, int> hotConcepts, CancellationToken ct)
     {
         if (results.Count == 0) return;
         var codes = results.Select(r => r.Code).ToList();
@@ -66,7 +95,14 @@ public class StockSelectionService
             if (industries.TryGetValue(r.Code, out var ind) && !string.IsNullOrEmpty(ind))
                 r.Industry = ind;
             if (concepts.TryGetValue(r.Code, out var cs))
-                r.Concepts = cs;
+            {
+                // 命中热门题材的概念优先（热度高在前），其余按名称
+                r.Concepts = cs
+                    .OrderByDescending(c => hotConcepts.TryGetValue(c, out var h) ? h : 0)
+                    .ThenBy(c => c)
+                    .ToList();
+                r.HotConcepts = cs.Where(hotConcepts.ContainsKey).ToList();
+            }
         }
     }
 
