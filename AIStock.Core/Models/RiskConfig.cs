@@ -15,6 +15,10 @@ public class RiskConfig
     /// <summary>单笔最大交易比例（%）</summary>
     public decimal MaxSingleTradePercent { get; set; } = 10;
 
+    // ========== 极端行情熔断 ==========
+    /// <summary>单日跌幅超过此值（%）禁止买入，默认 9%（接近跌停）</summary>
+    public decimal MaxDeclinePercent { get; set; } = 9;
+
     // ========== 风险等级阈值 ==========
     public int CriticalThreshold { get; set; } = 3;
     public int HighThreshold { get; set; } = 2;

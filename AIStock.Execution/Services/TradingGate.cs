@@ -21,6 +21,15 @@ public class TradingGate : ITradingGate
     // 在途买入预留（金额 + 过期时刻），用于跨并行订单的原子敞口控制
     private readonly List<(DateTime Expiry, decimal Amount)> _buyReservations = new();
 
+    // 股票级别暂停：code → 解禁时刻
+    private readonly Dictionary<string, DateTime> _stockSuspensions = new();
+
+    // 连续下单失败计数：code → 失败次数
+    private readonly Dictionary<string, int> _failureCounts = new();
+
+    private const int FailureThreshold = 3;
+    private static readonly TimeSpan DefaultSuspendDuration = TimeSpan.FromMinutes(30);
+
     public TradingGate(IOptions<TradingGuardOptions> options, ILogger<TradingGate> logger)
     {
         _options = options.Value;
@@ -116,6 +125,58 @@ public class TradingGate : ITradingGate
             _buyReservations.Add((now.Add(ttl), orderValue));
             rejectReason = null;
             return true;
+        }
+    }
+
+    public bool IsStockAllowed(string code, out string? rejectReason)
+    {
+        lock (_lock)
+        {
+            if (_stockSuspensions.TryGetValue(code, out var until) && DateTime.UtcNow < until)
+            {
+                rejectReason = $"{code} 已被暂停交易，解禁时间: {until:HH:mm:ss} UTC";
+                return false;
+            }
+            rejectReason = null;
+            return true;
+        }
+    }
+
+    public void SuspendStock(string code, TimeSpan duration, string reason)
+    {
+        lock (_lock)
+        {
+            var until = DateTime.UtcNow.Add(duration);
+            _stockSuspensions[code] = until;
+            _failureCounts.Remove(code);
+        }
+        _logger.LogWarning("股票 {Code} 已被暂停交易 {Minutes} 分钟，原因: {Reason}", code, duration.TotalMinutes, reason);
+    }
+
+    public void RecordOrderFailure(string code)
+    {
+        lock (_lock)
+        {
+            _failureCounts.TryGetValue(code, out var count);
+            count++;
+            _failureCounts[code] = count;
+
+            if (count >= FailureThreshold)
+            {
+                var until = DateTime.UtcNow.Add(DefaultSuspendDuration);
+                _stockSuspensions[code] = until;
+                _failureCounts.Remove(code);
+                _logger.LogWarning("股票 {Code} 连续下单失败 {Count} 次，自动暂停 {Minutes} 分钟",
+                    code, FailureThreshold, DefaultSuspendDuration.TotalMinutes);
+            }
+        }
+    }
+
+    public void RecordOrderSuccess(string code)
+    {
+        lock (_lock)
+        {
+            _failureCounts.Remove(code);
         }
     }
 
