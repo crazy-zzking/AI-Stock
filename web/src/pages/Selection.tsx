@@ -98,15 +98,15 @@ const Selection: React.FC = () => {
             </Row>
 
             <div style={{ marginBottom: 12 }}>
-              {r.tags.map((t) => <Tag color="blue" key={t}>{t}</Tag>)}
+              {(r.tags || []).map((t) => <Tag color="blue" key={t}>{t}</Tag>)}
               <Tag>评分 {r.totalScore}</Tag>
             </div>
 
-            {r.concepts.length > 0 && (
+            {(r.concepts?.length ?? 0) > 0 && (
               <div style={{ marginBottom: 12 }}>
                 <span style={{ fontSize: 12, color: '#999', marginRight: 6 }}>题材概念：</span>
                 {r.concepts.slice(0, 12).map((c) =>
-                  r.hotConcepts?.includes(c)
+                  (r.hotConcepts || []).includes(c)
                     ? <Tag color="red" key={c}>🔥 {c}</Tag>
                     : <Tag color="orange" key={c}>{c}</Tag>
                 )}
