@@ -182,22 +182,38 @@ public abstract class BaseProvider : IDataProvider
     }
 
     /// <summary>
-    /// 发送HTTP请求
+    /// 发送HTTP请求，失败时自动重试（最多3次，指数退避 2s/4s/8s）
     /// </summary>
     protected async Task<string?> SendRequestAsync(string url, CancellationToken cancellationToken = default)
     {
-        try
+        const int maxRetries = 3;
+        for (var attempt = 1; attempt <= maxRetries; attempt++)
         {
-            using var request = new HttpRequestMessage(HttpMethod.Get, url);
-            var response = await HttpClient.SendAsync(request, cancellationToken);
-            response.EnsureSuccessStatusCode();
-            return await response.Content.ReadAsStringAsync(cancellationToken);
+            try
+            {
+                using var request = new HttpRequestMessage(HttpMethod.Get, url);
+                var response = await HttpClient.SendAsync(request, cancellationToken);
+                response.EnsureSuccessStatusCode();
+                return await response.Content.ReadAsStringAsync(cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                if (attempt == maxRetries)
+                {
+                    Logger.LogError(ex, "Request failed after {MaxRetries} attempts: {Url}", maxRetries, url);
+                    return null;
+                }
+                var delay = TimeSpan.FromSeconds(Math.Pow(2, attempt)); // 2s, 4s, 8s
+                Logger.LogWarning("Request failed (attempt {Attempt}/{Max}), retrying in {Delay}s: {Url}",
+                    attempt, maxRetries, delay.TotalSeconds, url);
+                await Task.Delay(delay, cancellationToken);
+            }
         }
-        catch (Exception ex)
-        {
-            Logger.LogError(ex, "Failed to send request to {Url}", url);
-            return null;
-        }
+        return null;
     }
 
     /// <summary>
