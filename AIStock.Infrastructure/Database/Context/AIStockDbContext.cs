@@ -197,13 +197,14 @@ public class AIStockDbContext : DbContext
             entity.HasKey(e => e.Id);
         });
 
-        // 事件记录
+        // 事件记录（content/title 等存情报文本，可能含 emoji，需 utf8mb4 才存得下 4 字节字符）
         modelBuilder.Entity<EventRecordEntity>(entity =>
         {
             entity.HasKey(e => e.Id);
             entity.HasIndex(e => e.EventType);
             entity.HasIndex(e => e.EventTime);
             entity.HasIndex(e => e.CreatedAt);
+            entity.HasCharSet("utf8mb4");
         });
 
         // 交易记录

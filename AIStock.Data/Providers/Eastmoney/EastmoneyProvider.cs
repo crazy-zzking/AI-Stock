@@ -17,7 +17,7 @@ public class EastmoneyProvider : BaseProvider
     private const string QuoteUrl = "https://push2.eastmoney.com/api/qt/stock/get";
     private const string KlineUrl = "https://push2his.eastmoney.com/api/qt/stock/kline/get";
     private const string IntradayUrl = "https://push2.eastmoney.com/api/qt/stock/trends2/get";
-    private const string CapitalFlowUrl = "https://push2.eastmoney.com/api/qt/stock/fflow/kline/get";
+    private const string CapitalFlowUrl = "https://push2his.eastmoney.com/api/qt/stock/fflow/daykline/get";
     private const string UserToken = "fa5fd1943c7b386f172d6893dbfba10b";
 
     private readonly HttpClient _httpClient;
@@ -84,7 +84,7 @@ public class EastmoneyProvider : BaseProvider
         try
         {
             var secid = GetMarketCode(code);
-            var url = $"{QuoteUrl}?secid={secid}&fields=f43,f44,f45,f46,f47,f48,f50,f51,f52,f55,f57,f58,f60,f116,f117,f170,f162,f167";
+            var url = $"{QuoteUrl}?secid={secid}&ut={UserToken}&fields=f43,f44,f45,f46,f47,f48,f50,f51,f52,f55,f57,f58,f60,f116,f117,f170,f162,f167";
             Logger.LogDebug("Requesting quote from: {Url}", url);
             
             var response = await SendEastmoneyRequestAsync(url);
@@ -284,7 +284,7 @@ public class EastmoneyProvider : BaseProvider
         try
         {
             var secid = GetMarketCode(code);
-            var url = $"{CapitalFlowUrl}?lmt=0&klt=1&secid={secid}&fields1=f1,f2,f3,f7&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61,f62,f63,f64,f65";
+            var url = $"{CapitalFlowUrl}?lmt=0&klt=101&secid={secid}&ut={UserToken}&fields1=f1,f2,f3,f7&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61,f62,f63,f64,f65";
             var response = await SendEastmoneyRequestAsync(url);
 
             if (response == null)
@@ -309,11 +309,13 @@ public class EastmoneyProvider : BaseProvider
             {
                 Code = code,
                 Date = DateTime.Parse(parts[0]),
+                // 东财 fflow klines 顺序：时间, 主力, 小单, 中单, 大单, 超大单
+                // （校验：主力 = 大单 + 超大单）
                 MainNetInflow = decimal.Parse(parts[1]),
-                SuperLargeNetInflow = decimal.Parse(parts[2]),
-                LargeNetInflow = decimal.Parse(parts[3]),
-                MediumNetInflow = decimal.Parse(parts[4]),
-                SmallNetInflow = decimal.Parse(parts[5]),
+                SmallNetInflow = decimal.Parse(parts[2]),
+                MediumNetInflow = decimal.Parse(parts[3]),
+                LargeNetInflow = decimal.Parse(parts[4]),
+                SuperLargeNetInflow = decimal.Parse(parts[5]),
                 Source = ProviderId
             };
 

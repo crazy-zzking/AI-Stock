@@ -40,7 +40,8 @@ public abstract class BaseProvider : IDataProvider
     /// <summary>
     /// 获取实时行情
     /// </summary>
-    public abstract Task<QuoteData?> GetQuoteAsync(string code);
+    public virtual Task<QuoteData?> GetQuoteAsync(string code)
+        => Task.FromResult<QuoteData?>(null);
 
     /// <summary>
     /// 批量获取实时行情
@@ -62,12 +63,14 @@ public abstract class BaseProvider : IDataProvider
     /// <summary>
     /// 获取K线数据
     /// </summary>
-    public abstract Task<List<KlineData>> GetKlinesAsync(string code, KlineInterval interval, int count = 100);
+    public virtual Task<List<KlineData>> GetKlinesAsync(string code, KlineInterval interval, int count = 100)
+        => throw new NotSupportedException($"Provider {ProviderId} does not support kline data");
 
     /// <summary>
     /// 获取分时数据
     /// </summary>
-    public abstract Task<List<IntradayData>> GetIntradayAsync(string code);
+    public virtual Task<List<IntradayData>> GetIntradayAsync(string code)
+        => throw new NotSupportedException($"Provider {ProviderId} does not support intraday data");
 
     /// <summary>
     /// 获取历史分时数据

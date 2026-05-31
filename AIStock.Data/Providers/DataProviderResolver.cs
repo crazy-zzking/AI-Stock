@@ -89,7 +89,11 @@ public class DataProviderResolver : IDataProviderResolver
     {
         lock (_lock)
         {
-            return _providers.FirstOrDefault() ?? throw new InvalidOperationException("No data provider registered");
+            // 默认行情源优先东财（行情/估值/资金流完整）。散户是交易接口、对 quote/资金流返回空，
+            // 不能作为默认行情源（曾导致市值/PE/资金流全 0）。
+            return _providers.FirstOrDefault(p => p.ProviderId == "eastmoney")
+                ?? _providers.FirstOrDefault()
+                ?? throw new InvalidOperationException("No data provider registered");
         }
     }
 }

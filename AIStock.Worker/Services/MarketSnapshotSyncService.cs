@@ -36,12 +36,18 @@ public class MarketSnapshotSyncService
     /// <summary>遍历股票池采集当日快照，返回成功落库条数。</summary>
     public async Task<int> SyncAsync(CancellationToken ct = default)
     {
-        var provider = _resolver.GetDefaultProvider();
+        // 行情/估值/资金流统一用东财：GetDefaultProvider 返回的是散户(交易接口)，
+        // 它对 quote/资金流返回空数据（市值/PE/资金流全 0 的根因）。
+        var provider = _resolver.GetProviders(DataCapability.Quote)
+            .FirstOrDefault(p => p.ProviderId == "eastmoney")
+            ?? _resolver.GetDefaultProvider();
         using var scope = _scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AIStockDbContext>();
         var featureCalculator = scope.ServiceProvider.GetRequiredService<IFeatureCalculator>();
 
-        var query = db.StockBase.Where(s => !s.IsDelisted).Select(s => new { s.Code, s.Name });
+        var query = db.StockBase.Where(s => !s.IsDelisted)
+            .OrderBy(s => s.Code)
+            .Select(s => new { s.Code, s.Name });
         if (_options.MaxStocks > 0) query = query.Take(_options.MaxStocks);
         var stocks = await query.ToListAsync(ct);
 
@@ -53,6 +59,8 @@ public class MarketSnapshotSyncService
 
         _logger.LogInformation("开始采集市场快照，共 {Count} 只", stocks.Count);
         var ok = 0;
+        var quoteFail = 0;
+        var flowFail = 0;
         foreach (var stock in stocks)
         {
             if (ct.IsCancellationRequested) break;
@@ -61,6 +69,8 @@ public class MarketSnapshotSyncService
                 var snap = await BuildSnapshotAsync(provider, featureCalculator, stock.Code, stock.Name, ct);
                 if (snap != null)
                 {
+                    if (snap.TotalMarketCap == 0) quoteFail++; // quote 缺失（市值取不到）
+                    if (snap.MainNetInflow == 0) flowFail++;   // 资金流缺失（近似，正好为0也计入）
                     await UpsertAsync(db, snap, ct);
                     ok++;
                 }
@@ -74,15 +84,16 @@ public class MarketSnapshotSyncService
                 await Task.Delay(_options.ItemThrottleMs, ct);
         }
 
-        _logger.LogInformation("市场快照采集完成：{Ok}/{Total}", ok, stocks.Count);
+        _logger.LogInformation("市场快照采集完成：{Ok}/{Total}（quote缺失 {QF}，资金流缺失 {FF}）",
+            ok, stocks.Count, quoteFail, flowFail);
         return ok;
     }
 
     private static async Task<DailyMarketSnapshotEntity?> BuildSnapshotAsync(
         IDataProvider provider, IFeatureCalculator featureCalculator, string code, string name, CancellationToken ct)
     {
-        var klines = await provider.GetKlinesAsync(code, KlineInterval.Daily, 30);
-        if (klines.Count < 21) return null; // 不足 21 根无法算 20 日涨幅
+        var klines = await provider.GetKlinesAsync(code, KlineInterval.Daily, 60);
+        if (klines.Count < 21) return null; // 不足 21 根无法算 20 日涨幅（≥35 根 MACD 才收敛）
 
         var ordered = klines.OrderBy(k => k.DateTime).ToList();
         var last = ordered[^1];

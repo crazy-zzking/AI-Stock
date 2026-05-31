@@ -43,14 +43,6 @@ public class SanhuProvider : BaseProvider
     };
 
     /// <summary>
-    /// 获取实时行情（散户量化不支持）
-    /// </summary>
-    public override Task<QuoteData?> GetQuoteAsync(string code)
-    {
-        return Task.FromResult<QuoteData?>(null);
-    }
-
-    /// <summary>
     /// 获取K线数据
     /// </summary>
     public override Task<List<KlineData>> GetKlinesAsync(string code, KlineInterval interval, int count = 100)
