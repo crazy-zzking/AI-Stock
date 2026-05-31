@@ -8,7 +8,7 @@ import { getLatestSelection } from '../api';
 
 interface FactorScores {
   capital: number; technical: number; position: number;
-  dragonTiger: number; activity: number;
+  dragonTiger: number; activity: number; form: number;
 }
 interface SelectionResult {
   code: string; name: string; ratingStars: number; tags: string[];
@@ -63,7 +63,7 @@ const Selection: React.FC = () => {
         type="warning"
         showIcon
         style={{ marginBottom: 16 }}
-        message="筛选逻辑：主力净流入为正 + 技术面多头未超买 + 20日涨幅<50%（非追高）+ 龙虎榜阵容优质 + 放量活跃"
+        message="筛选逻辑（埋伏型）：温和放量未涨停（规避追高/次日高开）+ 主力净流入为正 + 技术面多头未超买 + 20日涨幅<50%（低位）+ 龙虎榜阵容优质"
       />
 
       {loading ? (
@@ -89,7 +89,7 @@ const Selection: React.FC = () => {
                 <Rate disabled value={r.ratingStars} style={{ fontSize: 14 }} />
               </Col>
               <Col>
-                <Tooltip title={`资金${r.factors.capital}/技术${r.factors.technical}/位置${r.factors.position}/龙虎${r.factors.dragonTiger}/活跃${r.factors.activity}`}>
+                <Tooltip title={`资金${r.factors.capital}/技术${r.factors.technical}/位置${r.factors.position}/形态${r.factors.form}/龙虎${r.factors.dragonTiger}/活跃${r.factors.activity}`}>
                   <span style={{ fontSize: 22, fontWeight: 700, color: '#52c41a' }}>No.{i + 1}</span>
                 </Tooltip>
               </Col>

@@ -8,15 +8,15 @@ public class SelectionCriteria
     /// <summary>返回 TOP-N</summary>
     public int TopN { get; set; } = 5;
 
-    // —— 第一级：活跃度粗筛 ——
-    /// <summary>放量大涨：当日涨幅下限（%）</summary>
-    public decimal SurgeChangePercent { get; set; } = 5m;
+    // —— 第一级：活跃度粗筛（埋伏型：偏好温和放量未涨停，规避次日高开追高）——
+    /// <summary>温和放量上涨：涨幅下限（%），已启动</summary>
+    public decimal HealthyRiseMin { get; set; } = 2m;
+    /// <summary>温和放量上涨：涨幅上限（%）= 追高线，超过视为追高/次日高开风险</summary>
+    public decimal HealthyRiseMax { get; set; } = 7m;
     /// <summary>放量/震荡：量比下限</summary>
     public decimal MinVolumeRatio { get; set; } = 1.5m;
     /// <summary>放量震荡：振幅下限（%）</summary>
     public decimal ShockAmplitude { get; set; } = 6m;
-    /// <summary>近期涨停回看天数（当前快照为单日，置 0 表示仅看当日 IsLimitUp）</summary>
-    public int LimitUpLookbackDays { get; set; } = 0;
 
     // —— 第二级：多因子阈值 ——
     /// <summary>主力净流入下限（元），低于则不入选</summary>
@@ -47,6 +47,8 @@ public class SelectionFactorScores
     public decimal DragonTiger { get; set; }
     /// <summary>活跃度（第一级粗筛得分）</summary>
     public decimal Activity { get; set; }
+    /// <summary>形态（多日序列：阶梯放量/突破/回踩企稳）</summary>
+    public decimal Form { get; set; }
 }
 
 /// <summary>
@@ -71,6 +73,12 @@ public class StockSelectionResult
 
     /// <summary>主力净流入（元）</summary>
     public decimal MainNetInflow { get; set; }
+
+    /// <summary>连续主力净流入天数（多日序列）</summary>
+    public int ConsecutiveInflowDays { get; set; }
+
+    /// <summary>当前连续涨停板数（多日序列）</summary>
+    public int ConsecutiveLimitUp { get; set; }
 
     /// <summary>综合得分</summary>
     public decimal TotalScore { get; set; }

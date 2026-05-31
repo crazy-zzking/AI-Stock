@@ -24,11 +24,14 @@ public static class ActivityScreener
             var features = new List<string>();
             decimal score = 0;
 
-            // 放量大涨
-            if (s.ChangePercent >= criteria.SurgeChangePercent && s.VolumeRatio >= criteria.MinVolumeRatio)
+            // 温和放量上涨（埋伏首选）：已启动但未涨停、涨幅适中 + 放量 → 次日高开概率低、可低吸
+            if (!s.IsLimitUp
+                && s.ChangePercent >= criteria.HealthyRiseMin
+                && s.ChangePercent <= criteria.HealthyRiseMax
+                && s.VolumeRatio >= criteria.MinVolumeRatio)
             {
-                features.Add("放量大涨");
-                score += 30;
+                features.Add("温和放量");
+                score += 35;
             }
 
             // 资金流入
@@ -38,18 +41,18 @@ public static class ActivityScreener
                 score += 25;
             }
 
-            // 近期涨停
-            if (s.IsLimitUp)
-            {
-                features.Add("涨停");
-                score += 30;
-            }
-
             // 放量震荡
             if (s.Amplitude >= criteria.ShockAmplitude && s.VolumeRatio >= criteria.MinVolumeRatio)
             {
                 features.Add("放量震荡");
                 score += 15;
+            }
+
+            // 涨停：仅作"有资金关注"的弱信号，低分（次日高开，非埋伏首选）
+            if (s.IsLimitUp)
+            {
+                features.Add("涨停");
+                score += 10;
             }
 
             if (features.Count > 0)

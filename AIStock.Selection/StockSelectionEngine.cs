@@ -16,9 +16,18 @@ public class StockSelectionEngine
 
     public StockSelectionEngine(ILogicNarrator narrator) => _narrator = narrator;
 
+    /// <summary>无多日序列时的便利重载（序列特征退化为空，仅按单日打分）。</summary>
     public List<StockSelectionResult> Select(
         IReadOnlyList<ActivityScreener.ActivityHit> activePool,
         IReadOnlyDictionary<string, DragonTigerEntity> dragonTigerByCode,
+        SelectionCriteria criteria)
+        => Select(activePool, dragonTigerByCode,
+            new Dictionary<string, SequenceFeatures>(), criteria);
+
+    public List<StockSelectionResult> Select(
+        IReadOnlyList<ActivityScreener.ActivityHit> activePool,
+        IReadOnlyDictionary<string, DragonTigerEntity> dragonTigerByCode,
+        IReadOnlyDictionary<string, SequenceFeatures> sequenceByCode,
         SelectionCriteria criteria)
     {
         var results = new List<StockSelectionResult>();
@@ -35,15 +44,22 @@ public class StockSelectionEngine
             dragonTigerByCode.TryGetValue(s.Code, out var dt);
             if (criteria.RequireDragonTiger && dt == null) continue;
 
+            var seq = sequenceByCode.TryGetValue(s.Code, out var sf) ? sf : new SequenceFeatures();
+
             // —— 因子打分（0-100）——
-            var capital = ScoreCapital(s);
+            var capital = ScoreCapital(s, seq);   // 含连续净流入加成
             var technical = ScoreTechnical(s);
             var position = ScorePosition(s);
+            var form = ScoreForm(seq);            // 多日形态
             var dragon = ScoreDragonTiger(dt);
             var activity = Math.Min(hit.ActivityScore, 100m);
 
-            var total = capital * 0.30m + technical * 0.30m + position * 0.20m
-                        + dragon * 0.10m + activity * 0.10m;
+            var total = capital * 0.22m + technical * 0.20m + position * 0.22m
+                        + form * 0.16m + dragon * 0.08m + activity * 0.12m;
+
+            // 涨停性质惩罚（多日）：区分低位首板（仍有空间，轻罚）与高位/连板（追高风险，重罚）
+            total -= LimitUpPenalty(s, seq, criteria);
+            total = Math.Max(0m, total);
 
             var result = new StockSelectionResult
             {
@@ -55,16 +71,19 @@ public class StockSelectionEngine
                 Rise20d = s.Rise20d,
                 PeTtm = s.PeTtm,
                 MainNetInflow = s.MainNetInflow,
+                ConsecutiveInflowDays = seq.ConsecutiveInflowDays,
+                ConsecutiveLimitUp = seq.ConsecutiveLimitUp,
                 TotalScore = Math.Round(total, 1),
                 RatingStars = ToStars(total),
-                Tags = BuildTags(s, dt, hit.Features),
+                Tags = BuildTags(s, dt, hit.Features, seq),
                 Factors = new SelectionFactorScores
                 {
                     Capital = Math.Round(capital, 1),
                     Technical = Math.Round(technical, 1),
                     Position = Math.Round(position, 1),
                     DragonTiger = Math.Round(dragon, 1),
-                    Activity = Math.Round(activity, 1)
+                    Activity = Math.Round(activity, 1),
+                    Form = Math.Round(form, 1)
                 }
             };
 
@@ -84,15 +103,42 @@ public class StockSelectionEngine
             .ToList();
     }
 
-    // 资金面：主力净流入强度
-    private static decimal ScoreCapital(DailyMarketSnapshotEntity s) => s.MainNetInflow switch
+    // 资金面：主力净流入强度 + 连续净流入加成（连续多日才是真建仓）
+    private static decimal ScoreCapital(DailyMarketSnapshotEntity s, SequenceFeatures seq)
     {
-        >= 100_000_000m => 100m,
-        >= 50_000_000m => 85m,
-        >= 20_000_000m => 70m,
-        > 0m => 55m,
-        _ => 0m
-    };
+        var score = s.MainNetInflow switch
+        {
+            >= 100_000_000m => 100m,
+            >= 50_000_000m => 85m,
+            >= 20_000_000m => 70m,
+            > 0m => 55m,
+            _ => 0m
+        };
+        if (seq.ConsecutiveInflowDays >= 3) score += 15;
+        else if (seq.ConsecutiveInflowDays >= 2) score += 8;
+        return Math.Min(score, 100m);
+    }
+
+    // 多日形态：突破新高 / 缩量回踩企稳 / 阶梯放量 = 强势中继信号
+    private static decimal ScoreForm(SequenceFeatures seq)
+    {
+        decimal score = 50; // 中性基础
+        if (seq.BreakoutNewHigh) score += 30;
+        if (seq.PullbackStabilize) score += 25;
+        if (seq.StairVolume) score += 15;
+        return Math.Min(score, 100m);
+    }
+
+    // 涨停性质惩罚：低位首板还有空间(轻罚)，高位/连板次日高开追高(重罚)
+    private static decimal LimitUpPenalty(DailyMarketSnapshotEntity s, SequenceFeatures seq, SelectionCriteria criteria)
+    {
+        if (seq.ConsecutiveLimitUp >= 2 && s.Rise20d > 30m) return 22m; // 高位连板
+        if (seq.ConsecutiveLimitUp >= 2) return 12m;                    // 连板
+        if (s.IsLimitUp && s.Rise20d > 30m) return 14m;                 // 高位首板
+        if (s.IsLimitUp) return 6m;                                     // 低位首板（轻罚）
+        if (s.ChangePercent > criteria.HealthyRiseMax) return 8m;       // 涨幅过大未封板
+        return 0m;
+    }
 
     // 技术面：MACD 金叉 + RSI 多头未超买 + 价在 MA20 上方
     private static decimal ScoreTechnical(DailyMarketSnapshotEntity s)
@@ -158,13 +204,19 @@ public class StockSelectionEngine
         _ => 1
     };
 
-    private static List<string> BuildTags(DailyMarketSnapshotEntity s, DragonTigerEntity? dt, List<string> activityFeatures)
+    private static List<string> BuildTags(DailyMarketSnapshotEntity s, DragonTigerEntity? dt, List<string> activityFeatures, SequenceFeatures seq)
     {
         var tags = new List<string>();
-        if (s.MainNetInflow > 0) tags.Add($"主力+{FormatWan(s.MainNetInflow)}");
+        if (s.MainNetInflow > 0)
+            tags.Add(seq.ConsecutiveInflowDays >= 2
+                ? $"主力连{seq.ConsecutiveInflowDays}日+{FormatWan(s.MainNetInflow)}"
+                : $"主力+{FormatWan(s.MainNetInflow)}");
         if (s.MacdGoldenCross) tags.Add("MACD刚金叉");
-        if (s.IsLimitUp) tags.Add("涨停");
-        else if (activityFeatures.Contains("放量大涨")) tags.Add("放量大涨");
+        if (seq.BreakoutNewHigh) tags.Add("突破新高");
+        else if (seq.PullbackStabilize) tags.Add("回踩企稳");
+        if (activityFeatures.Contains("温和放量")) tags.Add("温和放量");
+        else if (seq.ConsecutiveLimitUp >= 2) tags.Add($"{seq.ConsecutiveLimitUp}连板");
+        else if (s.IsLimitUp) tags.Add("首板");
         if (dt != null)
         {
             var instCount = ParseSeats(dt.BuySeatsJson).Count(x => x.IsInstitution);

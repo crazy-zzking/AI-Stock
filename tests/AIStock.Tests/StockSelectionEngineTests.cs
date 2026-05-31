@@ -125,6 +125,35 @@ public class StockSelectionEngineTests
     }
 
     [Fact]
+    public void Select_ConsecutiveInflow_ScoresHigherThanSingleDay()
+    {
+        // 多日：连续净流入(真建仓) 资金分应高于单日流入
+        var pool = new List<ActivityScreener.ActivityHit> { Hit(Snap("A", mainNet: 30_000_000m)) };
+        var consec = new Dictionary<string, SequenceFeatures> { ["A"] = new() { ConsecutiveInflowDays = 4 } };
+        var single = new Dictionary<string, SequenceFeatures> { ["A"] = new() { ConsecutiveInflowDays = 1 } };
+
+        var withConsec = NewEngine().Select(pool, NoDragon, consec, new SelectionCriteria());
+        var withSingle = NewEngine().Select(pool, NoDragon, single, new SelectionCriteria());
+
+        Assert.True(withConsec[0].Factors.Capital > withSingle[0].Factors.Capital);
+        Assert.True(withConsec[0].TotalScore > withSingle[0].TotalScore);
+        Assert.Contains(withConsec[0].Tags, t => t.Contains("主力连4日"));
+    }
+
+    [Fact]
+    public void Select_HighLevelConsecutiveLimitUp_IsPenalizedAndTagged()
+    {
+        // 多日：高位连板追高重罚，标签标注连板数
+        var pool = new List<ActivityScreener.ActivityHit> { Hit(Snap("A", rise20d: 40m, limitUp: true)) };
+        var seq = new Dictionary<string, SequenceFeatures> { ["A"] = new() { ConsecutiveLimitUp = 3 } };
+
+        var results = NewEngine().Select(pool, NoDragon, seq, new SelectionCriteria());
+
+        var r = Assert.Single(results);
+        Assert.Contains("3连板", r.Tags);
+    }
+
+    [Fact]
     public void Select_RespectsTopN()
     {
         var pool = new List<ActivityScreener.ActivityHit>

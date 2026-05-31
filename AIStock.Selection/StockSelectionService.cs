@@ -29,15 +29,15 @@ public class StockSelectionService
     /// <summary>执行选股，返回 TOP-N。无快照数据时返回空。</summary>
     public async Task<List<StockSelectionResult>> SelectAsync(SelectionCriteria criteria, CancellationToken ct = default)
     {
-        var (snapshots, dragonByCode) = await LoadLatestAsync(ct);
-        if (snapshots.Count == 0)
+        var (latest, dragonByCode, sequenceByCode) = await LoadAsync(ct);
+        if (latest.Count == 0)
         {
             _logger.LogWarning("daily_market_snapshot 无数据，选股返回空。请先运行 market-snapshot 采集任务。");
             return new List<StockSelectionResult>();
         }
 
-        var activePool = ActivityScreener.Screen(snapshots, criteria);
-        var results = _engine.Select(activePool, dragonByCode, criteria);
+        var activePool = ActivityScreener.Screen(latest, criteria);
+        var results = _engine.Select(activePool, dragonByCode, sequenceByCode, criteria);
         _logger.LogInformation("选股完成：活跃池 {Pool} 只，入选 TOP {Top}", activePool.Count, results.Count);
         return results;
     }
@@ -45,30 +45,44 @@ public class StockSelectionService
     /// <summary>仅返回第一级活跃度粗筛池（调试/观察用）。</summary>
     public async Task<List<ActivityScreener.ActivityHit>> ScreenActivityAsync(SelectionCriteria criteria, CancellationToken ct = default)
     {
-        var (snapshots, _) = await LoadLatestAsync(ct);
-        return ActivityScreener.Screen(snapshots, criteria);
+        var (latest, _, _) = await LoadAsync(ct);
+        return ActivityScreener.Screen(latest, criteria);
     }
 
-    private async Task<(List<DailyMarketSnapshotEntity> snapshots, Dictionary<string, DragonTigerEntity> dragonByCode)> LoadLatestAsync(CancellationToken ct)
+    /// <summary>
+    /// 取最近约 40 自然日（覆盖 ~20 交易日）快照：当日行用于粗筛/展示，
+    /// 整段按 code 组装序列算多日特征，龙虎榜取最新日。
+    /// </summary>
+    private async Task<(List<DailyMarketSnapshotEntity> latest,
+        Dictionary<string, DragonTigerEntity> dragonByCode,
+        Dictionary<string, SequenceFeatures> sequenceByCode)> LoadAsync(CancellationToken ct)
     {
         var latestDate = await _db.DailyMarketSnapshot
             .MaxAsync(s => (DateTime?)s.Date, ct);
 
         if (latestDate == null)
-            return (new List<DailyMarketSnapshotEntity>(), new Dictionary<string, DragonTigerEntity>());
+            return (new(), new(), new());
 
-        var snapshots = await _db.DailyMarketSnapshot
-            .Where(s => s.Date == latestDate)
+        var since = latestDate.Value.AddDays(-40);
+        var rows = await _db.DailyMarketSnapshot
+            .Where(s => s.Date >= since && s.Date <= latestDate)
             .ToListAsync(ct);
+
+        var sequenceByCode = rows
+            .GroupBy(r => r.Code)
+            .ToDictionary(
+                g => g.Key,
+                g => SequenceAnalyzer.Analyze(g.OrderBy(x => x.Date).ToList()));
+
+        var latest = rows.Where(r => r.Date == latestDate.Value).ToList();
 
         var dragons = await _db.DragonTiger
-            .Where(d => d.Date == latestDate)
+            .Where(d => d.Date == latestDate.Value)
             .ToListAsync(ct);
-
         var dragonByCode = dragons
             .GroupBy(d => d.Code)
             .ToDictionary(g => g.Key, g => g.First());
 
-        return (snapshots, dragonByCode);
+        return (latest, dragonByCode, sequenceByCode);
     }
 }

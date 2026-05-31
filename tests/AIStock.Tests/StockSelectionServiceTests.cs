@@ -83,6 +83,8 @@ public class StockSelectionServiceTests
         Assert.Equal(2, results.Count);
         Assert.DoesNotContain(results, r => r.Code == "600519"); // 不活跃淘汰
         Assert.DoesNotContain(results, r => r.Code == "301536"); // 追高淘汰
+        // 埋伏型：温和放量未涨停的英杰电气应优于当日涨停的中核科技（规避次日高开）
+        Assert.Equal("300820", results[0].Code);
         Assert.All(results, r => Assert.False(string.IsNullOrWhiteSpace(r.CoreLogic)));
         Assert.All(results, r => Assert.True(r.RatingStars is >= 1 and <= 5));
 

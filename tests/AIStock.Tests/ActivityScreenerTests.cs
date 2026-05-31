@@ -27,12 +27,25 @@ public class ActivityScreenerTests
     private static readonly SelectionCriteria Default = new();
 
     [Fact]
-    public void Screen_VolumeSurge_HitsFeature()
+    public void Screen_HealthyVolume_HitsFeature()
     {
+        // 温和放量上涨（未涨停、涨幅适中）是埋伏型首选信号
         var pool = ActivityScreener.Screen(new[] { Snap("A", change: 6m, volRatio: 2m) }, Default);
 
         Assert.Single(pool);
-        Assert.Contains("放量大涨", pool[0].Features);
+        Assert.Contains("温和放量", pool[0].Features);
+    }
+
+    [Fact]
+    public void Screen_LimitUp_ScoresLowerThanHealthyVolume()
+    {
+        // 埋伏型：涨停仅作弱信号，活跃分应低于温和放量（规避次日高开追高）
+        var limitUp = ActivityScreener.Screen(new[] { Snap("LU", change: 10m, volRatio: 3m, limitUp: true) }, Default);
+        var healthy = ActivityScreener.Screen(new[] { Snap("HV", change: 5m, volRatio: 3m) }, Default);
+
+        Assert.DoesNotContain("温和放量", limitUp[0].Features);
+        Assert.Contains("涨停", limitUp[0].Features);
+        Assert.True(healthy[0].ActivityScore > limitUp[0].ActivityScore);
     }
 
     [Fact]
