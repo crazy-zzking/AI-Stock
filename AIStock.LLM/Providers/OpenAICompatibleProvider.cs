@@ -16,6 +16,11 @@ public class OpenAICompatibleProvider : ILLMProvider
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<OpenAICompatibleProvider> _logger;
 
+    // 全局并发限制：最多 5 个 LLM 请求同时进行，防止打爆 API 配额
+    private static readonly SemaphoreSlim _concurrencyLimiter = new(5, 5);
+
+    private const int MaxRetries = 3;
+
     public string ProviderId => "openai-compatible";
 
     public OpenAICompatibleProvider(
@@ -30,6 +35,69 @@ public class OpenAICompatibleProvider : ILLMProvider
     {
         var stopwatch = Stopwatch.StartNew();
 
+        await _concurrencyLimiter.WaitAsync(cancellationToken);
+        try
+        {
+            return await SendWithRetryAsync(config, request, stopwatch, cancellationToken);
+        }
+        finally
+        {
+            _concurrencyLimiter.Release();
+        }
+    }
+
+    private async Task<LLMResponse> SendWithRetryAsync(LLMConfig config, LLMRequest request, Stopwatch stopwatch, CancellationToken cancellationToken)
+    {
+        for (var attempt = 1; attempt <= MaxRetries; attempt++)
+        {
+            try
+            {
+                var result = await SendOnceAsync(config, request, cancellationToken);
+                if (result.Success || attempt == MaxRetries)
+                {
+                    result.ResponseTimeMs = stopwatch.ElapsedMilliseconds;
+                    return result;
+                }
+
+                // 429 或 5xx 触发重试
+                if (result.ErrorMessage?.Contains("429") == true ||
+                    result.ErrorMessage?.Contains("5") == true)
+                {
+                    var delay = TimeSpan.FromSeconds(Math.Pow(2, attempt)); // 2s, 4s, 8s
+                    _logger.LogWarning("LLM request failed (attempt {Attempt}/{Max}), retrying in {Delay}s: {Error}",
+                        attempt, MaxRetries, delay.TotalSeconds, result.ErrorMessage);
+                    await Task.Delay(delay, cancellationToken);
+                    continue;
+                }
+
+                result.ResponseTimeMs = stopwatch.ElapsedMilliseconds;
+                return result;
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex) when (attempt < MaxRetries)
+            {
+                var delay = TimeSpan.FromSeconds(Math.Pow(2, attempt));
+                _logger.LogWarning(ex, "LLM request exception (attempt {Attempt}/{Max}), retrying in {Delay}s",
+                    attempt, MaxRetries, delay.TotalSeconds);
+                await Task.Delay(delay, cancellationToken);
+            }
+        }
+
+        return new LLMResponse
+        {
+            Success = false,
+            ErrorMessage = "Max retries exceeded",
+            ModelId = config.Id,
+            ModelName = config.Name,
+            ResponseTimeMs = stopwatch.ElapsedMilliseconds
+        };
+    }
+
+    private async Task<LLMResponse> SendOnceAsync(LLMConfig config, LLMRequest request, CancellationToken cancellationToken)
+    {
         try
         {
             var client = _httpClientFactory.CreateClient();
@@ -87,7 +155,7 @@ public class OpenAICompatibleProvider : ILLMProvider
                 ModelId = config.Id,
                 ModelName = config.Name,
                 Usage = usage,
-                ResponseTimeMs = stopwatch.ElapsedMilliseconds
+                ResponseTimeMs = 0 // 由调用方覆盖
             };
         }
         catch (Exception ex)
@@ -99,7 +167,7 @@ public class OpenAICompatibleProvider : ILLMProvider
                 ErrorMessage = ex.Message,
                 ModelId = config.Id,
                 ModelName = config.Name,
-                ResponseTimeMs = stopwatch.ElapsedMilliseconds
+                ResponseTimeMs = 0
             };
         }
     }

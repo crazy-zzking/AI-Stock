@@ -183,6 +183,11 @@ public class TradeSignal
     /// 止盈价
     /// </summary>
     public decimal? TakeProfitPrice { get; set; }
+
+    /// <summary>
+    /// 涨跌幅（%），负值表示下跌。用于极端行情熔断检查，0 表示未知。
+    /// </summary>
+    public decimal ChangePercent { get; set; }
 }
 
 /// <summary>

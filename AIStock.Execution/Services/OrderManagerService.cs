@@ -66,7 +66,13 @@ public class OrderManagerService : IOrderManager
                 return Rejected($"单笔金额 {orderValue:N0} 超过上限 {_guard.MaxOrderValue:N0}", request);
             }
 
-            // 2. kill-switch + 每日下单次数
+            // 2. 股票级别暂停检查（连续失败/极端行情熔断）
+            if (!_tradingGate.IsStockAllowed(request.Code, out var stockRejectReason))
+            {
+                return Rejected(stockRejectReason ?? "股票已被暂停交易", request);
+            }
+
+            // 3. kill-switch + 每日下单次数
             if (!_tradingGate.TryReserveOrderSlot(out var rejectReason))
             {
                 return Rejected(rejectReason ?? "交易闸门拒绝", request);
@@ -82,12 +88,13 @@ public class OrderManagerService : IOrderManager
             // 4. DryRun 模式：不调用券商接口，仅记录意向单
             if (_tradingGate.Mode == TradingMode.DryRun)
             {
+                var dryRunId = $"DRYRUN-{Guid.NewGuid():N}";
                 _logger.LogInformation(
-                    "[DryRun] 模拟下单 {Side} {Code} {Volume}@{Price} (金额 {Value:N0})，未发送至券商",
-                    request.Side, request.Code, request.Volume, request.Price, orderValue);
+                    "Order DryRun code={Code} side={Side} volume={Volume} price={Price} value={Value:N0} orderId={OrderId}",
+                    request.Code, request.Side, request.Volume, request.Price, orderValue, dryRunId);
                 return new OrderResult
                 {
-                    OrderId = $"DRYRUN-{Guid.NewGuid():N}",
+                    OrderId = dryRunId,
                     Success = true,
                     Message = "[DryRun] 模拟下单成功，未真实成交",
                     Status = OrderStatus.Submitted
@@ -110,17 +117,30 @@ public class OrderManagerService : IOrderManager
                          result.IsFailed ? OrderStatus.Failed :
                          OrderStatus.Pending;
 
-            return new OrderResult
+            _logger.LogInformation(
+                "Order Live code={Code} side={Side} volume={Volume} price={Price} value={Value:N0} orderId={OrderId} status={Status} msg={Msg}",
+                request.Code, request.Side, request.Volume, request.Price, orderValue, orderId, status, result.Msg);
+
+            var orderResult = new OrderResult
             {
                 OrderId = orderId,
                 Success = !result.IsFailed,
                 Message = result.Msg,
                 Status = status
             };
+
+            // 记录成功/失败，驱动连续失败熔断
+            if (result.IsFailed)
+                _tradingGate.RecordOrderFailure(request.Code);
+            else
+                _tradingGate.RecordOrderSuccess(request.Code);
+
+            return orderResult;
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to place order for {Code}", request.Code);
+            _tradingGate.RecordOrderFailure(request.Code);
             return new OrderResult
             {
                 Success = false,

@@ -134,7 +134,7 @@ builder.Services.AddFeatureServices();
 builder.Services.AddStrategyServices();
 
 // 注册风控服务
-builder.Services.AddRiskServices();
+builder.Services.AddRiskServices(builder.Configuration);
 
 // 注册执行服务
 builder.Services.AddExecutionServices(builder.Configuration);
@@ -153,6 +153,7 @@ builder.Services.Configure<AIStock.Monitor.MonitorOptions>(
     builder.Configuration.GetSection(AIStock.Monitor.MonitorOptions.SectionName));
 builder.Services.AddMonitorServices();
 builder.Services.AddHostedService<AIStock.Web.Services.MonitorBackgroundService>();
+builder.Services.AddHostedService<AIStock.Web.Services.DailyReviewBackgroundService>();
 
 // 注册数据源Provider（HttpClient/Resolver/各Provider，统一扩展，与 Worker 共用）
 builder.Services.AddDataProviders(builder.Configuration);

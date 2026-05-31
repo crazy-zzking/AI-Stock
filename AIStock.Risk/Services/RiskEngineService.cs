@@ -25,6 +25,14 @@ public class RiskEngineService : IRiskEngine
     {
         var result = new RiskCheckResult { Passed = true };
 
+        // 极端行情检查：买入信号时，若跌幅 >= 9% 直接拒绝（接近跌停，流动性风险高）
+        if (signal.SignalType is SignalType.Buy or SignalType.StrongBuy)
+        {
+            var extremeCheck = CheckExtremeDecline(signal);
+            result.Checks.Add(extremeCheck);
+            if (!extremeCheck.Passed) result.Passed = false;
+        }
+
         var singleTradeCheck = await CheckSingleTradeAsync(signal, totalCapital);
         result.Checks.Add(singleTradeCheck);
         if (!singleTradeCheck.Passed) result.Passed = false;
@@ -45,6 +53,24 @@ public class RiskEngineService : IRiskEngine
         result.Suggestion = GenerateSuggestion(result);
 
         return result;
+    }
+
+    private RiskCheckItem CheckExtremeDecline(TradeSignal signal)
+    {
+        // 信号携带涨跌幅时才检查（ChangePercent 为 0 视为未知，跳过）
+        var changePercent = signal.ChangePercent;
+        var triggered = changePercent != 0 && changePercent <= -_config.MaxDeclinePercent;
+
+        return new RiskCheckItem
+        {
+            Name = "极端下跌禁买",
+            Passed = !triggered,
+            CurrentValue = changePercent,
+            LimitValue = -_config.MaxDeclinePercent,
+            Description = triggered
+                ? $"涨跌幅 {changePercent:F2}%，达到极端下跌阈值 -{_config.MaxDeclinePercent}%，禁止买入"
+                : $"涨跌幅 {changePercent:F2}%，未触发极端下跌熔断"
+        };
     }
 
     public async Task<RiskCheckItem> CheckSingleTradeAsync(TradeSignal signal, decimal totalCapital)
