@@ -44,28 +44,22 @@ public class PositionCacheService
     {
         try
         {
-            // 缓存为空时（首次启动）允许拉取，不受交易时段限制
-            var cacheExists = await IsCacheExistsAsync();
+            var now = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow,
+                TimeZoneInfo.FindSystemTimeZoneById("China Standard Time"));
 
-            if (cacheExists)
+            // 非交易日 / 非交易时段一律跳过：休市时散户接口必然返回空，没必要调用，也避免日志刷屏
+            if (!await _tradingCalendar.IsTradingDayAsync(now.Date, ct))
             {
-                // 判断是否为 A 股交易日
-                var now = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow,
-                    TimeZoneInfo.FindSystemTimeZoneById("China Standard Time"));
+                _logger.LogDebug("Not a trading day, skipping position cache refresh");
+                return;
+            }
 
-                if (!await _tradingCalendar.IsTradingDayAsync(now.Date, ct))
-                {
-                    _logger.LogDebug("Not a trading day, skipping position cache refresh");
-                    return;
-                }
-
-                // 判断是否在 A 股交易时段（9:30-11:30, 13:00-15:00）
-                if (!IsInTradingHours(now))
-                {
-                    _logger.LogDebug("Outside trading hours ({Time}), skipping position cache refresh",
-                        now.ToString("HH:mm"));
-                    return;
-                }
+            // A 股连续竞价时段（9:30-11:30, 13:00-15:00）才刷新
+            if (!IsInTradingHours(now))
+            {
+                _logger.LogDebug("Outside trading hours ({Time}), skipping position cache refresh",
+                    now.ToString("HH:mm"));
+                return;
             }
 
             await FetchAndStoreAsync();
@@ -112,19 +106,6 @@ public class PositionCacheService
         _logger.LogInformation(
             "Position cache updated: TotalAssets={TotalAssets}, Positions={Count}",
             accountInfo.TotalAssets, accountInfo.Positions.Count);
-    }
-
-    private async Task<bool> IsCacheExistsAsync()
-    {
-        try
-        {
-            var db = _redis.GetDatabase();
-            return await db.KeyExistsAsync(CacheKey);
-        }
-        catch
-        {
-            return false;
-        }
     }
 
     /// <summary>
