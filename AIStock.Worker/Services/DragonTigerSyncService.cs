@@ -1,4 +1,5 @@
 using System.Text.Json;
+using AIStock.Core.Interfaces;
 using AIStock.Core.Models;
 using AIStock.Infrastructure.Database.Context;
 using AIStock.Infrastructure.Database.Entities;
@@ -17,25 +18,28 @@ public class DragonTigerSyncService
 {
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly IServiceScopeFactory _scopeFactory;
+    private readonly ITradingCalendar _tradingCalendar;
     private readonly MarketSnapshotOptions _options;
     private readonly ILogger<DragonTigerSyncService> _logger;
 
     public DragonTigerSyncService(
         IHttpClientFactory httpClientFactory,
         IServiceScopeFactory scopeFactory,
+        ITradingCalendar tradingCalendar,
         IOptions<MarketSnapshotOptions> options,
         ILogger<DragonTigerSyncService> logger)
     {
         _httpClientFactory = httpClientFactory;
         _scopeFactory = scopeFactory;
+        _tradingCalendar = tradingCalendar;
         _options = options.Value;
         _logger = logger;
     }
 
-    /// <summary>采集指定交易日（默认今天）的龙虎榜，返回落库条数。</summary>
+    /// <summary>采集龙虎榜，返回落库条数。tradeDate 为 null 时自动取最近交易日。</summary>
     public async Task<int> SyncAsync(DateTime? tradeDate = null, CancellationToken ct = default)
     {
-        var date = (tradeDate ?? DateTime.Now).Date;
+        var date = tradeDate?.Date ?? await ResolveLatestTradingDayAsync(ct);
         var client = _httpClientFactory.CreateClient("default");
 
         // 1. 拉榜单汇总
@@ -145,6 +149,18 @@ public class DragonTigerSyncService
         _logger.LogInformation("龙虎榜采集完成：{Ok} 只 / {Seats} 条席位（{Date}）",
             ok, seatRows, date.ToString("yyyy-MM-dd"));
         return ok;
+    }
+
+    /// <summary>取最近一个交易日（含今天）。任务收盘后(19点)跑，当天为交易日则当天龙虎榜已出榜。</summary>
+    private async Task<DateTime> ResolveLatestTradingDayAsync(CancellationToken ct)
+    {
+        var d = DateTime.Now.Date;
+        for (var i = 0; i < 10; i++) // 最多回溯 10 天，跨节假日
+        {
+            if (await _tradingCalendar.IsTradingDayAsync(d, ct)) return d;
+            d = d.AddDays(-1);
+        }
+        return DateTime.Now.Date; // 兜底
     }
 
     private static DragonTigerSeatEntity ToSeatEntity(DragonTigerEntity rec, DragonTigerSeat s, string side) =>

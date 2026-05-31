@@ -124,5 +124,5 @@ public class DragonTigerCollectJob : IScheduledJob
     private readonly DragonTigerSyncService _svc;
     public DragonTigerCollectJob(DragonTigerSyncService svc) => _svc = svc;
     public string Name => "dragon-tiger";
-    public Task ExecuteAsync(CancellationToken ct) => _svc.SyncAsync(DateTime.Now.AddDays(-2), ct);
+    public Task ExecuteAsync(CancellationToken ct) => _svc.SyncAsync(null, ct); // 自动取最近交易日
 }
