@@ -86,6 +86,26 @@ public record QuoteData
     public long OuterVolume { get; init; }
 
     /// <summary>
+    /// 总市值（元）
+    /// </summary>
+    public decimal TotalMarketCap { get; init; }
+
+    /// <summary>
+    /// 流通市值（元）
+    /// </summary>
+    public decimal FloatMarketCap { get; init; }
+
+    /// <summary>
+    /// 市盈率（TTM）
+    /// </summary>
+    public decimal PeTtm { get; init; }
+
+    /// <summary>
+    /// 市净率
+    /// </summary>
+    public decimal Pb { get; init; }
+
+    /// <summary>
     /// 数据时间
     /// </summary>
     public DateTime Timestamp { get; init; }

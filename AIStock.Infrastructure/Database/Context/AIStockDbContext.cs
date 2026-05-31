@@ -87,6 +87,16 @@ public class AIStockDbContext : DbContext
     /// </summary>
     public DbSet<GraphCandidateEdgeEntity> GraphCandidateEdge { get; set; }
 
+    /// <summary>
+    /// 龙虎榜记录
+    /// </summary>
+    public DbSet<DragonTigerEntity> DragonTiger { get; set; }
+
+    /// <summary>
+    /// 每日市场快照（选股引擎数据源）
+    /// </summary>
+    public DbSet<DailyMarketSnapshotEntity> DailyMarketSnapshot { get; set; }
+
     public override int SaveChanges()
     {
         UpdateTimestamps();
@@ -246,6 +256,22 @@ public class AIStockDbContext : DbContext
         {
             entity.HasKey(e => new { e.Name, e.Version });
             entity.HasIndex(e => e.Category);
+        });
+
+        // 龙虎榜
+        modelBuilder.Entity<DragonTigerEntity>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => new { e.Code, e.Date }).IsUnique();
+            entity.HasIndex(e => e.Date);
+        });
+
+        // 每日市场快照
+        modelBuilder.Entity<DailyMarketSnapshotEntity>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => new { e.Code, e.Date }).IsUnique();
+            entity.HasIndex(e => e.Date);
         });
     }
 }

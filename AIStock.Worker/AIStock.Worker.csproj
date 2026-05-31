@@ -20,6 +20,7 @@
     <ProjectReference Include="..\AIStock.Core\AIStock.Core.csproj" />
     <ProjectReference Include="..\AIStock.Infrastructure\AIStock.Infrastructure.csproj" />
     <ProjectReference Include="..\AIStock.Data\AIStock.Data.csproj" />
+    <ProjectReference Include="..\AIStock.Feature\AIStock.Feature.csproj" />
     <ProjectReference Include="..\AIStock.LLM\AIStock.LLM.csproj" />
     <ProjectReference Include="..\AIStock.Intelligence\AIStock.Intelligence.csproj" />
     <ProjectReference Include="..\AIStock.EventEngine\AIStock.EventEngine.csproj" />

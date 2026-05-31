@@ -20,6 +20,7 @@ using AIStock.Orchestrator;
 using AIStock.Prompt;
 using AIStock.Prompt.Services;
 using AIStock.Risk;
+using AIStock.Selection;
 using AIStock.Strategy;
 using Microsoft.EntityFrameworkCore;
 using OpenTelemetry.Logs;
@@ -135,6 +136,9 @@ builder.Services.AddStrategyServices();
 
 // 注册风控服务
 builder.Services.AddRiskServices(builder.Configuration);
+
+// 注册选股服务
+builder.Services.AddSelectionServices();
 
 // 注册执行服务
 builder.Services.AddExecutionServices(builder.Configuration);

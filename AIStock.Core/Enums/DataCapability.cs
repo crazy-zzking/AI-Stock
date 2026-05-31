@@ -56,6 +56,11 @@ public enum DataCapability
     SectorConstituents,
 
     /// <summary>
+    /// 个股所属板块
+    /// </summary>
+    StockSectors,
+
+    /// <summary>
     /// 交易日历
     /// </summary>
     TradingCalendar,

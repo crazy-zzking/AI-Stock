@@ -108,3 +108,21 @@ public class PositionCacheJob : IScheduledJob
     public string Name => "position-cache";
     public Task ExecuteAsync(CancellationToken ct) => _svc.RefreshCacheAsync(ct);
 }
+
+/// <summary>市场快照采集任务（收盘后，聚合行情/估值/资金流/技术指标供选股引擎）</summary>
+public class MarketSnapshotSyncJob : IScheduledJob
+{
+    private readonly MarketSnapshotSyncService _svc;
+    public MarketSnapshotSyncJob(MarketSnapshotSyncService svc) => _svc = svc;
+    public string Name => "market-snapshot";
+    public Task ExecuteAsync(CancellationToken ct) => _svc.SyncAsync(ct);
+}
+
+/// <summary>龙虎榜采集任务（收盘后）</summary>
+public class DragonTigerCollectJob : IScheduledJob
+{
+    private readonly DragonTigerSyncService _svc;
+    public DragonTigerCollectJob(DragonTigerSyncService svc) => _svc = svc;
+    public string Name => "dragon-tiger";
+    public Task ExecuteAsync(CancellationToken ct) => _svc.SyncAsync(DateTime.Now.AddDays(-2), ct);
+}

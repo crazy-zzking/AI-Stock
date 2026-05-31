@@ -32,6 +32,7 @@
     <ProjectReference Include="..\AIStock.Feature\AIStock.Feature.csproj" />
     <ProjectReference Include="..\AIStock.Strategy\AIStock.Strategy.csproj" />
     <ProjectReference Include="..\AIStock.Risk\AIStock.Risk.csproj" />
+    <ProjectReference Include="..\AIStock.Selection\AIStock.Selection.csproj" />
     <ProjectReference Include="..\AIStock.Execution\AIStock.Execution.csproj" />
     <ProjectReference Include="..\AIStock.Orchestrator\AIStock.Orchestrator.csproj" />
     <ProjectReference Include="..\AIStock.Prompt\AIStock.Prompt.csproj" />

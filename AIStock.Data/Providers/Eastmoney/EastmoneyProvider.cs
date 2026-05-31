@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using AIStock.Core.Enums;
 using AIStock.Core.Models;
 using AIStock.Data.Providers;
@@ -69,7 +70,10 @@ public class EastmoneyProvider : BaseProvider
         DataCapability.Quote,
         DataCapability.Kline,
         DataCapability.Intraday,
-        DataCapability.CapitalFlow
+        DataCapability.CapitalFlow,
+        DataCapability.SectorRanking,
+        DataCapability.SectorConstituents,
+        DataCapability.StockSectors
     };
 
     /// <summary>
@@ -80,7 +84,7 @@ public class EastmoneyProvider : BaseProvider
         try
         {
             var secid = GetMarketCode(code);
-            var url = $"{QuoteUrl}?secid={secid}&fields=f43,f44,f45,f46,f47,f48,f50,f51,f52,f55,f57,f58,f60,f116,f117,f170";
+            var url = $"{QuoteUrl}?secid={secid}&fields=f43,f44,f45,f46,f47,f48,f50,f51,f52,f55,f57,f58,f60,f116,f117,f170,f162,f167";
             Logger.LogDebug("Requesting quote from: {Url}", url);
             
             var response = await SendEastmoneyRequestAsync(url);
@@ -140,6 +144,12 @@ public class EastmoneyProvider : BaseProvider
                 ChangeAmount = GetDecimal(data.GetProperty("f116"), 100),
                 TurnoverRate = GetDecimal(data.GetProperty("f117"), 100),
                 VolumeRatio = GetDecimal(data.GetProperty("f50"), 100),
+                // 估值字段（东财 stock/get：f116 总市值、f117 流通市值、f162 PE(动)、f167 PB）。
+                // 字段号/精度以实盘联调为准，取不到则为 0，不影响其他字段。
+                TotalMarketCap = data.TryGetProperty("f116", out var mcEl) ? GetDecimal(mcEl) : 0,
+                FloatMarketCap = data.TryGetProperty("f117", out var fmcEl) ? GetDecimal(fmcEl) : 0,
+                PeTtm = data.TryGetProperty("f162", out var peEl) ? GetDecimal(peEl, 100) : 0,
+                Pb = data.TryGetProperty("f167", out var pbEl) ? GetDecimal(pbEl, 100) : 0,
                 Timestamp = DateTime.UtcNow,
                 Source = ProviderId
             };
@@ -333,6 +343,148 @@ public class EastmoneyProvider : BaseProvider
         }
     }
 
+    // ---- 板块能力 ----
+
+    private const string SectorRankingUrl = "https://push2dycalc.eastmoney.com/api/qt/clist/get";
+    private const string SectorConstituentsUrl = "https://push2dycalc.eastmoney.com/api/qt/clist/get";
+    private const string StockSectorsUrl = "https://datacenter.eastmoney.com/securities/api/data/v1/get";
+
+    /// <summary>
+    /// 获取板块排名（资金流向）
+    /// </summary>
+    public async Task<List<SectorFlowData>> GetSectorRankingAsync(CancellationToken ct = default)
+    {
+        var url = SectorRankingUrl + "?" +
+                  "fs=m:90+e:2,m:90+e:3&" +
+                  "fltt=2&invt=2&" +
+                  "fields=f3,f4,f10,f12,f13,f14,f104,f105,f106,f615,f616,f621,f622,f623,f624,f625,f626&" +
+                  "fid=f621&po=1&pn=1&pz=50&np=1&" +
+                  $"ut={UserToken}";
+
+        try
+        {
+            var response = await SendEastmoneyRequestAsync(url, ct);
+            if (response == null) return new List<SectorFlowData>();
+            return ParseSectorRanking(response);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to fetch sector ranking");
+            return new List<SectorFlowData>();
+        }
+    }
+
+    /// <summary>
+    /// 获取板块成分股
+    /// </summary>
+    public async Task<List<string>> GetSectorConstituentsAsync(string sectorCode, CancellationToken ct = default)
+    {
+        var fs = $"m:1+t:2+b:{sectorCode},m:1+t:23+b:{sectorCode},m:0+t:6+b:{sectorCode},m:0+t:13+b:{sectorCode},m:0+t:80+b:{sectorCode},m:0+t:81+s:2048+b:{sectorCode}";
+        var url = SectorConstituentsUrl + "?" +
+                  $"fs={fs}&fltt=2&fields=f12,f14&fid=f3&po=1&pn=1&pz=100&np=1&ut={UserToken}";
+
+        try
+        {
+            var response = await SendEastmoneyRequestAsync(url, ct);
+            if (response == null) return new List<string>();
+
+            var result = new List<string>();
+            var doc = JsonDocument.Parse(response);
+            if (doc.RootElement.TryGetProperty("data", out var data) &&
+                data.TryGetProperty("diff", out var diff))
+            {
+                foreach (var item in diff.EnumerateArray())
+                {
+                    if (item.TryGetProperty("f12", out var code))
+                        result.Add(code.GetString() ?? "");
+                }
+            }
+            return result;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to fetch constituents for {SectorCode}", sectorCode);
+            return new List<string>();
+        }
+    }
+
+    /// <summary>
+    /// 获取个股所属板块
+    /// </summary>
+    public async Task<List<string>> GetStockSectorsAsync(string stockCode, CancellationToken ct = default)
+    {
+        var secucode = stockCode.ToUpper();
+        if (!secucode.Contains("."))
+        {
+            var marketCode = GetMarketCode(stockCode);
+            var prefix = marketCode.Split('.')[0];
+            var code = marketCode.Split('.')[1];
+            secucode = $"{code}.{(prefix == "1" ? "SH" : "SZ")}";
+        }
+
+        var url = StockSectorsUrl + "?" +
+                  "reportName=RPT_F10_CORETHEME_BOARDTYPE&" +
+                  "columns=SECUCODE,SECURITY_CODE,SECURITY_NAME_ABBR,NEW_BOARD_CODE,BOARD_NAME&" +
+                  $"filter=(SECUCODE=\"{secucode}\")(IS_PRECISE=\"1\")&" +
+                  "pageNumber=1&pageSize=10&source=HSF10&client=PC";
+
+        try
+        {
+            var response = await SendEastmoneyRequestAsync(url, ct);
+            if (response == null) return new List<string>();
+
+            var result = new List<string>();
+            var doc = JsonDocument.Parse(response);
+            if (doc.RootElement.TryGetProperty("result", out var res) &&
+                res.TryGetProperty("data", out var dataArray))
+            {
+                foreach (var item in dataArray.EnumerateArray())
+                {
+                    if (item.TryGetProperty("BOARD_NAME", out var boardName))
+                    {
+                        var name = boardName.GetString();
+                        if (!string.IsNullOrEmpty(name)) result.Add(name);
+                    }
+                }
+            }
+            return result;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Failed to fetch sectors for {StockCode}", stockCode);
+            return new List<string>();
+        }
+    }
+
+    private List<SectorFlowData> ParseSectorRanking(string json)
+    {
+        var result = new List<SectorFlowData>();
+        try
+        {
+            var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+            var response = JsonSerializer.Deserialize<SectorRankingResponse>(json, options);
+
+            if (response?.Data?.Diff != null)
+            {
+                foreach (var item in response.Data.Diff)
+                {
+                    result.Add(new SectorFlowData
+                    {
+                        SectorCode = item.F12,
+                        SectorName = item.F14,
+                        ChangePercent = item.F3,
+                        NetInflow = item.F621
+                    });
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Failed to parse sector ranking");
+        }
+        return result;
+    }
+
     /// <summary>
     /// 发送带东方财富所需请求头的 HTTP 请求
     /// </summary>
@@ -374,4 +526,27 @@ public class EastmoneyProvider : BaseProvider
             _ => 101
         };
     }
+}
+
+/// <summary>
+/// 板块排名接口响应
+/// </summary>
+internal class SectorRankingResponse
+{
+    [JsonPropertyName("data")]
+    public SectorRankingData? Data { get; set; }
+}
+
+internal class SectorRankingData
+{
+    [JsonPropertyName("diff")]
+    public List<SectorItem> Diff { get; set; } = new();
+}
+
+internal class SectorItem
+{
+    [JsonPropertyName("f3")] public decimal F3 { get; set; }
+    [JsonPropertyName("f12")] public string F12 { get; set; } = "";
+    [JsonPropertyName("f14")] public string F14 { get; set; } = "";
+    [JsonPropertyName("f621")] public decimal F621 { get; set; }
 }

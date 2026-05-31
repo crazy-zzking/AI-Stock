@@ -24,6 +24,7 @@
     <ProjectReference Include="..\..\AIStock.Risk\AIStock.Risk.csproj" />
     <ProjectReference Include="..\..\AIStock.Intelligence\AIStock.Intelligence.csproj" />
     <ProjectReference Include="..\..\AIStock.Infrastructure\AIStock.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\AIStock.Selection\AIStock.Selection.csproj" />
   </ItemGroup>
 
   <ItemGroup>

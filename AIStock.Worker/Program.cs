@@ -1,5 +1,6 @@
 using AIStock.Data;
 using AIStock.EventEngine;
+using AIStock.Feature;
 using AIStock.Infrastructure.Database.Context;
 using AIStock.Infrastructure.MessageBus;
 using AIStock.Intelligence;
@@ -46,6 +47,9 @@ builder.Services.AddDbContext<AIStockDbContext>(options =>
 // 注册数据源 Provider（与 Web 共用同一扩展）
 builder.Services.AddDataProviders(builder.Configuration);
 
+// 技术指标计算（市场快照采集依赖）
+builder.Services.AddFeatureServices();
+
 // Redis（消息总线依赖）
 var redisConnection = builder.Configuration.GetConnectionString("Redis");
 if (!string.IsNullOrWhiteSpace(redisConnection))
@@ -69,6 +73,9 @@ builder.Services.Configure<IntelligenceSyncOptions>(builder.Configuration.GetSec
 builder.Services.Configure<KnowledgeStarOptions>(builder.Configuration.GetSection(KnowledgeStarOptions.SectionName));
 builder.Services.AddSingleton<IntelligenceSyncService>();
 builder.Services.AddSingleton<PositionCacheService>();
+builder.Services.Configure<MarketSnapshotOptions>(builder.Configuration.GetSection(MarketSnapshotOptions.SectionName));
+builder.Services.AddSingleton<MarketSnapshotSyncService>();
+builder.Services.AddSingleton<DragonTigerSyncService>();
 
 // 调度：每个后台任务独立注册，调度参数由 Jobs:<Name> 配置
 builder.Services.Configure<JobSchedulerOptions>(o =>
@@ -82,6 +89,8 @@ builder.Services.AddSingleton<IScheduledJob, ReportCollectJob>();
 builder.Services.AddSingleton<IScheduledJob, KnowledgeStarCollectJob>();
 builder.Services.AddSingleton<IScheduledJob, GraphPromoteJob>();
 builder.Services.AddSingleton<IScheduledJob, PositionCacheJob>();
+builder.Services.AddSingleton<IScheduledJob, MarketSnapshotSyncJob>();
+builder.Services.AddSingleton<IScheduledJob, DragonTigerCollectJob>();
 builder.Services.Configure<GraphPromotionOptions>(
     builder.Configuration.GetSection(GraphPromotionOptions.SectionName));
 builder.Services.AddHostedService<JobScheduler>();
