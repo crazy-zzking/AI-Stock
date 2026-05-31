@@ -1,0 +1,91 @@
+{
+  // ============================================================
+  // 实盘灰度模板 — 复制本文件为 appsettings.user.json 并填写真实值
+  // appsettings.user.json 已在 .gitignore 中，不会提交到仓库
+  //
+  // 灰度阶段建议值（逐周放开，见注释）：
+  //   Week1: MaxOrdersPerDay=3, MaxOrderValue=5000,  MaxSingleTradePercent=2, MaxTotalPositionPercent=20
+  //   Week2: MaxOrdersPerDay=10, MaxOrderValue=20000, MaxSingleTradePercent=5, MaxTotalPositionPercent=40
+  //   Week3: MaxOrdersPerDay=30, MaxOrderValue=50000, MaxSingleTradePercent=8, MaxTotalPositionPercent=60
+  //   Full:  MaxOrdersPerDay=50, MaxOrderValue=100000,MaxSingleTradePercent=10,MaxTotalPositionPercent=80
+  // ============================================================
+
+  "ConnectionStrings": {
+    "MySQL": "Server=localhost;Port=3306;Database=aistock;User=root;Password=【数据库密码】;CharSet=utf8mb4;",
+    "Redis": "localhost:6379"
+  },
+
+  "Trading": {
+    // 切换为实盘前必须显式设置为 Live，默认 DryRun 不会真实下单
+    "Mode": "DryRun",
+    "Halted": false,
+
+    // ===== Week1 灰度限制（谨慎起步） =====
+    "MaxOrdersPerDay": 3,
+    "MaxOrderValue": 5000,
+    "MaxTotalExposure": 10000,
+    "ReservationTtlSeconds": 120
+  },
+
+  "Risk": {
+    "MaxSingleTradePercent": 2,
+    "MaxTotalPositionPercent": 20,
+    "MaxSingleStockPercent": 10,
+    "MaxSectorPercent": 30,
+    "MaxDeclinePercent": 9
+  },
+
+  "Monitor": {
+    "Enabled": true,
+    "CheckIntervalSeconds": 30,
+    "AccountLossPercent": -3,
+    "PositionLossPercent": -8,
+    "MaxPositionRatioPercent": 80,
+    // 填写钉钉/企业微信 Webhook，触发告警时推送
+    "WebhookUrl": ""
+  },
+
+  "DataProviders": {
+    "Sanhu": {
+      "BaseUrl": "http://www.sanhulianghua.com:2008",
+      "Token": "【散户量化Token】",
+      "MyKey": "【散户量化MyKey，可选】"
+    }
+  },
+
+  "LLM": {
+    "Models": [
+      {
+        "Id": "tongyi",
+        "Name": "通义千问",
+        "BaseUrl": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        "ApiKey": "sk-【通义千问ApiKey】",
+        "Model": "qwen-plus",
+        "IsEnabled": true,
+        "Priority": 1,
+        "TimeoutSeconds": 30
+      },
+      {
+        "Id": "deepseek",
+        "Name": "DeepSeek",
+        "BaseUrl": "https://api.deepseek.com/v1",
+        "ApiKey": "sk-【DeepSeekApiKey】",
+        "Model": "deepseek-chat",
+        "IsEnabled": true,
+        "Priority": 2,
+        "TimeoutSeconds": 30
+      }
+    ]
+  },
+
+  "Serilog": {
+    "MinimumLevel": {
+      "Default": "Information",
+      "Override": {
+        "Microsoft": "Warning",
+        "System": "Warning",
+        "AIStock": "Debug"
+      }
+    }
+  }
+}

@@ -1,0 +1,45 @@
+{
+  // ============================================================
+  // Worker 用户配置模板 — 复制为 appsettings.user.json 并填写真实值
+  // ============================================================
+
+  "ConnectionStrings": {
+    "MySQL": "Server=localhost;Port=3306;Database=aistock;User=root;Password=【数据库密码】;CharSet=utf8mb4;",
+    "Redis": "localhost:6379"
+  },
+
+  "DataProviders": {
+    "Sanhu": {
+      "BaseUrl": "http://www.sanhulianghua.com:2008",
+      "Token": "【散户量化Token】"
+    }
+  },
+
+  "DataSync": {
+    "Enabled": true,
+    "SyncHour": 16,
+    "SyncKlines": true,
+    "KlineCount": 120,
+    // 灰度阶段建议只同步少量股票，验证无误后改为 0（全量）
+    "MaxStocks": 100,
+    "KlineThrottleMs": 300
+  },
+
+  "IntelligenceSync": {
+    "Enabled": true,
+    "RunOnStartup": false,
+    "IntervalMinutes": 60,
+    "CollectNews": true,
+    "CollectReports": true,
+    "ItemThrottleMs": 1000
+  },
+
+  "Jobs": {
+    "stock-base":   { "Enabled": true,  "RunOnStartup": true,  "DailyAtHour": 8  },
+    "stock-detail": { "Enabled": false, "RunOnStartup": false, "DailyAtHour": 8  },
+    "kline":        { "Enabled": true,  "RunOnStartup": true,  "DailyAtHour": 16 },
+    "news":         { "Enabled": true,  "RunOnStartup": false, "IntervalSeconds": 1800 },
+    "report":       { "Enabled": true,  "RunOnStartup": false, "IntervalSeconds": 3600 },
+    "graph-promote":{ "Enabled": false, "RunOnStartup": false, "DailyAtHour": 18 }
+  }
+}
