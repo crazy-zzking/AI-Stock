@@ -82,12 +82,13 @@ public class OrderManagerService : IOrderManager
             // 4. DryRun 模式：不调用券商接口，仅记录意向单
             if (_tradingGate.Mode == TradingMode.DryRun)
             {
+                var dryRunId = $"DRYRUN-{Guid.NewGuid():N}";
                 _logger.LogInformation(
-                    "[DryRun] 模拟下单 {Side} {Code} {Volume}@{Price} (金额 {Value:N0})，未发送至券商",
-                    request.Side, request.Code, request.Volume, request.Price, orderValue);
+                    "Order DryRun code={Code} side={Side} volume={Volume} price={Price} value={Value:N0} orderId={OrderId}",
+                    request.Code, request.Side, request.Volume, request.Price, orderValue, dryRunId);
                 return new OrderResult
                 {
-                    OrderId = $"DRYRUN-{Guid.NewGuid():N}",
+                    OrderId = dryRunId,
                     Success = true,
                     Message = "[DryRun] 模拟下单成功，未真实成交",
                     Status = OrderStatus.Submitted
@@ -109,6 +110,10 @@ public class OrderManagerService : IOrderManager
                          result.IsCompleted ? OrderStatus.Filled :
                          result.IsFailed ? OrderStatus.Failed :
                          OrderStatus.Pending;
+
+            _logger.LogInformation(
+                "Order Live code={Code} side={Side} volume={Volume} price={Price} value={Value:N0} orderId={OrderId} status={Status} msg={Msg}",
+                request.Code, request.Side, request.Volume, request.Price, orderValue, orderId, status, result.Msg);
 
             return new OrderResult
             {

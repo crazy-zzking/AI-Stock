@@ -41,10 +41,17 @@ public class AutonomousDecisionSystem
             Code = request.Code
         };
 
+        _logger.LogInformation("Decision started for {Code} (capital={Capital})", request.Code, request.TotalCapital);
+
         try
         {
             // Step 1: 分析
+            var sw = System.Diagnostics.Stopwatch.StartNew();
             var analyzeResult = await ExecuteAnalysisAsync(request.Code);
+            sw.Stop();
+            _logger.LogInformation("Step1/Analysis {Code} {Status} in {ElapsedMs}ms",
+                request.Code, analyzeResult.Success ? "OK" : "FAIL", sw.ElapsedMilliseconds);
+
             if (!analyzeResult.Success)
             {
                 result.Success = false;
@@ -54,7 +61,12 @@ public class AutonomousDecisionSystem
             result.Analysis = analyzeResult.Output;
 
             // Step 2: 信号生成
+            sw.Restart();
             var signalResult = await ExecuteSignalGenerationAsync(request.Code);
+            sw.Stop();
+            _logger.LogInformation("Step2/Signal {Code} {Status} in {ElapsedMs}ms",
+                request.Code, signalResult.Success ? "OK" : "FAIL", sw.ElapsedMilliseconds);
+
             if (!signalResult.Success)
             {
                 result.Success = false;
@@ -65,24 +77,41 @@ public class AutonomousDecisionSystem
 
             // Step 3: 风控检查（对每个信号分别检查）
             var signals = ExtractSignals(signalResult);
+            _logger.LogInformation("Step3/Risk {Code} — {SignalCount} signals to check", request.Code, signals.Count);
+
             var riskResults = new List<object>();
             var orders = new List<OrderResult>();
 
             foreach (var signal in signals)
             {
+                sw.Restart();
                 var riskResult = await ExecuteRiskCheckAsync(signal, request.TotalCapital);
+                sw.Stop();
+
                 if (riskResult != null)
                 {
+                    var passed = IsRiskPassed(riskResult);
+                    _logger.LogInformation(
+                        "Step3/Risk {Code} signal={SignalType} strength={Strength} passed={Passed} in {ElapsedMs}ms",
+                        signal.Code, signal.SignalType, signal.Strength, passed, sw.ElapsedMilliseconds);
+
                     riskResults.Add(riskResult.Output);
 
                     // Step 4: 风控通过后自动下单
-                    if (riskResult.Success && IsRiskPassed(riskResult))
+                    if (riskResult.Success && passed)
                     {
+                        sw.Restart();
                         var orderResult = await PlaceOrderAsync(signal, request.TotalCapital, request.PositionSizeMode);
+                        sw.Stop();
                         orders.Add(orderResult);
                         _logger.LogInformation(
-                            "Auto order placed for {Code}: {Side}@{Price}, OrderId={OrderId}, Success={Success}",
-                            signal.Code, signal.SignalType, signal.Price, orderResult.OrderId, orderResult.Success);
+                            "Step4/Order {Code} side={Side} price={Price} volume={Volume} orderId={OrderId} success={Success} in {ElapsedMs}ms",
+                            signal.Code, signal.SignalType, signal.Price, signal.Volume,
+                            orderResult.OrderId, orderResult.Success, sw.ElapsedMilliseconds);
+                    }
+                    else if (riskResult.Success && !passed)
+                    {
+                        _logger.LogWarning("Step4/Order {Code} skipped — risk check not passed", signal.Code);
                     }
                 }
             }
@@ -104,6 +133,9 @@ public class AutonomousDecisionSystem
         }
 
         result.ExecutionTime = (long)(DateTime.UtcNow - startTime).TotalMilliseconds;
+        _logger.LogInformation(
+            "Decision finished {Code} success={Success} orders={OrderCount} totalMs={ElapsedMs}",
+            request.Code, result.Success, result.Orders.Count, result.ExecutionTime);
         return result;
     }
 
