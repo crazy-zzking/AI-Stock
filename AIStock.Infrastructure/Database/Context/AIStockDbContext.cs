@@ -138,11 +138,11 @@ public class AIStockDbContext : DbContext
         {
             if (entry.Entity.GetType().GetProperty("CreatedAt") != null && entry.State == EntityState.Added)
             {
-                entry.Property("CreatedAt").CurrentValue = DateTime.UtcNow;
+                entry.Property("CreatedAt").CurrentValue = DateTime.Now;
             }
             if (entry.Entity.GetType().GetProperty("UpdatedAt") != null)
             {
-                entry.Property("UpdatedAt").CurrentValue = DateTime.UtcNow;
+                entry.Property("UpdatedAt").CurrentValue = DateTime.Now;
             }
         }
     }

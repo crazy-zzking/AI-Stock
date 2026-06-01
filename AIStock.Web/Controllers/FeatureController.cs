@@ -51,7 +51,7 @@ public class FeatureController : ControllerBase
             var intradayData = await provider.GetIntradayAsync(code);
             var indicators = _featureCalculator.CalculateAll(code, klines, intradayData);
 
-            await _featureStore.SaveFeaturesAsync(code, DateTime.UtcNow, indicators);
+            await _featureStore.SaveFeaturesAsync(code, DateTime.Now, indicators);
 
             return Ok(indicators);
         }

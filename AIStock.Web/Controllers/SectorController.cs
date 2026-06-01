@@ -52,8 +52,7 @@ public class SectorController : ControllerBase
     /// <summary>缓存时长：交易日盘中 60 秒，其余 10 分钟。</summary>
     private static TimeSpan CacheTtl()
     {
-        var now = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow,
-            TimeZoneInfo.FindSystemTimeZoneById("China Standard Time"));
+        var now = DateTime.Now; // 本地即北京时间
         var t = now.TimeOfDay;
         var inTrading = now.DayOfWeek != DayOfWeek.Saturday && now.DayOfWeek != DayOfWeek.Sunday
             && ((t >= new TimeSpan(9, 30, 0) && t <= new TimeSpan(11, 30, 0))

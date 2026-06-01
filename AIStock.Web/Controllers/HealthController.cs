@@ -41,7 +41,7 @@ public class HealthController : ControllerBase
         try
         {
             var redisConnected = _redis.IsConnected;
-            var serverTime = DateTime.UtcNow;
+            var serverTime = DateTime.Now;
 
             return Ok(new
             {
@@ -170,7 +170,7 @@ public class HealthController : ControllerBase
         return StatusCode(httpStatus, new
         {
             status,
-            timestamp = DateTime.UtcNow,
+            timestamp = DateTime.Now,
             checks
         });
     }

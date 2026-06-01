@@ -147,7 +147,7 @@ public class KnowledgeStarCollectorService : IKnowledgeStarCollector
 
         var createTime = topic.TryGetProperty("create_time", out var ct2) && DateTime.TryParse(ct2.GetString(), out var dt)
             ? dt
-            : DateTime.UtcNow;
+            : DateTime.Now;
 
         var title = text.Length > 40 ? text[..40] : text;
 

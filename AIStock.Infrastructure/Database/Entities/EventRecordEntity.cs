@@ -105,5 +105,5 @@ public class EventRecordEntity
     /// 创建时间
     /// </summary>
     [Column("created_at")]
-    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime CreatedAt { get; set; } = DateTime.Now;
 }

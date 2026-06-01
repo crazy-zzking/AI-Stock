@@ -99,6 +99,44 @@ public class SelectionHistoryItem
     public int TopN { get; set; }
 }
 
+/// <summary>某批选股的"选后表现"汇总</summary>
+public class SelectionPerformance
+{
+    public long Id { get; set; }
+    /// <summary>选股所基于的交易日</summary>
+    public DateTime SelectionTradingDate { get; set; }
+    public DateTime RunAt { get; set; }
+    public int Count { get; set; }
+    /// <summary>前进数据截至的最新交易日（无则 null）</summary>
+    public DateTime? LatestDate { get; set; }
+    /// <summary>至今上涨命中数（自选股日累计涨幅 &gt; 0）</summary>
+    public int HitCount { get; set; }
+    /// <summary>至今平均累计涨跌幅（%）</summary>
+    public decimal AvgCurrentChange { get; set; }
+    public List<SelectionPerformanceItem> Items { get; set; } = new();
+}
+
+/// <summary>单只选股标的的选后表现</summary>
+public class SelectionPerformanceItem
+{
+    public string Code { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
+    /// <summary>选股日收盘价（成本基准）</summary>
+    public decimal SelectClose { get; set; }
+    /// <summary>选股当天涨跌幅（%）</summary>
+    public decimal SelectChangePercent { get; set; }
+    /// <summary>次日(T+1)涨跌幅（%），相对选股日收盘</summary>
+    public decimal? NextDayChangePercent { get; set; }
+    /// <summary>自选股日至今累计涨跌幅（%）</summary>
+    public decimal? CurrentChangePercent { get; set; }
+    /// <summary>选中之后最高涨幅（%，区间最高价相对选股日收盘）</summary>
+    public decimal? MaxRisePercent { get; set; }
+    /// <summary>选中之后最低跌幅（%，区间最低价相对选股日收盘，负值）</summary>
+    public decimal? MaxDropPercent { get; set; }
+    /// <summary>已观察的前进交易日数</summary>
+    public int ForwardDays { get; set; }
+}
+
 /// <summary>
 /// 选股结果（一只股票一张卡片）
 /// </summary>

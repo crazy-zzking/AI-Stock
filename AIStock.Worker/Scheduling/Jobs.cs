@@ -101,8 +101,7 @@ public class KnowledgeStarCollectJob : IScheduledJob
     /// <summary>交易日盘中(9:30-15:00) 5-10 分钟随机；其余(收盘/周末/节假日) 1-2 小时随机。</summary>
     public async Task<TimeSpan?> GetNextDelayAsync(CancellationToken ct)
     {
-        var now = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow,
-            TimeZoneInfo.FindSystemTimeZoneById("China Standard Time"));
+        var now = DateTime.Now; // 本地即北京时间
         var isTradingDay = await _calendar.IsTradingDayAsync(now.Date, ct);
         if (isTradingDay && PositionCacheService.IsInTradingHours(now))
             return TimeSpan.FromMinutes(5 + Random.Shared.NextDouble() * 5);  // 5-10 分钟

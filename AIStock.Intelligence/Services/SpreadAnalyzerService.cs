@@ -79,7 +79,7 @@ public class SpreadAnalyzerService : ISpreadAnalyzer
 
     public async Task<double> CalculateHeatSlopeAsync(string keyword, int hours = 24, CancellationToken cancellationToken = default)
     {
-        var startTime = DateTime.UtcNow.AddHours(-hours);
+        var startTime = DateTime.Now.AddHours(-hours);
 
         var events = await _dbContext.EventRecord
             .Where(e => (e.Title.Contains(keyword) || e.Content!.Contains(keyword))
@@ -135,7 +135,7 @@ public class SpreadAnalyzerService : ISpreadAnalyzer
 
     private int CalculateCurrentHeat(List<EventRecordEntity> events)
     {
-        var recentEvents = events.Where(e => e.CreatedAt >= DateTime.UtcNow.AddHours(-24)).ToList();
+        var recentEvents = events.Where(e => e.CreatedAt >= DateTime.Now.AddHours(-24)).ToList();
         var totalEvents = events.Count;
 
         if (totalEvents == 0) return 0;
@@ -165,7 +165,7 @@ public class SpreadAnalyzerService : ISpreadAnalyzer
         if (result.HeatSlope <= 0) return null;
 
         // 简单估算：假设热度会持续增长2-4小时
-        return DateTime.UtcNow.AddHours(3);
+        return DateTime.Now.AddHours(3);
     }
 
     private string GenerateConclusion(SpreadAnalysisResult result)

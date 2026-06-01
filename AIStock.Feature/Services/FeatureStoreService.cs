@@ -141,7 +141,7 @@ public class FeatureStoreService : IFeatureStore
         try
         {
             var db = _redis.GetDatabase();
-            var cutoffTicks = DateTime.UtcNow.Subtract(maxAge).Ticks;
+            var cutoffTicks = DateTime.Now.Subtract(maxAge).Ticks;
             var deletedCount = 0;
 
             // 仅遍历注册表中已知的 code，避免扫描整个 keyspace

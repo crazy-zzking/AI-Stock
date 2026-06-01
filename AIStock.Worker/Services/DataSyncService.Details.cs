@@ -73,7 +73,7 @@ public partial class DataSyncService
                         if (info.EmployeeCount.HasValue) entity.EmployeeCount = info.EmployeeCount;
                         if (info.RegCapital.HasValue) entity.RegCapital = info.RegCapital;
                         if (info.ListDate.HasValue) entity.ListDate = info.ListDate;
-                        entity.UpdatedAt = DateTime.UtcNow;
+                        entity.UpdatedAt = DateTime.Now;
                     }
                 }
 
@@ -111,7 +111,7 @@ public partial class DataSyncService
                 if (!string.IsNullOrEmpty(c.BoardCode)) row.QuoteCode = c.BoardCode;
                 row.BoardRank = c.Rank;
                 row.SelectedReason = c.Reason;
-                row.UpdatedAt = DateTime.UtcNow;
+                row.UpdatedAt = DateTime.Now;
             }
             else
             {
@@ -122,8 +122,8 @@ public partial class DataSyncService
                     QuoteCode = c.BoardCode,
                     BoardRank = c.Rank,
                     SelectedReason = c.Reason,
-                    CreatedAt = DateTime.UtcNow,
-                    UpdatedAt = DateTime.UtcNow
+                    CreatedAt = DateTime.Now,
+                    UpdatedAt = DateTime.Now
                 };
                 db.StockConceptRelation.Add(ent);
                 byName[c.Name] = ent; // 同批去重
@@ -239,7 +239,7 @@ public partial class DataSyncService
         var db = scope.ServiceProvider.GetRequiredService<AIStockDbContext>();
 
         var existing = await db.ConceptBoard.ToDictionaryAsync(b => b.BoardCode, ct);
-        var now = DateTime.UtcNow;
+        var now = DateTime.Now;
         var total = 0;
 
         foreach (var (t, type) in BoardTypes)

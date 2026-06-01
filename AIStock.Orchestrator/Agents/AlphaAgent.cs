@@ -39,7 +39,7 @@ public class AlphaAgent : IAgent
 
     public async Task<AgentResult> ExecuteAsync(AgentTask task)
     {
-        var startTime = DateTime.UtcNow;
+        var startTime = DateTime.Now;
         AgentResult result;
 
         try
@@ -59,7 +59,7 @@ public class AlphaAgent : IAgent
             {
                 Success = false,
                 Message = ex.Message,
-                ExecutionTime = (long)(DateTime.UtcNow - startTime).TotalMilliseconds
+                ExecutionTime = (long)(DateTime.Now - startTime).TotalMilliseconds
             };
         }
 
@@ -77,13 +77,13 @@ public class AlphaAgent : IAgent
         {
             AgentId = AgentId,
             IsOnline = true,
-            LastActiveTime = DateTime.UtcNow
+            LastActiveTime = DateTime.Now
         });
     }
 
     private async Task<AgentResult> GenerateSignalAsync(AgentTask task)
     {
-        var startTime = DateTime.UtcNow;
+        var startTime = DateTime.Now;
         var code = task.Parameters.GetValueOrDefault("code")?.ToString() ?? "";
 
         var provider = _dataProviderResolver.GetDefaultProvider();
@@ -139,13 +139,13 @@ public class AlphaAgent : IAgent
             Success = true,
             Output = result,
             Message = $"{_strategies.Count()} strategies → {rawSignals.Count} raw signals → composite {composite.SignalType} (strength {composite.Strength})",
-            ExecutionTime = (long)(DateTime.UtcNow - startTime).TotalMilliseconds
+            ExecutionTime = (long)(DateTime.Now - startTime).TotalMilliseconds
         };
     }
 
     private async Task<AgentResult> MergeSignalsAsync(AgentTask task)
     {
-        var startTime = DateTime.UtcNow;
+        var startTime = DateTime.Now;
 
         var signals = new List<TradeSignal>();
         if (task.Parameters.ContainsKey("signals"))
@@ -165,7 +165,7 @@ public class AlphaAgent : IAgent
                 ["mergedSignal"] = mergedSignal
             },
             Message = "Signals merged successfully",
-            ExecutionTime = (long)(DateTime.UtcNow - startTime).TotalMilliseconds
+            ExecutionTime = (long)(DateTime.Now - startTime).TotalMilliseconds
         };
     }
 }

@@ -40,7 +40,7 @@ public class RedisMessageBus : IMessageBus, IDisposable
             {
                 new NameValueEntry("data", json),
                 new NameValueEntry("type", typeof(T).Name),
-                new NameValueEntry("timestamp", DateTime.UtcNow.ToString("O"))
+                new NameValueEntry("timestamp", DateTime.Now.ToString("O"))
             };
 
             var id = await db.StreamAddAsync(stream, entries, messageId);
@@ -294,7 +294,7 @@ public class RedisMessageBus : IMessageBus, IDisposable
                 new NameValueEntry("data", originalEntry["data"].ToString()),
                 new NameValueEntry("type", originalEntry["type"].ToString()),
                 new NameValueEntry("error", error),
-                new NameValueEntry("movedAt", DateTime.UtcNow.ToString("O"))
+                new NameValueEntry("movedAt", DateTime.Now.ToString("O"))
             };
 
             await db.StreamAddAsync(deadLetterStream, entries);

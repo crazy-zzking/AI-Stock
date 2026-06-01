@@ -81,8 +81,8 @@ public class EastmoneyReportCollector : IReportCollector
                                     Source = "东方财富",
                                     Author = item.TryGetProperty("orgName", out var org) ? org.GetString() : null,
                                     PublishTime = item.TryGetProperty("publishDate", out var date)
-                                        ? DateTime.Parse(date.GetString() ?? DateTime.UtcNow.ToString())
-                                        : DateTime.UtcNow,
+                                        ? DateTime.Parse(date.GetString() ?? DateTime.Now.ToString())
+                                        : DateTime.Now,
                                     Url = $"https://data.eastmoney.com/report/info/{item.GetProperty("infoCode").GetString()}.html",
                                     ReportType = item.TryGetProperty("type", out var type) ? type.GetString() : null,
                                     Rating = item.TryGetProperty("emRatingName", out var rating) ? rating.GetString() : null,
@@ -134,7 +134,7 @@ public class EastmoneyReportCollector : IReportCollector
             client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
             client.DefaultRequestHeaders.Add("Referer", "https://data.eastmoney.com/");
 
-            var url = $"https://reportapi.eastmoney.com/report/list?code={stockCode}&pageNo=1&pageSize={count}&fields=&qType=0&orgCode=&rcode=&_={DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()}";
+            var url = $"https://reportapi.eastmoney.com/report/list?code={stockCode}&pageNo=1&pageSize={count}&fields=&qType=0&orgCode=&rcode=&_={DateTimeOffset.Now.ToUnixTimeMilliseconds()}";
             var response = await client.GetAsync(url, cancellationToken);
 
             if (response.IsSuccessStatusCode)
@@ -158,8 +158,8 @@ public class EastmoneyReportCollector : IReportCollector
                                     Source = "东方财富",
                                     Author = item.TryGetProperty("orgName", out var org) ? org.GetString() : null,
                                     PublishTime = item.TryGetProperty("publishDate", out var date)
-                                        ? DateTime.Parse(date.GetString() ?? DateTime.UtcNow.ToString())
-                                        : DateTime.UtcNow,
+                                        ? DateTime.Parse(date.GetString() ?? DateTime.Now.ToString())
+                                        : DateTime.Now,
                                     Url = $"https://data.eastmoney.com/report/info/{item.GetProperty("infoCode").GetString()}.html",
                                     ReportType = item.TryGetProperty("type", out var type) ? type.GetString() : null,
                                     Rating = item.TryGetProperty("emRatingName", out var rating) ? rating.GetString() : null

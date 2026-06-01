@@ -138,7 +138,7 @@ public class FeatureCalculatorService : IFeatureCalculator
         var indicator = new TechnicalIndicator
         {
             Code = code,
-            DateTime = DateTime.UtcNow
+            DateTime = DateTime.Now
         };
 
         if (klines != null && klines.Count > 0)

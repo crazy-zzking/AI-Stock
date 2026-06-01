@@ -32,7 +32,7 @@ public class ReflectiveAgent : IAgent
 
     public async Task<AgentResult> ExecuteAsync(AgentTask task)
     {
-        var startTime = DateTime.UtcNow;
+        var startTime = DateTime.Now;
 
         // Step 1: 初始执行
         var result = await _inner.ExecuteAsync(task);
@@ -65,7 +65,7 @@ public class ReflectiveAgent : IAgent
             }
         }
 
-        result.ExecutionTime = (long)(DateTime.UtcNow - startTime).TotalMilliseconds;
+        result.ExecutionTime = (long)(DateTime.Now - startTime).TotalMilliseconds;
         return result;
     }
 

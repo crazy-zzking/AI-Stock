@@ -113,7 +113,7 @@ public class PromptRegistryService : IPromptRegistry
             {
                 Name = template.Name,
                 Version = template.Version,
-                CreatedAt = DateTime.UtcNow
+                CreatedAt = DateTime.Now
             };
             _dbContext.PromptTemplate.Add(entity);
             _logger.LogInformation("Created prompt: {Name}:{Version}", template.Name, template.Version);
@@ -131,7 +131,7 @@ public class PromptRegistryService : IPromptRegistry
         entity.Variables = SerializeVariables(template.Variables);
         entity.SystemPrompt = template.SystemPrompt;
         entity.UserPrompt = template.UserPrompt;
-        entity.UpdatedAt = DateTime.UtcNow;
+        entity.UpdatedAt = DateTime.Now;
 
         await _dbContext.SaveChangesAsync();
 

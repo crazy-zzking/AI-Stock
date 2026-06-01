@@ -240,7 +240,7 @@ public class EventEngineService
                     eventData.NegativeDirections,
                     eventData.RelatedProducts
                 }),
-                EventTime = DateTime.UtcNow
+                EventTime = DateTime.Now
             };
 
             _dbContext.EventRecord.Add(eventRecord);
@@ -353,7 +353,7 @@ public class EventEngineService
                 existing.MentionCount++;
                 existing.Credibility = Math.Max(existing.Credibility, credibility);
                 existing.LastSourceUrl = sourceUrl;
-                existing.UpdatedAt = DateTime.UtcNow;
+                existing.UpdatedAt = DateTime.Now;
             }
             else
             {
@@ -365,8 +365,8 @@ public class EventEngineService
                     Credibility = credibility,
                     MentionCount = 1,
                     LastSourceUrl = sourceUrl,
-                    CreatedAt = DateTime.UtcNow,
-                    UpdatedAt = DateTime.UtcNow
+                    CreatedAt = DateTime.Now,
+                    UpdatedAt = DateTime.Now
                 });
             }
         }

@@ -91,7 +91,7 @@ public class TdxProvider : IDataProvider, IDisposable, IAsyncDisposable
                 ChangeAmount = (decimal)(quote.Last - quote.PreviousClose),
                 InnerVolume = quote.InsideDish,
                 OuterVolume = quote.OuterDisc,
-                Timestamp = DateTime.UtcNow,
+                Timestamp = DateTime.Now,
                 Source = ProviderId
             };
         }
@@ -124,7 +124,7 @@ public class TdxProvider : IDataProvider, IDisposable, IAsyncDisposable
                 ChangeAmount = (decimal)(quote.Last - quote.PreviousClose),
                 InnerVolume = quote.InsideDish,
                 OuterVolume = quote.OuterDisc,
-                Timestamp = DateTime.UtcNow,
+                Timestamp = DateTime.Now,
                 Source = ProviderId
             }).ToList();
         }

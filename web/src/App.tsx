@@ -9,6 +9,7 @@ import Positions from './pages/Positions';
 import Selection from './pages/Selection';
 import Sector from './pages/Sector';
 import Review from './pages/Review';
+import SelectionHistory from './pages/SelectionHistory';
 import Agents from './pages/Agents';
 import Strategy from './pages/Strategy';
 import AutoTrading from './pages/AutoTrading';
@@ -32,6 +33,7 @@ function App() {
               <Route path="auto-trading" element={<AutoTrading />} />
               <Route path="positions" element={<Positions />} />
               <Route path="selection" element={<Selection />} />
+              <Route path="selection-history" element={<SelectionHistory />} />
               <Route path="sector" element={<Sector />} />
               <Route path="review" element={<Review />} />
               <Route path="agents" element={<Agents />} />

@@ -48,6 +48,16 @@ public class SelectionController : ControllerBase
         return Ok(results);
     }
 
+    /// <summary>导入外部选股结果（历史未入库的批次）。date 为该批选股所基于的交易日(yyyy-MM-dd)。</summary>
+    [HttpPost("import")]
+    public async Task<ActionResult> Import([FromBody] List<StockSelectionResult>? picks, [FromQuery] string? date, CancellationToken ct = default)
+    {
+        if (picks == null || picks.Count == 0) return BadRequest("无选股数据");
+        var d = DateTime.TryParse(date, out var parsed) ? parsed : DateTime.Today.AddDays(-1);
+        var n = await _selection.ImportAsync(picks, d, ct);
+        return Ok(new { imported = n, tradingDate = d.Date.ToString("yyyy-MM-dd") });
+    }
+
     /// <summary>选股历史记录列表（元信息，按选股时间倒序）。</summary>
     [HttpGet("history")]
     public async Task<ActionResult<List<SelectionHistoryItem>>> History([FromQuery] int take = 30, CancellationToken ct = default)
@@ -62,6 +72,14 @@ public class SelectionController : ControllerBase
     {
         var results = await _selection.GetByIdAsync(id, ct);
         return Ok(results);
+    }
+
+    /// <summary>某批选股的选后表现：次日/至今涨跌、选中后最高涨幅与最低跌幅（按日K）。</summary>
+    [HttpGet("history/{id:long}/performance")]
+    public async Task<ActionResult<SelectionPerformance>> HistoryPerformance(long id, CancellationToken ct)
+    {
+        var perf = await _selection.GetPerformanceAsync(id, ct);
+        return perf == null ? NotFound() : Ok(perf);
     }
 
     /// <summary>仅返回第一级活跃度粗筛池（调试/观察用）。</summary>

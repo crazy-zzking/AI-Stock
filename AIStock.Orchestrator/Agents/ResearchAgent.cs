@@ -37,7 +37,7 @@ public class ResearchAgent : IAgent
 
     public async Task<AgentResult> ExecuteAsync(AgentTask task)
     {
-        var startTime = DateTime.UtcNow;
+        var startTime = DateTime.Now;
         AgentResult result;
 
         try
@@ -57,7 +57,7 @@ public class ResearchAgent : IAgent
             {
                 Success = false,
                 Message = ex.Message,
-                ExecutionTime = (long)(DateTime.UtcNow - startTime).TotalMilliseconds
+                ExecutionTime = (long)(DateTime.Now - startTime).TotalMilliseconds
             };
         }
 
@@ -76,13 +76,13 @@ public class ResearchAgent : IAgent
         {
             AgentId = AgentId,
             IsOnline = true,
-            LastActiveTime = DateTime.UtcNow
+            LastActiveTime = DateTime.Now
         });
     }
 
     private async Task<AgentResult> AnalyzeStockAsync(AgentTask task)
     {
-        var startTime = DateTime.UtcNow;
+        var startTime = DateTime.Now;
         var code = task.Parameters.GetValueOrDefault("code")?.ToString() ?? "";
 
         var provider = _dataProviderResolver.GetDefaultProvider();
@@ -135,13 +135,13 @@ public class ResearchAgent : IAgent
             Success = true,
             Output = analysis,
             Message = $"Analysis completed for {code}",
-            ExecutionTime = (long)(DateTime.UtcNow - startTime).TotalMilliseconds
+            ExecutionTime = (long)(DateTime.Now - startTime).TotalMilliseconds
         };
     }
 
     private async Task<AgentResult> GetMarketOverviewAsync(AgentTask task)
     {
-        var startTime = DateTime.UtcNow;
+        var startTime = DateTime.Now;
 
         var provider = _dataProviderResolver.GetDefaultProvider();
         var indexCode = task.Parameters.GetValueOrDefault("indexCode")?.ToString() ?? "000001";
@@ -175,7 +175,7 @@ public class ResearchAgent : IAgent
             Success = true,
             Output = overview,
             Message = "Market overview retrieved",
-            ExecutionTime = (long)(DateTime.UtcNow - startTime).TotalMilliseconds
+            ExecutionTime = (long)(DateTime.Now - startTime).TotalMilliseconds
         };
     }
 }

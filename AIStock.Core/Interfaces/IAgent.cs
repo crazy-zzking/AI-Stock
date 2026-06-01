@@ -56,7 +56,7 @@ public class AgentTask
     /// <summary>
     /// 创建时间
     /// </summary>
-    public DateTime CreateTime { get; set; } = DateTime.UtcNow;
+    public DateTime CreateTime { get; set; } = DateTime.Now;
 }
 
 /// <summary>

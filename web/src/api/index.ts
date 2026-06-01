@@ -75,6 +75,8 @@ export const getSelectionHistory = (take = 30) =>
   api.get('/selection/history', { params: { take } });
 // 按 id 取某次选股的完整结果
 export const getSelectionById = (id: number) => api.get(`/selection/history/${id}`);
+// 某批选股的选后表现（次日/至今涨跌、最高涨幅、最低跌幅）
+export const getSelectionPerformance = (id: number) => api.get(`/selection/history/${id}/performance`);
 export const getActivityPool = () => api.get('/selection/activity');
 
 // ============ 每日复盘 ============

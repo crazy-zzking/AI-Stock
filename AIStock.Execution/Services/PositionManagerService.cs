@@ -67,7 +67,7 @@ public class PositionManagerService : IPositionManager
     public async Task<PositionSummary> RefreshAsync()
     {
         var summary = await FetchFromProviderAsync();
-        summary.UpdatedAt = DateTime.UtcNow;
+        summary.UpdatedAt = DateTime.Now;
 
         if (_redis != null)
         {
@@ -80,7 +80,7 @@ public class PositionManagerService : IPositionManager
                     var json = JsonSerializer.Serialize(accountInfo, JsonOptions);
                     var db = _redis.GetDatabase();
                     await db.StringSetAsync(CacheKey, json);
-                    await db.StringSetAsync(UpdatedKey, DateTime.UtcNow.ToString("O"));
+                    await db.StringSetAsync(UpdatedKey, DateTime.Now.ToString("O"));
                     _logger.LogInformation("Position cache refreshed via API");
                 }
             }

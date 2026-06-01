@@ -44,8 +44,7 @@ public class PositionCacheService
     {
         try
         {
-            var now = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow,
-                TimeZoneInfo.FindSystemTimeZoneById("China Standard Time"));
+            var now = DateTime.Now; // 本地即北京时间
 
             // 非交易日 / 非交易时段一律跳过：休市时散户接口必然返回空，没必要调用，也避免日志刷屏
             if (!await _tradingCalendar.IsTradingDayAsync(now.Date, ct))
@@ -101,7 +100,7 @@ public class PositionCacheService
         var db = _redis.GetDatabase();
 
         await db.StringSetAsync(CacheKey, json);
-        await db.StringSetAsync(UpdatedKey, DateTime.UtcNow.ToString("O"));
+        await db.StringSetAsync(UpdatedKey, DateTime.Now.ToString("O"));
 
         _logger.LogInformation(
             "Position cache updated: TotalAssets={TotalAssets}, Positions={Count}",

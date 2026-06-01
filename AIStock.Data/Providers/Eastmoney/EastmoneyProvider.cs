@@ -150,7 +150,7 @@ public class EastmoneyProvider : BaseProvider
                 FloatMarketCap = data.TryGetProperty("f117", out var fmcEl) ? GetDecimal(fmcEl) : 0,
                 PeTtm = data.TryGetProperty("f162", out var peEl) ? GetDecimal(peEl, 100) : 0,
                 Pb = data.TryGetProperty("f167", out var pbEl) ? GetDecimal(pbEl, 100) : 0,
-                Timestamp = DateTime.UtcNow,
+                Timestamp = DateTime.Now,
                 Source = ProviderId
             };
 

@@ -96,11 +96,11 @@ public class StockBaseEntity
     /// 创建时间
     /// </summary>
     [Column("created_at")]
-    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime CreatedAt { get; set; } = DateTime.Now;
 
     /// <summary>
     /// 更新时间
     /// </summary>
     [Column("updated_at")]
-    public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime UpdatedAt { get; set; } = DateTime.Now;
 }

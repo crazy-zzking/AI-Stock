@@ -172,7 +172,7 @@ public class TradeSignal
     /// <summary>
     /// 信号时间
     /// </summary>
-    public DateTime SignalTime { get; set; } = DateTime.UtcNow;
+    public DateTime SignalTime { get; set; } = DateTime.Now;
 
     /// <summary>
     /// 止损价

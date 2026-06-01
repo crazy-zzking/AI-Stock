@@ -33,7 +33,7 @@ public class EventStockRelationEntity
     /// 创建时间
     /// </summary>
     [Column("created_at")]
-    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime CreatedAt { get; set; } = DateTime.Now;
 
     /// <summary>
     /// 导航属性 - 事件记录
@@ -72,7 +72,7 @@ public class EventConceptRelationEntity
     /// 创建时间
     /// </summary>
     [Column("created_at")]
-    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime CreatedAt { get; set; } = DateTime.Now;
 
     /// <summary>
     /// 导航属性 - 事件记录

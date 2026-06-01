@@ -83,5 +83,5 @@ public class PositionEntity
     /// 更新时间
     /// </summary>
     [Column("updated_at")]
-    public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime UpdatedAt { get; set; } = DateTime.Now;
 }

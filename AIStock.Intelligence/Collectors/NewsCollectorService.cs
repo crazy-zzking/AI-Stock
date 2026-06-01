@@ -66,8 +66,8 @@ public class NewsCollectorService : INewsCollector
                                     Source = "东方财富",
                                     Url = $"https://data.eastmoney.com/notices/detail/{stockCode}/{item.GetProperty("art_code").GetString()}.html",
                                     PublishTime = item.TryGetProperty("notice_date", out var date)
-                                        ? DateTime.Parse(date.GetString() ?? DateTime.UtcNow.ToString())
-                                        : DateTime.UtcNow,
+                                        ? DateTime.Parse(date.GetString() ?? DateTime.Now.ToString())
+                                        : DateTime.Now,
                                     Category = "公告"
                                 };
 
@@ -127,8 +127,8 @@ public class NewsCollectorService : INewsCollector
                                 Source = item.TryGetProperty("mediaName", out var source) ? source.GetString() ?? "" : "",
                                 Url = item.TryGetProperty("url", out var urlEl) ? urlEl.GetString() ?? "" : "",
                                 PublishTime = item.TryGetProperty("date", out var date)
-                                    ? DateTime.Parse(date.GetString() ?? DateTime.UtcNow.ToString())
-                                    : DateTime.UtcNow,
+                                    ? DateTime.Parse(date.GetString() ?? DateTime.Now.ToString())
+                                    : DateTime.Now,
                                 Summary = item.TryGetProperty("content", out var content) ? content.GetString() : null
                             };
 
@@ -169,7 +169,7 @@ public class NewsCollectorService : INewsCollector
         try
         {
             // 东财新闻列表接口需要 biz / req_trace / column 参数
-            var reqTrace = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds().ToString();
+            var reqTrace = DateTimeOffset.Now.ToUnixTimeMilliseconds().ToString();
             var url = $"https://np-listapi.eastmoney.com/comm/web/getNewsByColumns?client=web&biz=web_news_col&req_trace={reqTrace}&column={columns}&order=1&needInteractData=0&pageSize={count}&pageNo=1";
             var response = await _httpClient.GetStringAsync(url, cancellationToken);
 
@@ -198,8 +198,8 @@ public class NewsCollectorService : INewsCollector
                                     Source = item.TryGetProperty("mediaName", out var source) ? source.GetString() ?? "东方财富" : "东方财富",
                                     Url = newsUrl,
                                     PublishTime = item.TryGetProperty("showTime", out var time)
-                                        ? DateTime.Parse(time.GetString() ?? DateTime.UtcNow.ToString())
-                                        : DateTime.UtcNow,
+                                        ? DateTime.Parse(time.GetString() ?? DateTime.Now.ToString())
+                                        : DateTime.Now,
                                     Summary = item.TryGetProperty("summary", out var digest) ? digest.GetString() : null,
                                     Category = category
                                 };

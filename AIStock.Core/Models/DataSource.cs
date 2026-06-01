@@ -54,7 +54,7 @@ public class AnalysisResultBase
     /// <summary>
     /// 分析时间
     /// </summary>
-    public DateTime AnalysisTime { get; set; } = DateTime.UtcNow;
+    public DateTime AnalysisTime { get; set; } = DateTime.Now;
 
     /// <summary>
     /// 添加数据源

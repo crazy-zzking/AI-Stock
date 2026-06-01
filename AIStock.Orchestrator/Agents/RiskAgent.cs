@@ -33,7 +33,7 @@ public class RiskAgent : IAgent
 
     public async Task<AgentResult> ExecuteAsync(AgentTask task)
     {
-        var startTime = DateTime.UtcNow;
+        var startTime = DateTime.Now;
         AgentResult result;
 
         try
@@ -53,7 +53,7 @@ public class RiskAgent : IAgent
             {
                 Success = false,
                 Message = ex.Message,
-                ExecutionTime = (long)(DateTime.UtcNow - startTime).TotalMilliseconds
+                ExecutionTime = (long)(DateTime.Now - startTime).TotalMilliseconds
             };
         }
 
@@ -71,13 +71,13 @@ public class RiskAgent : IAgent
         {
             AgentId = AgentId,
             IsOnline = true,
-            LastActiveTime = DateTime.UtcNow
+            LastActiveTime = DateTime.Now
         });
     }
 
     private async Task<AgentResult> CheckRiskAsync(AgentTask task)
     {
-        var startTime = DateTime.UtcNow;
+        var startTime = DateTime.Now;
 
         TradeSignal? signal = null;
         List<PortfolioPosition> positions = new();
@@ -109,13 +109,13 @@ public class RiskAgent : IAgent
                 ["riskCheckResult"] = result
             },
             Message = result.Passed ? "Risk check passed" : $"Risk check failed: {result.Suggestion}",
-            ExecutionTime = (long)(DateTime.UtcNow - startTime).TotalMilliseconds
+            ExecutionTime = (long)(DateTime.Now - startTime).TotalMilliseconds
         };
     }
 
     private Task<AgentResult> CalculateStopLossAsync(AgentTask task)
     {
-        var startTime = DateTime.UtcNow;
+        var startTime = DateTime.Now;
 
         TradeSignal? signal = null;
         List<KlineData> klines = new();
@@ -146,7 +146,7 @@ public class RiskAgent : IAgent
                 ["takeProfit"] = takeProfit
             },
             Message = "Stop loss calculated",
-            ExecutionTime = (long)(DateTime.UtcNow - startTime).TotalMilliseconds
+            ExecutionTime = (long)(DateTime.Now - startTime).TotalMilliseconds
         });
     }
 }

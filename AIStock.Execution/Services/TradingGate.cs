@@ -103,7 +103,7 @@ public class TradingGate : ITradingGate
     {
         lock (_lock)
         {
-            var now = DateTime.UtcNow;
+            var now = DateTime.Now;
             _buyReservations.RemoveAll(r => r.Expiry <= now);
             var reserved = _buyReservations.Sum(r => r.Amount);
 
@@ -132,7 +132,7 @@ public class TradingGate : ITradingGate
     {
         lock (_lock)
         {
-            if (_stockSuspensions.TryGetValue(code, out var until) && DateTime.UtcNow < until)
+            if (_stockSuspensions.TryGetValue(code, out var until) && DateTime.Now < until)
             {
                 rejectReason = $"{code} 已被暂停交易，解禁时间: {until:HH:mm:ss} UTC";
                 return false;
@@ -146,7 +146,7 @@ public class TradingGate : ITradingGate
     {
         lock (_lock)
         {
-            var until = DateTime.UtcNow.Add(duration);
+            var until = DateTime.Now.Add(duration);
             _stockSuspensions[code] = until;
             _failureCounts.Remove(code);
         }
@@ -163,7 +163,7 @@ public class TradingGate : ITradingGate
 
             if (count >= FailureThreshold)
             {
-                var until = DateTime.UtcNow.Add(DefaultSuspendDuration);
+                var until = DateTime.Now.Add(DefaultSuspendDuration);
                 _stockSuspensions[code] = until;
                 _failureCounts.Remove(code);
                 _logger.LogWarning("股票 {Code} 连续下单失败 {Count} 次，自动暂停 {Minutes} 分钟",

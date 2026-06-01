@@ -278,13 +278,32 @@ public class StockSelectionService
         _db.SelectionResult.Add(new SelectionResultEntity
         {
             TradingDate = tradingDate.Value,
-            RunAt = DateTime.UtcNow,
+            RunAt = DateTime.Now,
             TopN = criteria.TopN,
             ResultsJson = JsonSerializer.Serialize(results),
         });
         await _db.SaveChangesAsync(ct);
         _logger.LogInformation("选股结果已记录：{Date} TOP{Top}（追加历史）", tradingDate.Value.ToString("yyyy-MM-dd"), results.Count);
         return results;
+    }
+
+    /// <summary>
+    /// 导入外部选股结果（如历史未入库的选股），追加一条记录。
+    /// RunAt 归到选股交易日 17:00，避免把历史数据当成"最新一次"。
+    /// </summary>
+    public async Task<int> ImportAsync(List<StockSelectionResult> picks, DateTime tradingDate, CancellationToken ct = default)
+    {
+        if (picks.Count == 0) return 0;
+        _db.SelectionResult.Add(new SelectionResultEntity
+        {
+            TradingDate = tradingDate.Date,
+            RunAt = tradingDate.Date.AddHours(17),
+            TopN = picks.Count,
+            ResultsJson = JsonSerializer.Serialize(picks),
+        });
+        await _db.SaveChangesAsync(ct);
+        _logger.LogInformation("导入选股结果：{Date}，{Count} 只", tradingDate.ToString("yyyy-MM-dd"), picks.Count);
+        return picks.Count;
     }
 
     /// <summary>选股历史记录元信息（不含明细），按选股时间倒序。</summary>
@@ -309,6 +328,72 @@ public class StockSelectionService
     {
         var row = await _db.SelectionResult.FirstOrDefaultAsync(r => r.Id == id, ct);
         return row == null ? new() : Deserialize(row.ResultsJson, 0);
+    }
+
+    /// <summary>
+    /// 某批选股的"选后表现"：以选股日收盘为基准，从日K算 次日/至今累计涨跌、选中后最高涨幅与最低跌幅。
+    /// </summary>
+    public async Task<SelectionPerformance?> GetPerformanceAsync(long id, CancellationToken ct = default)
+    {
+        var row = await _db.SelectionResult.FirstOrDefaultAsync(r => r.Id == id, ct);
+        if (row == null) return null;
+
+        var picks = Deserialize(row.ResultsJson, 0);
+        var selDate = row.TradingDate.Date;
+        var codes = picks.Select(p => p.Code).Distinct().ToList();
+        const string interval = nameof(Core.Enums.KlineInterval.Daily);
+
+        // 取选股日(含)起的日K，用于定基准价 + 区间最高/最低/最新
+        var bars = (await _db.KlineData
+                .Where(k => k.Interval == interval && codes.Contains(k.Code) && k.DateTime >= selDate)
+                .Select(k => new { k.Code, k.DateTime, k.Close, k.High, k.Low })
+                .ToListAsync(ct))
+            .GroupBy(b => b.Code)
+            .ToDictionary(g => g.Key, g => g.OrderBy(x => x.DateTime).ToList());
+
+        DateTime? latestDate = bars.Values.SelectMany(v => v).Select(b => (DateTime?)b.DateTime).Max();
+
+        var items = new List<SelectionPerformanceItem>();
+        foreach (var p in picks)
+        {
+            var item = new SelectionPerformanceItem
+            {
+                Code = p.Code,
+                Name = p.Name,
+                SelectClose = p.Close,
+                SelectChangePercent = p.ChangePercent,
+            };
+
+            if (bars.TryGetValue(p.Code, out var list) && list.Count > 0)
+            {
+                var baseBar = list.FirstOrDefault(b => b.DateTime.Date == selDate);
+                var basePrice = baseBar?.Close ?? (p.Close > 0 ? p.Close : list[0].Close);
+                var forward = list.Where(b => b.DateTime.Date > selDate).ToList();
+                if (basePrice > 0 && forward.Count > 0)
+                {
+                    decimal Pct(decimal v) => Math.Round((v - basePrice) / basePrice * 100m, 2);
+                    item.NextDayChangePercent = Pct(forward[0].Close);
+                    item.CurrentChangePercent = Pct(forward[^1].Close);
+                    item.MaxRisePercent = Pct(forward.Max(b => b.High));
+                    item.MaxDropPercent = Pct(forward.Min(b => b.Low));
+                    item.ForwardDays = forward.Count;
+                }
+            }
+            items.Add(item);
+        }
+
+        var withData = items.Where(i => i.CurrentChangePercent.HasValue).ToList();
+        return new SelectionPerformance
+        {
+            Id = row.Id,
+            SelectionTradingDate = selDate,
+            RunAt = row.RunAt,
+            Count = items.Count,
+            LatestDate = latestDate,
+            HitCount = withData.Count(i => i.CurrentChangePercent > 0),
+            AvgCurrentChange = withData.Count > 0 ? Math.Round(withData.Average(i => i.CurrentChangePercent!.Value), 2) : 0,
+            Items = items,
+        };
     }
 
     private static List<StockSelectionResult> Deserialize(string json, int topN)

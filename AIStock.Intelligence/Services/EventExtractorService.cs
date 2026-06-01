@@ -120,7 +120,7 @@ public class EventExtractorService : IEventExtractor
                 EventType = eventType,
                 Title = ExtractTitle(text),
                 Content = text,
-                EventTime = DateTime.UtcNow
+                EventTime = DateTime.Now
             };
 
             if (root.TryGetProperty("relatedCompanies", out var companies))
@@ -198,7 +198,7 @@ public class EventExtractorService : IEventExtractor
             EventType = eventType,
             Title = ExtractTitle(text),
             Content = text,
-            EventTime = DateTime.UtcNow
+            EventTime = DateTime.Now
         };
     }
 }

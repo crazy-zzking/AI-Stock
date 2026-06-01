@@ -70,8 +70,8 @@ public class GraphPromotionService
                         {
                             StockCode = code,
                             ConceptName = edge.ToEntity,
-                            CreatedAt = DateTime.UtcNow,
-                            UpdatedAt = DateTime.UtcNow
+                            CreatedAt = DateTime.Now,
+                            UpdatedAt = DateTime.Now
                         });
                 }
                 else if (edge.EdgeType == "co-occur")
@@ -86,8 +86,8 @@ public class GraphPromotionService
                             RelationType = "related",
                             Weight = Math.Min(1.0m, edge.MentionCount / 10m),
                             Description = $"小作文共现晋升（提及{edge.MentionCount}次，可信度{edge.Credibility}）",
-                            CreatedAt = DateTime.UtcNow,
-                            UpdatedAt = DateTime.UtcNow
+                            CreatedAt = DateTime.Now,
+                            UpdatedAt = DateTime.Now
                         });
                 }
                 else
@@ -96,7 +96,7 @@ public class GraphPromotionService
                 }
 
                 edge.Promoted = true;
-                edge.UpdatedAt = DateTime.UtcNow;
+                edge.UpdatedAt = DateTime.Now;
                 promoted++;
             }
             catch (Exception ex)

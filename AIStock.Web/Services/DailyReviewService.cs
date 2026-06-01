@@ -118,7 +118,7 @@ public class DailyReviewService
         var report = new DailyReviewReport
         {
             TradingDate = date,
-            GeneratedAt = DateTime.UtcNow,
+            GeneratedAt = DateTime.Now,
         };
 
         var snaps = await _db.DailyMarketSnapshot.Where(s => s.Date == date).ToListAsync(ct);

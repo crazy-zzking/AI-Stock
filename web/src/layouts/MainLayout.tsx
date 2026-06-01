@@ -43,6 +43,11 @@ const menuItems = [
     label: '选股',
   },
   {
+    key: '/selection-history',
+    icon: <HistoryOutlined />,
+    label: '历史选股',
+  },
+  {
     key: '/sector',
     icon: <FireOutlined />,
     label: '板块资金',

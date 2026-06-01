@@ -27,5 +27,5 @@ public class ConceptBoardEntity
     public string BoardType { get; set; } = string.Empty;
 
     [Column("updated_at")]
-    public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime UpdatedAt { get; set; } = DateTime.Now;
 }

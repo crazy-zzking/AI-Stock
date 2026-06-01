@@ -43,7 +43,7 @@ public class AgentOrchestrator : IAgentOrchestrator
         activity?.SetTag("workflow.id", workflow.WorkflowId);
         activity?.SetTag("workflow.name", workflow.Name);
         activity?.SetTag("workflow.steps", workflow.Steps.Count);
-        var startTime = DateTime.UtcNow;
+        var startTime = DateTime.Now;
         var result = new WorkflowResult
         {
             WorkflowId = workflow.WorkflowId
@@ -88,7 +88,7 @@ public class AgentOrchestrator : IAgentOrchestrator
                         result.Success = false;
                         result.StepResults = stepResults;
                         result.FinalOutput["error"] = $"Step {stepId} failed: {agentResult.Message}";
-                        result.TotalExecutionTime = (long)(DateTime.UtcNow - startTime).TotalMilliseconds;
+                        result.TotalExecutionTime = (long)(DateTime.Now - startTime).TotalMilliseconds;
                         return result;
                     }
                 }
@@ -110,7 +110,7 @@ public class AgentOrchestrator : IAgentOrchestrator
             result.FinalOutput["error"] = ex.Message;
         }
 
-        result.TotalExecutionTime = (long)(DateTime.UtcNow - startTime).TotalMilliseconds;
+        result.TotalExecutionTime = (long)(DateTime.Now - startTime).TotalMilliseconds;
         activity?.SetTag("workflow.success", result.Success);
         activity?.SetTag("workflow.duration_ms", result.TotalExecutionTime);
         return result;

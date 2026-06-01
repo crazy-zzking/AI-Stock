@@ -52,7 +52,7 @@ public class AgentMemoryService : IAgentMemory
                 Success = result.Success,
                 Message = result.Message,
                 ExecutionTimeMs = result.ExecutionTime,
-                CreatedAt = DateTime.UtcNow
+                CreatedAt = DateTime.Now
             };
 
             dbContext.AgentMemory.Add(entity);

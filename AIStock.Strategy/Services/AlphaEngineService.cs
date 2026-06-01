@@ -41,7 +41,7 @@ public class AlphaEngineService : IAlphaEngine
         {
             Code = code,
             StrategyName = "AlphaEngine",
-            SignalTime = DateTime.UtcNow
+            SignalTime = DateTime.Now
         };
 
         if (buyStrength > sellStrength && buySignals.Count > 0)

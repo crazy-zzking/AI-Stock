@@ -68,7 +68,7 @@ public class TencentProvider : BaseProvider
                 ChangePercent = decimal.TryParse(parts[32], out var changePct) ? changePct : 0,
                 ChangeAmount = decimal.TryParse(parts[31], out var changeAmt) ? changeAmt : 0,
                 Amount = decimal.TryParse(parts[37], out var amount) ? amount : 0,
-                Timestamp = DateTime.UtcNow,
+                Timestamp = DateTime.Now,
                 Source = ProviderId
             };
 
@@ -119,7 +119,7 @@ public class TencentProvider : BaseProvider
                     ChangePercent = decimal.TryParse(parts[32], out var changePct) ? changePct : 0,
                     ChangeAmount = decimal.TryParse(parts[31], out var changeAmt) ? changeAmt : 0,
                     Amount = decimal.TryParse(parts[37], out var amount) ? amount : 0,
-                    Timestamp = DateTime.UtcNow,
+                    Timestamp = DateTime.Now,
                     Source = ProviderId
                 };
 

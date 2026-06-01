@@ -114,7 +114,7 @@ public class SpreadAnalyzerServiceTests
     public async Task AnalyzeSpread_Conclusion_ContainsFirstSourceAndHeat()
     {
         using var db = NewDb();
-        var t = DateTime.UtcNow.AddMinutes(-30); // 近 24h 内，保证 CurrentHeat 有效
+        var t = DateTime.Now.AddMinutes(-30); // 近 24h 内，保证 CurrentHeat 有效
         db.EventRecord.Add(Event("光伏大利好", "财联社", t));
         await db.SaveChangesAsync();
         var svc = NewService(db);
@@ -129,7 +129,7 @@ public class SpreadAnalyzerServiceTests
     public async Task CalculateHeatSlope_LessThanTwoBuckets_ReturnsZero()
     {
         using var db = NewDb();
-        db.EventRecord.Add(Event("光伏", "财联社", DateTime.UtcNow.AddMinutes(-10)));
+        db.EventRecord.Add(Event("光伏", "财联社", DateTime.Now.AddMinutes(-10)));
         await db.SaveChangesAsync();
         var svc = NewService(db);
 

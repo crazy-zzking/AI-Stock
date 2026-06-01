@@ -74,7 +74,7 @@ public partial class DataSyncService
         var db = scope.ServiceProvider.GetRequiredService<AIStockDbContext>();
 
         var existing = await db.StockBase.ToDictionaryAsync(s => s.Code, ct);
-        var now = DateTime.UtcNow;
+        var now = DateTime.Now;
         var upserted = 0;
 
         foreach (var s in stocks)
@@ -205,7 +205,7 @@ public partial class DataSyncService
                         TurnoverRate = k.TurnoverRate,
                         ChangePercent = k.ChangePercent,
                         Source = provider.ProviderName,
-                        CreatedAt = DateTime.UtcNow
+                        CreatedAt = DateTime.Now
                     })
                     .ToList();
 

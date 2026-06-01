@@ -151,8 +151,8 @@ public class LLMService : ILLMService
     public async Task<LLMConfig> AddModelConfigAsync(LLMConfig config)
     {
         var entity = MapToEntity(config);
-        entity.CreatedAt = DateTime.UtcNow;
-        entity.UpdatedAt = DateTime.UtcNow;
+        entity.CreatedAt = DateTime.Now;
+        entity.UpdatedAt = DateTime.Now;
         _dbContext.LLMModelConfig.Add(entity);
         await _dbContext.SaveChangesAsync();
 
@@ -177,7 +177,7 @@ public class LLMService : ILLMService
         entity.MaxTokens = config.MaxTokens;
         entity.Temperature = config.Temperature;
         entity.Description = config.Description;
-        entity.UpdatedAt = DateTime.UtcNow;
+        entity.UpdatedAt = DateTime.Now;
 
         await _dbContext.SaveChangesAsync();
 

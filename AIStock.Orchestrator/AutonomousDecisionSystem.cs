@@ -35,7 +35,7 @@ public class AutonomousDecisionSystem
     /// </summary>
     public async Task<DecisionResult> MakeDecisionAsync(DecisionRequest request)
     {
-        var startTime = DateTime.UtcNow;
+        var startTime = DateTime.Now;
         var result = new DecisionResult
         {
             Code = request.Code
@@ -132,7 +132,7 @@ public class AutonomousDecisionSystem
             result.Message = ex.Message;
         }
 
-        result.ExecutionTime = (long)(DateTime.UtcNow - startTime).TotalMilliseconds;
+        result.ExecutionTime = (long)(DateTime.Now - startTime).TotalMilliseconds;
         _logger.LogInformation(
             "Decision finished {Code} success={Success} orders={OrderCount} totalMs={ElapsedMs}",
             request.Code, result.Success, result.Orders.Count, result.ExecutionTime);

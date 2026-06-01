@@ -80,8 +80,7 @@ public class MonitorBackgroundService : BackgroundService
     {
         try
         {
-            var now = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow,
-                TimeZoneInfo.FindSystemTimeZoneById("China Standard Time"));
+            var now = DateTime.Now; // 本地即北京时间
 
             if (!await _tradingCalendar.IsTradingDayAsync(now.Date, ct))
                 return false;
