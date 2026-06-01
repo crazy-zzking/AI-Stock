@@ -112,6 +112,11 @@ public class AIStockDbContext : DbContext
     /// </summary>
     public DbSet<DailyReviewEntity> DailyReview { get; set; }
 
+    /// <summary>
+    /// 东财板块目录（概念/行业/地域板块清单）
+    /// </summary>
+    public DbSet<ConceptBoardEntity> ConceptBoard { get; set; }
+
     public override int SaveChanges()
     {
         UpdateTimestamps();
@@ -312,6 +317,13 @@ public class AIStockDbContext : DbContext
         {
             entity.HasKey(e => e.Id);
             entity.HasIndex(e => e.TradingDate).IsUnique();
+        });
+
+        // 东财板块目录（board_code 主键）
+        modelBuilder.Entity<ConceptBoardEntity>(entity =>
+        {
+            entity.HasKey(e => e.BoardCode);
+            entity.HasIndex(e => e.BoardType);
         });
     }
 }

@@ -102,6 +102,8 @@ public class HotThemeItem
 /// <summary>选股回测：最近一次选股结果在当日的表现</summary>
 public class SelectionReview
 {
+    /// <summary>被回测的那次选股所基于的交易日（即"为复盘日挑的"那批）</summary>
+    public DateTime SelectionTradingDate { get; set; }
     public DateTime SelectionRunAt { get; set; }
     public int Count { get; set; }
     /// <summary>上涨命中数（当日涨幅 &gt; 0）</summary>

@@ -29,7 +29,7 @@ interface Review {
   orders: { totalOrders: number; successOrders: number; failedOrders: number; buyOrders: number; sellOrders: number; totalValue: number; gateMode: string; };
   market: { totalCount: number; upCount: number; downCount: number; limitUpCount: number; totalMainNetInflow: number; avgChangePercent: number; };
   topSectors: SectorItem[]; topStocks: StockItem[]; hotThemes: ThemeItem[];
-  selection?: { selectionRunAt: string; count: number; hitCount: number; avgChangePercent: number; items: SelItem[]; };
+  selection?: { selectionTradingDate: string; selectionRunAt: string; count: number; hitCount: number; avgChangePercent: number; items: SelItem[]; };
   dataGaps: DataGap[];
 }
 
@@ -146,7 +146,7 @@ const Review: React.FC = () => {
 
           {/* 选股回测 */}
           {r.selection && (
-            <Card title={`选股回测 · ${r.selection.count}选${r.selection.hitCount}红 · 均${pct(r.selection.avgChangePercent)}`} size="small" style={{ marginBottom: 16 }}>
+            <Card title={`选股回测（${r.selection.selectionTradingDate?.slice(0, 10)} 选的票今日表现）· ${r.selection.count}选${r.selection.hitCount}红 · 均${pct(r.selection.avgChangePercent)}`} size="small" style={{ marginBottom: 16 }}>
               <List size="small" dataSource={r.selection.items}
                 renderItem={(it) => (
                   <List.Item>

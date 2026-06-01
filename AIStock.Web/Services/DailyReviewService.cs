@@ -132,7 +132,7 @@ public class DailyReviewService
 
         report.TopStocks = await BuildTopStocksAsync(snaps, date, hotConceptSet, ct);
         report.TopSectors = await BuildTopSectorsAsync(ct);
-        report.Selection = await BuildSelectionReviewAsync(snaps, ct);
+        report.Selection = await BuildSelectionReviewAsync(snaps, date, ct);
         report.DataGaps = await BuildDataGapsAsync(snaps, date, report.TopSectors, ct);
         report.Summary = BuildSummary(report);
 
@@ -325,14 +325,21 @@ public class DailyReviewService
         return result;
     }
 
-    // —— 选股回测：最近一次选股在当日的表现 ——
-    private async Task<SelectionReview?> BuildSelectionReviewAsync(List<DailyMarketSnapshotEntity> snaps, CancellationToken ct)
+    // —— 选股回测：复盘日"之前"最近一次选股（其标的本就是为复盘日挑的）在复盘日的表现 ——
+    private async Task<SelectionReview?> BuildSelectionReviewAsync(
+        List<DailyMarketSnapshotEntity> snaps, DateTime date, CancellationToken ct)
     {
-        var latest = await _db.SelectionResult.OrderByDescending(r => r.RunAt).FirstOrDefaultAsync(ct);
-        if (latest == null) return null;
+        // 选股是"明日可介入"：取基于更早交易日(< date)选出的那批，看它们在 date 当天表现，才是真回测。
+        // 排除当天才选的（TradingDate == date），否则等于用今天的票考今天、无意义。
+        var prior = await _db.SelectionResult
+            .Where(r => r.TradingDate < date)
+            .OrderByDescending(r => r.TradingDate)
+            .ThenByDescending(r => r.RunAt)
+            .FirstOrDefaultAsync(ct);
+        if (prior == null) return null;
 
         List<StockSelectionResult> picks;
-        try { picks = JsonSerializer.Deserialize<List<StockSelectionResult>>(latest.ResultsJson) ?? new(); }
+        try { picks = JsonSerializer.Deserialize<List<StockSelectionResult>>(prior.ResultsJson) ?? new(); }
         catch { return null; }
         if (picks.Count == 0) return null;
 
@@ -352,7 +359,8 @@ public class DailyReviewService
         var withData = items.Where(i => i.ChangePercent.HasValue).ToList();
         return new SelectionReview
         {
-            SelectionRunAt = latest.RunAt,
+            SelectionTradingDate = prior.TradingDate,
+            SelectionRunAt = prior.RunAt,
             Count = items.Count,
             HitCount = items.Count(i => i.Hit),
             AvgChangePercent = withData.Count > 0 ? Math.Round(withData.Average(i => i.ChangePercent!.Value), 2) : 0,

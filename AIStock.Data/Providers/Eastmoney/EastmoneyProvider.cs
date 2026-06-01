@@ -223,6 +223,48 @@ public class EastmoneyProvider : BaseProvider
     }
 
     /// <summary>
+    /// 获取指数日K（按 secid 直传，如上证综指 "1.000001"、深证成指 "0.399001"、创业板指 "0.399006"）。
+    /// 指数代码与个股代码前缀规则不同，不能走 GetMarketCode，需显式传 secid。
+    /// </summary>
+    public async Task<List<KlineData>> GetIndexDailyAsync(string secid, int count = 30, CancellationToken ct = default)
+    {
+        try
+        {
+            var url = $"{KlineUrl}?fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59&end=20500101&ut={UserToken}&rtntype=6&secid={secid}&klt=101&fqt=1&lmt={count}";
+            var response = await SendEastmoneyRequestAsync(url, ct);
+            if (response == null) return new List<KlineData>();
+
+            using var doc = JsonDocument.Parse(response);
+            if (!doc.RootElement.TryGetProperty("data", out var data) || data.ValueKind == JsonValueKind.Null)
+                return new List<KlineData>();
+
+            var result = new List<KlineData>();
+            foreach (var item in data.GetProperty("klines").EnumerateArray())
+            {
+                var p = item.GetString()?.Split(',');
+                if (p == null || p.Length < 3) continue;
+                result.Add(new KlineData
+                {
+                    Code = secid,
+                    DateTime = DateTime.Parse(p[0]),
+                    Open = decimal.Parse(p[1]),
+                    Close = decimal.Parse(p[2]),
+                    High = p.Length > 3 ? decimal.Parse(p[3]) : 0,
+                    Low = p.Length > 4 ? decimal.Parse(p[4]) : 0,
+                    ChangePercent = p.Length > 8 ? decimal.Parse(p[8]) : 0,
+                    Source = ProviderId
+                });
+            }
+            return result;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Failed to get index klines for {Secid}", secid);
+            return new List<KlineData>();
+        }
+    }
+
+    /// <summary>
     /// 获取分时数据
     /// </summary>
     public override async Task<List<IntradayData>> GetIntradayAsync(string code)

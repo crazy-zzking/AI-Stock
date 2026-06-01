@@ -23,14 +23,22 @@ public class StockConceptRelationEntity
     [StringLength(100)]
     public string ConceptName { get; set; } = string.Empty;
 
-    /// <summary>概念来源行情代码（同花顺 quote_code）</summary>
+    /// <summary>板块代码（东财 NEW_BOARD_CODE，如 BK0809）</summary>
     [Column("quote_code")]
     [StringLength(50)]
     public string? QuoteCode { get; set; }
 
-    /// <summary>概念ID（同花顺 concept_id）</summary>
+    /// <summary>概念ID（同花顺 concept_id，东财来源为空）</summary>
     [Column("concept_id")]
     public int? ConceptId { get; set; }
+
+    /// <summary>题材排名（东财 BOARD_RANK，越小越核心）</summary>
+    [Column("board_rank")]
+    public int? BoardRank { get; set; }
+
+    /// <summary>入选理由（东财 SELECTED_BOARD_REASON）</summary>
+    [Column("selected_reason", TypeName = "text")]
+    public string? SelectedReason { get; set; }
 
     [Column("created_at")]
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;

@@ -9,7 +9,7 @@ import { getLatestSelection, rerunSelection } from '../api';
 
 interface FactorScores {
   capital: number; technical: number; position: number;
-  dragonTiger: number; activity: number; form: number;
+  dragonTiger: number; activity: number; form: number; theme: number; sector: number;
 }
 interface SelectionResult {
   code: string; name: string; industry: string; concepts: string[]; hotConcepts: string[];
@@ -17,6 +17,7 @@ interface SelectionResult {
   close: number; changePercent: number; totalMarketCap: number;
   rise20d: number; peTtm: number; mainNetInflow: number;
   totalScore: number; factors: FactorScores; coreLogic: string;
+  marketRegime?: string;
 }
 
 const pct = (v: number) => `${v >= 0 ? '+' : ''}${(v ?? 0).toFixed(2)}%`;
@@ -80,11 +81,20 @@ const Selection: React.FC = () => {
         </Space>
       </h2>
 
+      {list[0]?.marketRegime && (
+        <Alert
+          type={list[0].marketRegime.includes('偏弱') ? 'error' : list[0].marketRegime.includes('偏强') ? 'success' : 'info'}
+          showIcon
+          style={{ marginBottom: 12 }}
+          message={list[0].marketRegime}
+        />
+      )}
+
       <Alert
         type="warning"
         showIcon
         style={{ marginBottom: 16 }}
-        message="筛选逻辑（埋伏型）：温和放量未涨停（规避追高/次日高开）+ 主力净流入为正 + 技术面多头未超买 + 20日涨幅<50%（低位）+ 龙虎榜阵容优质"
+        message="筛选逻辑（埋伏型）：温和放量未涨停（规避追高/次日高开）+ 主力净流入为正 + 技术面多头未超买 + 20日涨幅<50%（低位）+ 龙虎榜阵容优质；并结合大盘指数环境动态收紧/放宽"
       />
 
       {loading ? (
@@ -111,7 +121,7 @@ const Selection: React.FC = () => {
                 <Rate disabled value={r.ratingStars} style={{ fontSize: 14 }} />
               </Col>
               <Col style={{ textAlign: 'right' }}>
-                <Tooltip title={`资金${r.factors.capital}/技术${r.factors.technical}/位置${r.factors.position}/形态${r.factors.form}/龙虎${r.factors.dragonTiger}/活跃${r.factors.activity}`}>
+                <Tooltip title={`资金${r.factors.capital}/技术${r.factors.technical}/位置${r.factors.position}/形态${r.factors.form}/龙虎${r.factors.dragonTiger}/活跃${r.factors.activity}/题材${r.factors.theme}/板块${r.factors.sector}`}>
                   <span style={{ fontSize: 22, fontWeight: 700, color: '#52c41a' }}>No.{i + 1}</span>
                 </Tooltip>
                 <div>

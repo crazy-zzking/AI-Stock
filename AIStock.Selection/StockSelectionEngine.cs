@@ -28,18 +28,36 @@ public class StockSelectionEngine
         IReadOnlyList<ActivityScreener.ActivityHit> activePool,
         IReadOnlyDictionary<string, DragonTigerEntity> dragonTigerByCode,
         IReadOnlyDictionary<string, SequenceFeatures> sequenceByCode,
-        SelectionCriteria criteria)
+        SelectionCriteria criteria,
+        SelectionContext? context = null)
     {
         var results = new List<StockSelectionResult>();
+
+        // 大盘环境调节：弱市收紧（压追高线、要求资金净流入、整体降权），强市略放宽
+        var regime = context?.Regime;
+        var level = regime?.Level ?? MarketRegimeLevel.Neutral;
+        var maxRise20dEff = level == MarketRegimeLevel.Weak
+            ? Math.Min(criteria.MaxRise20d, 30m)
+            : criteria.MaxRise20d;
+        var minInflowEff = level == MarketRegimeLevel.Weak
+            ? Math.Max(criteria.MinMainNetInflow, 1m)   // 弱市要求主力实打实净流入（>0）
+            : criteria.MinMainNetInflow;
+        var scoreFactor = level switch
+        {
+            MarketRegimeLevel.Weak => 0.88m,
+            MarketRegimeLevel.Strong => 1.06m,
+            _ => 1.0m
+        };
+        var regimeNote = regime?.Description ?? string.Empty;
 
         foreach (var hit in activePool)
         {
             var s = hit.Snapshot;
 
-            // —— 硬过滤 ——
-            if (s.MainNetInflow < criteria.MinMainNetInflow) continue; // 主力净流入门槛
-            if (s.Rise20d > criteria.MaxRise20d) continue;             // 追高排除
-            if (s.Rsi > criteria.MaxRsi) continue;                     // 超买排除
+            // —— 硬过滤（受大盘环境调节）——
+            if (s.MainNetInflow < minInflowEff) continue; // 主力净流入门槛（弱市要求 >0）
+            if (s.Rise20d > maxRise20dEff) continue;       // 追高排除（弱市压到 30%）
+            if (s.Rsi > criteria.MaxRsi) continue;         // 超买排除
 
             dragonTigerByCode.TryGetValue(s.Code, out var dt);
             if (criteria.RequireDragonTiger && dt == null) continue;
@@ -53,13 +71,17 @@ public class StockSelectionEngine
             var form = ScoreForm(seq);            // 多日形态
             var dragon = ScoreDragonTiger(dt);
             var activity = Math.Min(hit.ActivityScore, 100m);
+            var theme = ScoreTheme(s.Code, context, out var hitHotConcepts);  // 题材合力
+            var sector = ScoreSector(s.Code, context);                        // 板块强弱
 
-            var total = capital * 0.22m + technical * 0.20m + position * 0.22m
-                        + form * 0.16m + dragon * 0.08m + activity * 0.12m;
+            var total = capital * 0.20m + technical * 0.16m + position * 0.18m
+                        + form * 0.12m + dragon * 0.06m + activity * 0.10m
+                        + theme * 0.10m + sector * 0.08m;
 
             // 涨停性质惩罚（多日）：区分低位首板（仍有空间，轻罚）与高位/连板（追高风险，重罚）
             total -= LimitUpPenalty(s, seq, criteria);
-            total = Math.Max(0m, total);
+            total *= scoreFactor;                  // 大盘环境整体调节
+            total = Math.Clamp(total, 0m, 100m);
 
             var result = new StockSelectionResult
             {
@@ -75,7 +97,7 @@ public class StockSelectionEngine
                 ConsecutiveLimitUp = seq.ConsecutiveLimitUp,
                 TotalScore = Math.Round(total, 1),
                 RatingStars = ToStars(total),
-                Tags = BuildTags(s, dt, hit.Features, seq),
+                Tags = BuildTags(s, dt, hit.Features, seq, hitHotConcepts, sector),
                 Factors = new SelectionFactorScores
                 {
                     Capital = Math.Round(capital, 1),
@@ -83,7 +105,9 @@ public class StockSelectionEngine
                     Position = Math.Round(position, 1),
                     DragonTiger = Math.Round(dragon, 1),
                     Activity = Math.Round(activity, 1),
-                    Form = Math.Round(form, 1)
+                    Form = Math.Round(form, 1),
+                    Theme = Math.Round(theme, 1),
+                    Sector = Math.Round(sector, 1)
                 }
             };
 
@@ -93,6 +117,7 @@ public class StockSelectionEngine
                 DragonTiger = dt,
                 ActivityFeatures = hit.Features
             });
+            result.MarketRegime = regimeNote;
 
             results.Add(result);
         }
@@ -127,6 +152,31 @@ public class StockSelectionEngine
         if (seq.PullbackStabilize) score += 25;
         if (seq.StairVolume) score += 15;
         return Math.Min(score, 100m);
+    }
+
+    // 题材合力：命中当日热门题材（活跃股扎堆的概念）加分；命中越多、题材越热越高。
+    private static decimal ScoreTheme(string code, SelectionContext? ctx, out List<string> hitHotConcepts)
+    {
+        hitHotConcepts = new List<string>();
+        if (ctx == null || !ctx.ConceptsByCode.TryGetValue(code, out var concepts) || concepts.Count == 0)
+            return 30m; // 无概念数据：中性偏低
+
+        var hits = concepts.Where(c => ctx.HotConcepts.ContainsKey(c)).ToList();
+        if (hits.Count == 0) return 30m; // 有概念但未踩中风口
+
+        // 命中热门题材：基础 60，命中个数与最高热度加成
+        hitHotConcepts = hits.OrderByDescending(c => ctx.HotConcepts[c]).ToList();
+        var maxHeat = hits.Max(c => ctx.HotConcepts[c]);
+        var score = 60m + Math.Min((hits.Count - 1) * 10m, 20m) + Math.Min(maxHeat * 3m, 20m);
+        return Math.Min(score, 100m);
+    }
+
+    // 板块强弱：个股所属行业当日强度分位（0-100），强势板块的票溢价、弱势板块降权。
+    private static decimal ScoreSector(string code, SelectionContext? ctx)
+    {
+        if (ctx == null || !ctx.IndustryByCode.TryGetValue(code, out var industry))
+            return 50m;
+        return ctx.IndustryStrength.TryGetValue(industry, out var st) ? st : 50m;
     }
 
     // 涨停性质惩罚：低位首板还有空间(轻罚)，高位/连板次日高开追高(重罚)
@@ -204,9 +254,12 @@ public class StockSelectionEngine
         _ => 1
     };
 
-    private static List<string> BuildTags(DailyMarketSnapshotEntity s, DragonTigerEntity? dt, List<string> activityFeatures, SequenceFeatures seq)
+    private static List<string> BuildTags(DailyMarketSnapshotEntity s, DragonTigerEntity? dt, List<string> activityFeatures,
+        SequenceFeatures seq, List<string> hitHotConcepts, decimal sectorScore)
     {
         var tags = new List<string>();
+        if (hitHotConcepts.Count > 0) tags.Add($"风口·{hitHotConcepts[0]}"); // 命中最热题材
+        if (sectorScore >= 80m) tags.Add("强势板块");
         if (s.MainNetInflow > 0)
             tags.Add(seq.ConsecutiveInflowDays >= 2
                 ? $"主力连{seq.ConsecutiveInflowDays}日+{FormatWan(s.MainNetInflow)}"

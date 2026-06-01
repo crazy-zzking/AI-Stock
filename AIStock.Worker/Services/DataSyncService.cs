@@ -171,6 +171,7 @@ public partial class DataSyncService
                 var lmt = ComputeKlineFetchCount(lastSync, today);
                 try
                 {
+                    if (lmt == 0) return (code, null);
                     var klines = await provider.GetKlinesAsync(code, KlineInterval.Daily, lmt);
                     return (code, klines);
                 }
@@ -246,7 +247,7 @@ public partial class DataSyncService
         if (lastSync == null) return max; // 首次/无历史：按配置深度拉满
 
         var daysBehind = (today.Date - lastSync.Value.Date).TotalDays;
-        if (daysBehind <= 0) return 2; // 已是最新，仍拉最近 2 根做校验/容错
+        if (daysBehind <= 0) return 0; // 已是最新，仍拉最近 2 根做校验/容错
 
         var approxTradingDays = (int)Math.Ceiling(daysBehind * 5.0 / 7.0);
         return Math.Clamp(approxTradingDays + 5, 2, max); // +5 缓冲，封顶 KlineCount

@@ -1,5 +1,8 @@
 using System.Text.Json;
+using AIStock.Core.Enums;
+using AIStock.Core.Interfaces;
 using AIStock.Core.Models;
+using AIStock.Data.Providers.Eastmoney;
 using AIStock.Infrastructure.Database.Context;
 using AIStock.Infrastructure.Database.Entities;
 using Microsoft.EntityFrameworkCore;
@@ -15,15 +18,18 @@ public class StockSelectionService
 {
     private readonly AIStockDbContext _db;
     private readonly StockSelectionEngine _engine;
+    private readonly IDataProviderResolver _resolver;
     private readonly ILogger<StockSelectionService> _logger;
 
     public StockSelectionService(
         AIStockDbContext db,
         StockSelectionEngine engine,
+        IDataProviderResolver resolver,
         ILogger<StockSelectionService> logger)
     {
         _db = db;
         _engine = engine;
+        _resolver = resolver;
         _logger = logger;
     }
 
@@ -37,72 +43,211 @@ public class StockSelectionService
             return new List<StockSelectionResult>();
         }
 
+        var regime = await ComputeMarketRegimeAsync(latest, ct);
+
+        // 题材（个股概念 + 当日热门题材）与板块强度，一次性算好供打分与展示复用
+        var conceptsByCode = await LoadConceptsByCodeAsync(latest, ct);
+        var hotConcepts = ComputeHotConcepts(latest, conceptsByCode);
+        var (industryByCode, industryStrength) = await ComputeSectorStrengthAsync(latest, ct);
+
+        var context = new SelectionContext
+        {
+            Regime = regime,
+            HotConcepts = hotConcepts,
+            ConceptsByCode = conceptsByCode,
+            IndustryByCode = industryByCode,
+            IndustryStrength = industryStrength,
+        };
+
         var activePool = ActivityScreener.Screen(latest, criteria);
-        var results = _engine.Select(activePool, dragonByCode, sequenceByCode, criteria);
-        var hotConcepts = await ComputeHotConceptsAsync(latest, ct);
-        await EnrichIndustryConceptsAsync(results, hotConcepts, ct);
-        _logger.LogInformation("选股完成：活跃池 {Pool} 只，入选 TOP {Top}，当日热门题材 {Hot} 个",
-            activePool.Count, results.Count, hotConcepts.Count);
+        var results = _engine.Select(activePool, dragonByCode, sequenceByCode, criteria, context);
+        EnrichIndustryConcepts(results, context);
+        _logger.LogInformation("选股完成：大盘[{Regime}]，活跃池 {Pool} 只，入选 TOP {Top}，当日热门题材 {Hot} 个",
+            regime.Level, activePool.Count, results.Count, hotConcepts.Count);
         return results;
+    }
+
+    // 同时判断的主要指数（名称 + 东财 secid）。指数代码前缀与个股不同，需显式 secid。
+    private static readonly (string Name, string Secid)[] MarketIndices =
+    {
+        ("上证", "1.000001"),   // 上证综指
+        ("深成", "0.399001"),   // 深证成指
+        ("创业", "0.399006"),   // 创业板指
+        ("沪深300", "1.000300"),
+        ("科创50", "1.000688"), // 上证科创板50成份指数
+        ("北证50", "0.899050"), // 北证50
+    };
+
+    /// <summary>
+    /// 判断大盘环境：综合多个主要指数（当日涨跌幅 + 是否站上 20 日线）与全市场涨跌广度。
+    /// 取不到指数时仅用广度判断。弱市选股趋严、强市略放宽（在引擎里生效）。
+    /// </summary>
+    private async Task<MarketRegime> ComputeMarketRegimeAsync(List<DailyMarketSnapshotEntity> latest, CancellationToken ct)
+    {
+        var regime = new MarketRegime();
+        if (latest.Count > 0)
+            regime.AdvanceRatio = Math.Round((decimal)latest.Count(s => s.ChangePercent > 0) / latest.Count, 2);
+
+        var em = _resolver.GetProviders(DataCapability.Kline)
+            .FirstOrDefault(p => p.ProviderName == "东方财富") as EastmoneyProvider;
+        if (em != null)
+        {
+            // 多指数并发拉取
+            var tasks = MarketIndices.Select(async ix =>
+            {
+                try
+                {
+                    var kl = await em.GetIndexDailyAsync(ix.Secid, 30, ct);
+                    if (kl.Count < 2) return null;
+                    var closes = kl.OrderBy(k => k.DateTime).Select(k => k.Close).ToList();
+                    var last = closes[^1];
+                    var prev = closes[^2];
+                    var ma20 = closes.Count >= 20 ? closes.TakeLast(20).Average() : closes.Average();
+                    return new IndexQuote
+                    {
+                        Name = ix.Name,
+                        ChangePercent = prev > 0 ? Math.Round((last - prev) / prev * 100m, 2) : 0,
+                        AboveMa20 = last >= ma20,
+                    };
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "选股：指数 {Name} 获取失败", ix.Name);
+                    return null;
+                }
+            });
+            regime.Indices = (await Task.WhenAll(tasks)).Where(q => q != null).Select(q => q!).ToList();
+        }
+        if (!regime.HasIndex)
+            _logger.LogWarning("选股：指数数据均不可用，按全市场涨跌广度判断大盘");
+
+        // —— 综合打分：指数均值涨跌 / 多数指数是否站上20线 / 全市场涨家占比 ——
+        var score = 0;
+        if (regime.HasIndex)
+        {
+            var avgChange = regime.Indices.Average(i => i.ChangePercent);
+            if (avgChange > 0.5m) score++;
+            else if (avgChange < -0.5m) score--;
+
+            var aboveCount = regime.Indices.Count(i => i.AboveMa20);
+            var half = regime.Indices.Count / 2.0;
+            if (aboveCount > half) score++;
+            else if (aboveCount < half) score--;
+        }
+        if (regime.AdvanceRatio > 0.55m) score++;
+        else if (regime.AdvanceRatio > 0m && regime.AdvanceRatio < 0.4m) score--;
+
+        regime.Level = score >= 2 ? MarketRegimeLevel.Strong
+            : score <= -2 ? MarketRegimeLevel.Weak
+            : MarketRegimeLevel.Neutral;
+
+        var levelText = regime.Level switch
+        {
+            MarketRegimeLevel.Strong => "偏强",
+            MarketRegimeLevel.Weak => "偏弱（选股趋严）",
+            _ => "中性"
+        };
+        var idxText = regime.HasIndex
+            ? string.Join("、", regime.Indices.Select(i => $"{i.Name}{i.ChangePercent:+0.0;-0.0}%{(i.AboveMa20 ? "↑20线" : "↓20线")}"))
+            : "指数数据不可用";
+        regime.Description = $"大盘{levelText}：{idxText}；涨家占比 {regime.AdvanceRatio:P0}";
+        return regime;
     }
 
     /// <summary>
     /// 计算当日热门题材：当日活跃股（涨停/大涨/放量）扎堆的概念，活跃股越多越热。
     /// 返回 概念→活跃股数。反映"当下市场在炒什么"。
     /// </summary>
-    private async Task<Dictionary<string, int>> ComputeHotConceptsAsync(
-        List<DailyMarketSnapshotEntity> latest, CancellationToken ct)
+    private static Dictionary<string, int> ComputeHotConcepts(
+        List<DailyMarketSnapshotEntity> latest, IReadOnlyDictionary<string, List<string>> conceptsByCode)
     {
         var activeCodes = latest
             .Where(s => s.IsLimitUp || s.ChangePercent >= 5m
                 || (s.VolumeRatio >= 2m && s.ChangePercent > 0))
             .Select(s => s.Code)
-            .ToList();
+            .ToHashSet();
         if (activeCodes.Count == 0) return new Dictionary<string, int>();
 
-        var rel = await _db.StockConceptRelation
-            .Where(c => activeCodes.Contains(c.StockCode))
-            .Select(c => new { c.StockCode, c.ConceptName })
-            .ToListAsync(ct);
-
-        return rel
-            .GroupBy(c => c.ConceptName)
-            .Select(g => new { Concept = g.Key, Count = g.Select(x => x.StockCode).Distinct().Count() })
-            .Where(x => x.Count >= 2) // 至少 2 只活跃股才算成"题材"
-            .ToDictionary(x => x.Concept, x => x.Count);
+        // 概念 → 活跃股数（去重）
+        var counter = new Dictionary<string, HashSet<string>>();
+        foreach (var (code, concepts) in conceptsByCode)
+        {
+            if (!activeCodes.Contains(code)) continue;
+            foreach (var c in concepts)
+            {
+                if (!counter.TryGetValue(c, out var set)) counter[c] = set = new HashSet<string>();
+                set.Add(code);
+            }
+        }
+        return counter
+            .Where(kv => kv.Value.Count >= 2) // 至少 2 只活跃股才算成"题材"
+            .ToDictionary(kv => kv.Key, kv => kv.Value.Count);
     }
 
-    /// <summary>补充行业、概念/题材；命中热门题材的概念优先排序并标记。</summary>
-    private async Task EnrichIndustryConceptsAsync(
-        List<StockSelectionResult> results, Dictionary<string, int> hotConcepts, CancellationToken ct)
+    /// <summary>取今日全部股票的概念关联：股票代码 → 概念列表。</summary>
+    private async Task<Dictionary<string, List<string>>> LoadConceptsByCodeAsync(
+        List<DailyMarketSnapshotEntity> latest, CancellationToken ct)
     {
-        if (results.Count == 0) return;
-        var codes = results.Select(r => r.Code).ToList();
-
-        var industries = await _db.StockBase
-            .Where(s => codes.Contains(s.Code))
-            .Select(s => new { s.Code, s.Industry })
-            .ToDictionaryAsync(x => x.Code, x => x.Industry, ct);
-
-        var concepts = (await _db.StockConceptRelation
-            .Where(c => codes.Contains(c.StockCode))
-            .Select(c => new { c.StockCode, c.ConceptName })
-            .ToListAsync(ct))
+        var codes = latest.Select(s => s.Code).ToList();
+        if (codes.Count == 0) return new();
+        return (await _db.StockConceptRelation
+                .Where(c => codes.Contains(c.StockCode))
+                .Select(c => new { c.StockCode, c.ConceptName })
+                .ToListAsync(ct))
             .GroupBy(c => c.StockCode)
             .ToDictionary(g => g.Key, g => g.Select(x => x.ConceptName).Distinct().ToList());
+    }
 
+    /// <summary>
+    /// 计算板块（行业）强度：按 stock_base.Industry 把今日快照分组，
+    /// 用各行业平均涨幅的分位数（0-100）作为强度分；行业内不足 3 只或无行业的记中性。
+    /// </summary>
+    private async Task<(Dictionary<string, string> IndustryByCode, Dictionary<string, decimal> Strength)>
+        ComputeSectorStrengthAsync(List<DailyMarketSnapshotEntity> latest, CancellationToken ct)
+    {
+        var codes = latest.Select(s => s.Code).ToList();
+        var industryByCode = await _db.StockBase
+            .Where(s => codes.Contains(s.Code) && s.Industry != null && s.Industry != "")
+            .Select(s => new { s.Code, s.Industry })
+            .ToDictionaryAsync(x => x.Code, x => x.Industry!, ct);
+
+        var changeByCode = latest.ToDictionary(s => s.Code, s => s.ChangePercent);
+
+        var industryAvg = industryByCode
+            .GroupBy(kv => kv.Value)
+            .Select(g => new { Industry = g.Key, Codes = g.Select(x => x.Key).ToList() })
+            .Where(x => x.Codes.Count >= 3) // 行业内至少 3 只，避免小样本噪声
+            .Select(x => new
+            {
+                x.Industry,
+                Avg = x.Codes.Average(c => changeByCode.TryGetValue(c, out var v) ? v : 0m)
+            })
+            .OrderBy(x => x.Avg)
+            .ToList();
+
+        var strength = new Dictionary<string, decimal>();
+        for (int i = 0; i < industryAvg.Count; i++)
+            strength[industryAvg[i].Industry] = industryAvg.Count <= 1
+                ? 50m
+                : Math.Round((decimal)i / (industryAvg.Count - 1) * 100m, 1);
+
+        return (industryByCode, strength);
+    }
+
+    /// <summary>补充展示用的行业、概念/题材（命中热门题材的概念优先排序并标记），复用已算好的上下文。</summary>
+    private static void EnrichIndustryConcepts(List<StockSelectionResult> results, SelectionContext ctx)
+    {
         foreach (var r in results)
         {
-            if (industries.TryGetValue(r.Code, out var ind) && !string.IsNullOrEmpty(ind))
+            if (ctx.IndustryByCode.TryGetValue(r.Code, out var ind) && !string.IsNullOrEmpty(ind))
                 r.Industry = ind;
-            if (concepts.TryGetValue(r.Code, out var cs))
+            if (ctx.ConceptsByCode.TryGetValue(r.Code, out var cs))
             {
-                // 命中热门题材的概念优先（热度高在前），其余按名称
                 r.Concepts = cs
-                    .OrderByDescending(c => hotConcepts.TryGetValue(c, out var h) ? h : 0)
+                    .OrderByDescending(c => ctx.HotConcepts.TryGetValue(c, out var h) ? h : 0)
                     .ThenBy(c => c)
                     .ToList();
-                r.HotConcepts = cs.Where(hotConcepts.ContainsKey).ToList();
+                r.HotConcepts = cs.Where(ctx.HotConcepts.ContainsKey).ToList();
             }
         }
     }

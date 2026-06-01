@@ -32,6 +32,36 @@ public class SelectionCriteria
     public bool UseLlmNarrative { get; set; } = false;
 }
 
+/// <summary>大盘环境等级</summary>
+public enum MarketRegimeLevel { Weak, Neutral, Strong }
+
+/// <summary>单个指数行情快照</summary>
+public class IndexQuote
+{
+    public string Name { get; set; } = string.Empty;
+    /// <summary>当日涨跌幅（%）</summary>
+    public decimal ChangePercent { get; set; }
+    /// <summary>是否站上 20 日均线</summary>
+    public bool AboveMa20 { get; set; }
+}
+
+/// <summary>
+/// 大盘环境判断 — 综合多个主要指数（上证/深成/创业板/沪深300 的涨跌幅与是否站上20日线）
+/// 与全市场涨跌广度，用于调节选股松紧。
+/// </summary>
+public class MarketRegime
+{
+    public MarketRegimeLevel Level { get; set; } = MarketRegimeLevel.Neutral;
+    /// <summary>参与判断的各指数快照</summary>
+    public List<IndexQuote> Indices { get; set; } = new();
+    /// <summary>是否取到至少一个指数（取不到则仅用广度判断）</summary>
+    public bool HasIndex => Indices.Count > 0;
+    /// <summary>全市场上涨家数占比（0-1）</summary>
+    public decimal AdvanceRatio { get; set; }
+    /// <summary>文字描述</summary>
+    public string Description { get; set; } = string.Empty;
+}
+
 /// <summary>
 /// 各因子得分明细（0-100）
 /// </summary>
@@ -49,6 +79,10 @@ public class SelectionFactorScores
     public decimal Activity { get; set; }
     /// <summary>形态（多日序列：阶梯放量/突破/回踩企稳）</summary>
     public decimal Form { get; set; }
+    /// <summary>题材（命中当日热门题材/风口的合力）</summary>
+    public decimal Theme { get; set; }
+    /// <summary>板块（所属行业当日强弱：板块联动/资金共识）</summary>
+    public decimal Sector { get; set; }
 }
 
 /// <summary>
@@ -111,4 +145,7 @@ public class StockSelectionResult
 
     /// <summary>核心逻辑（规则或 LLM 生成）</summary>
     public string CoreLogic { get; set; } = string.Empty;
+
+    /// <summary>选股时的大盘环境描述（同一批选股相同）</summary>
+    public string MarketRegime { get; set; } = string.Empty;
 }

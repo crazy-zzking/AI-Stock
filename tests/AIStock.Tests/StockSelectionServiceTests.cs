@@ -1,3 +1,5 @@
+using AIStock.Core.Enums;
+using AIStock.Core.Interfaces;
 using AIStock.Core.Models;
 using AIStock.Infrastructure.Database.Context;
 using AIStock.Infrastructure.Database.Entities;
@@ -25,7 +27,18 @@ public class StockSelectionServiceTests
             .Options);
 
     private static StockSelectionService NewService(AIStockDbContext db) =>
-        new(db, new StockSelectionEngine(new RuleLogicNarrator()), NullLogger<StockSelectionService>.Instance);
+        new(db, new StockSelectionEngine(new RuleLogicNarrator()),
+            new EmptyResolver(), NullLogger<StockSelectionService>.Instance);
+
+    /// <summary>空数据源解析器：测试中不取指数，大盘环境仅由快照广度判断。</summary>
+    private sealed class EmptyResolver : IDataProviderResolver
+    {
+        public IEnumerable<IDataProvider> GetProviders(DataCapability capability) => Array.Empty<IDataProvider>();
+        public IDataProvider? GetPrimaryProvider(DataCapability capability) => null;
+        public void RegisterProvider(IDataProvider provider) { }
+        public IEnumerable<IDataProvider> GetAllProviders() => Array.Empty<IDataProvider>();
+        public IDataProvider GetDefaultProvider() => throw new NotSupportedException();
+    }
 
     private static DailyMarketSnapshotEntity Snap(
         string code, string name, decimal close, decimal change, decimal volRatio,

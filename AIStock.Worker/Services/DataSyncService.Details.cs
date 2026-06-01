@@ -19,6 +19,9 @@ public partial class DataSyncService
     /// </summary>
     public async Task<int> SyncStockDetailsAsync(CancellationToken ct = default)
     {
+        // 先刷新东财板块目录（概念/行业/地域），供概念名校验/导航
+        await SyncBoardCatalogAsync(ct);
+
         using var scope = _scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AIStockDbContext>();
 
@@ -92,28 +95,39 @@ public partial class DataSyncService
         return industryUpdated;
     }
 
-    /// <summary>同步单只股票的概念关联（只增量补充未有的概念）</summary>
+    /// <summary>同步单只股票的概念关联（新概念插入，已有的刷新排名/理由/板块代码）</summary>
     private static async Task UpsertConceptsAsync(AIStockDbContext db, string code, List<ConceptDto> concepts, CancellationToken ct)
     {
         var existing = await db.StockConceptRelation
             .Where(r => r.StockCode == code)
-            .Select(r => r.ConceptName)
             .ToListAsync(ct);
-        var existingSet = existing.ToHashSet();
+        var byName = existing.ToDictionary(r => r.ConceptName);
 
         foreach (var c in concepts)
         {
-            if (string.IsNullOrEmpty(c.Name) || existingSet.Contains(c.Name)) continue;
-            db.StockConceptRelation.Add(new StockConceptRelationEntity
+            if (string.IsNullOrEmpty(c.Name)) continue;
+            if (byName.TryGetValue(c.Name, out var row))
             {
-                StockCode = code,
-                ConceptName = c.Name,
-                QuoteCode = c.QuoteCode,
-                ConceptId = c.ConceptId,
-                CreatedAt = DateTime.UtcNow,
-                UpdatedAt = DateTime.UtcNow
-            });
-            existingSet.Add(c.Name);
+                if (!string.IsNullOrEmpty(c.BoardCode)) row.QuoteCode = c.BoardCode;
+                row.BoardRank = c.Rank;
+                row.SelectedReason = c.Reason;
+                row.UpdatedAt = DateTime.UtcNow;
+            }
+            else
+            {
+                var ent = new StockConceptRelationEntity
+                {
+                    StockCode = code,
+                    ConceptName = c.Name,
+                    QuoteCode = c.BoardCode,
+                    BoardRank = c.Rank,
+                    SelectedReason = c.Reason,
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow
+                };
+                db.StockConceptRelation.Add(ent);
+                byName[c.Name] = ent; // 同批去重
+            }
         }
     }
 
@@ -172,26 +186,110 @@ public partial class DataSyncService
         _ => null
     };
 
-    /// <summary>同花顺概念列表</summary>
+    /// <summary>东财个股核心题材（RPT_F10_CORETHEME_BOARDTYPE，IS_PRECISE=1 精确匹配，按 BOARD_RANK 升序）</summary>
     private async Task<List<ConceptDto>> FetchConceptsAsync(HttpClient client, string code, CancellationToken ct)
     {
         try
         {
-            var marketId = GetMarketId(code);
-            var url = $"https://basic.10jqka.com.cn/fuyao/f10_stock_index/concept/v1/stock_concept_list?simple=1&market_id={marketId}&code={code}";
+            var secucode = $"{code}.{GetMarketSuffix(code)}";
+            var url = "https://datacenter.eastmoney.com/securities/api/data/v1/get?" +
+                      "reportName=RPT_F10_CORETHEME_BOARDTYPE&" +
+                      "columns=SECUCODE,SECURITY_CODE,NEW_BOARD_CODE,BOARD_NAME,SELECTED_BOARD_REASON,BOARD_RANK&" +
+                      $"filter=(SECUCODE=%22{secucode}%22)(IS_PRECISE=%221%22)&" +
+                      "pageNumber=1&pageSize=50&sortColumns=BOARD_RANK&sortTypes=1&source=HSF10&client=PC";
             var json = await client.GetStringAsync(url, ct);
-            var resp = JsonSerializer.Deserialize<ThsConceptResponse>(json);
-            if (resp?.StatusCode != 0 || resp.Data == null) return new List<ConceptDto>();
-            return resp.Data
-                .Where(c => !string.IsNullOrEmpty(c.Name))
-                .Select(c => new ConceptDto { Name = c.Name!, QuoteCode = c.QuoteCode, ConceptId = c.ConceptId })
-                .ToList();
+
+            using var doc = JsonDocument.Parse(json);
+            var list = new List<ConceptDto>();
+            if (doc.RootElement.TryGetProperty("result", out var res) &&
+                res.ValueKind == JsonValueKind.Object &&
+                res.TryGetProperty("data", out var data) &&
+                data.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var item in data.EnumerateArray())
+                {
+                    var name = item.TryGetProperty("BOARD_NAME", out var bn) ? bn.GetString() : null;
+                    if (string.IsNullOrEmpty(name)) continue;
+                    list.Add(new ConceptDto
+                    {
+                        Name = name,
+                        BoardCode = item.TryGetProperty("NEW_BOARD_CODE", out var bc) ? bc.GetString() : null,
+                        Reason = item.TryGetProperty("SELECTED_BOARD_REASON", out var rs) ? rs.GetString() : null,
+                        Rank = item.TryGetProperty("BOARD_RANK", out var rk) && rk.ValueKind == JsonValueKind.Number ? rk.GetInt32() : null,
+                    });
+                }
+            }
+            return list;
         }
         catch (Exception ex)
         {
-            _logger.LogDebug(ex, "同花顺概念获取失败 {Code}", code);
+            _logger.LogDebug(ex, "东财核心题材获取失败 {Code}", code);
             return new List<ConceptDto>();
         }
+    }
+
+    // 东财板块类型（akshare 通行映射）：t:1 地域 / t:2 行业 / t:3 概念。本机联调请核对各类数量。
+    private static readonly (int T, string Type)[] BoardTypes = { (1, "地域"), (2, "行业"), (3, "概念") };
+
+    /// <summary>同步东财板块目录（概念/行业/地域全量）到 concept_board。</summary>
+    public async Task<int> SyncBoardCatalogAsync(CancellationToken ct = default)
+    {
+        var client = _httpClientFactory.CreateClient("eastmoney"); // 走隧道代理
+        using var scope = _scopeFactory.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AIStockDbContext>();
+
+        var existing = await db.ConceptBoard.ToDictionaryAsync(b => b.BoardCode, ct);
+        var now = DateTime.UtcNow;
+        var total = 0;
+
+        foreach (var (t, type) in BoardTypes)
+        {
+            try
+            {
+                var url = "https://push2.eastmoney.com/api/qt/clist/get?" +
+                          $"pn=1&pz=600&po=1&np=1&fltt=2&invt=2&fid=f12&fs=m:90+t:{t}&fields=f12,f14&" +
+                          "ut=8dec03ba335b81bf4ebdf7b29ec27d15";
+                var json = await client.GetStringAsync(url, ct);
+                using var doc = JsonDocument.Parse(json);
+                if (!doc.RootElement.TryGetProperty("data", out var data) ||
+                    data.ValueKind != JsonValueKind.Object ||
+                    !data.TryGetProperty("diff", out var diff)) continue;
+
+                var items = diff.ValueKind == JsonValueKind.Array
+                    ? diff.EnumerateArray()
+                    : diff.EnumerateObject().Select(p => p.Value);
+
+                var cnt = 0;
+                foreach (var it in items)
+                {
+                    var bcode = it.TryGetProperty("f12", out var c) ? c.GetString() : null;
+                    var bname = it.TryGetProperty("f14", out var n) ? n.GetString() : null;
+                    if (string.IsNullOrEmpty(bcode) || string.IsNullOrEmpty(bname)) continue;
+
+                    if (existing.TryGetValue(bcode, out var row))
+                    {
+                        row.BoardName = bname; row.BoardType = type; row.UpdatedAt = now;
+                    }
+                    else
+                    {
+                        var e = new ConceptBoardEntity { BoardCode = bcode, BoardName = bname, BoardType = type, UpdatedAt = now };
+                        db.ConceptBoard.Add(e);
+                        existing[bcode] = e;
+                    }
+                    cnt++;
+                }
+                total += cnt;
+                _logger.LogInformation("板块目录[{Type}] t:{T}：{Count} 个", type, t, cnt);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "板块目录采集失败 t:{T}", t);
+            }
+        }
+
+        await db.SaveChangesAsync(ct);
+        _logger.LogInformation("板块目录同步完成：累计 {Total} 个", total);
+        return total;
     }
 
     private static string GetMarketSuffix(string code)
@@ -202,19 +300,15 @@ public partial class DataSyncService
         return "SZ";
     }
 
-    private static int GetMarketId(string code)
-    {
-        if (code.StartsWith("6")) return 17;
-        if (code.StartsWith("0") || code.StartsWith("3")) return 33;
-        if (code.StartsWith("8") || code.StartsWith("9") || code.StartsWith("4")) return 151;
-        return 33;
-    }
-
     private class ConceptDto
     {
         public string Name { get; set; } = string.Empty;
-        public string? QuoteCode { get; set; }
-        public int? ConceptId { get; set; }
+        /// <summary>东财板块代码 NEW_BOARD_CODE</summary>
+        public string? BoardCode { get; set; }
+        /// <summary>题材排名 BOARD_RANK</summary>
+        public int? Rank { get; set; }
+        /// <summary>入选理由 SELECTED_BOARD_REASON</summary>
+        public string? Reason { get; set; }
     }
 
     private class EmF10Response
@@ -255,16 +349,4 @@ public partial class DataSyncService
         public DateTime? ListDate { get; set; }
     }
 
-    private class ThsConceptResponse
-    {
-        [JsonPropertyName("status_code")] public int StatusCode { get; set; }
-        [JsonPropertyName("data")] public List<ThsConceptItem>? Data { get; set; }
-    }
-
-    private class ThsConceptItem
-    {
-        [JsonPropertyName("concept_id")] public int? ConceptId { get; set; }
-        [JsonPropertyName("name")] public string? Name { get; set; }
-        [JsonPropertyName("quote_code")] public string? QuoteCode { get; set; }
-    }
 }
