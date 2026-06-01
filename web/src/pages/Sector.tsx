@@ -16,15 +16,20 @@ const upDown = (v: number) => (v >= 0 ? '#cf1322' : '#3f8600'); // 红涨绿跌
 const Sector: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [sectors, setSectors] = useState<SectorFlow[]>([]);
+  const [outSectors, setOutSectors] = useState<SectorFlow[]>([]);
   const [selected, setSelected] = useState<SectorFlow | null>(null);
   const [strongStocks, setStrongStocks] = useState<any[]>([]);
 
   const load = async () => {
     setLoading(true);
     try {
-      const res = await getSectorRanking();
-      const data = res.data || [];
+      const [inRes, outRes] = await Promise.all([
+        getSectorRanking('inflow'),
+        getSectorRanking('outflow'),
+      ]);
+      const data = inRes.data || [];
       setSectors(data);
+      setOutSectors(outRes.data || []);
       if (data.length > 0) selectSector(data[0]);
     } catch {
       message.error('加载板块排行失败');
@@ -45,8 +50,8 @@ const Sector: React.FC = () => {
     }
   };
 
-  const inflow = sectors.slice(0, 15);                  // 净流入榜（已按净流入降序）
-  const outflow = [...sectors].slice(-15).reverse();    // 净流出榜（尾部、流出最多在前）
+  const inflow = sectors.slice(0, 15);     // 净流入榜（东财服务端按主力净流入降序）
+  const outflow = outSectors.slice(0, 15); // 流出/弱势榜（独立查询，东财服务端排序）
 
   const sectorCols = [
     { title: '板块', dataIndex: 'sectorName', key: 'name' },
@@ -85,7 +90,7 @@ const Sector: React.FC = () => {
         <Col span={12}>{sectorTable('主力净流出榜 TOP15', outflow)}</Col>
       </Row>
 
-      <Card title={`${selected?.sectorName || ''} — 板块内强势个股（资金流入 + 上涨）`} size="small">
+      <Card title={`${selected?.sectorName || ''} — 板块内个股资金流（按主力净流入排序）`} size="small">
         <Table
           size="small"
           pagination={false}
@@ -94,12 +99,13 @@ const Sector: React.FC = () => {
           columns={[
             { title: '代码', dataIndex: 'code', key: 'code' },
             { title: '名称', dataIndex: 'name', key: 'name' },
+            { title: '现价', dataIndex: 'price', key: 'price', render: (v: number) => (v ?? 0).toFixed(2) },
             { title: '涨幅', dataIndex: 'changePercent', key: 'chg', render: (v: number) => <span style={{ color: upDown(v) }}>{pct(v)}</span> },
             { title: '主力净流入', dataIndex: 'mainNetInflow', key: 'net', render: (v: number) => <span style={{ color: upDown(v) }}>{yi(v)}</span> },
-            { title: '换手', dataIndex: 'turnoverRate', key: 'turn', render: (v: number) => `${(v ?? 0).toFixed(2)}%` },
+            { title: '主力占比', dataIndex: 'mainNetRatio', key: 'ratio', render: (v: number) => <span style={{ color: upDown(v) }}>{pct(v)}</span> },
             { title: '', dataIndex: 'isLimitUp', key: 'lu', render: (v: boolean) => (v ? <Tag color="red">涨停</Tag> : null) },
           ]}
-          locale={{ emptyText: '该板块暂无强势个股（需 daily_market_snapshot 有当日数据）' }}
+          locale={{ emptyText: '该板块暂无个股资金流数据（需东财接口可达）' }}
         />
       </Card>
     </div>

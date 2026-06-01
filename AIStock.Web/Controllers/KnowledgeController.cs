@@ -98,24 +98,24 @@ public class KnowledgeController : ControllerBase
     /// concept → 概念名（to_entity）；co-occur → 公司实体（from/to）。按出现次数降序。
     /// </summary>
     [HttpGet("candidate-edges/values")]
-    public async Task<IActionResult> GetCandidateValues([FromQuery] string edgeType, [FromQuery] int top = 100)
+    public async Task<IActionResult> GetCandidateValues([FromQuery] string edgeType, [FromQuery] int top = 0)
     {
         if (edgeType == "concept")
         {
-            var values = await _db.GraphCandidateEdge
+            var q = _db.GraphCandidateEdge
                 .Where(e => e.EdgeType == "concept")
                 .GroupBy(e => e.ToEntity)
                 .Select(g => new { value = g.Key, count = g.Count() })
-                .OrderByDescending(x => x.count)
-                .Take(top)
-                .ToListAsync();
+                .OrderByDescending(x => x.count);
+            var values = top > 0 ? await q.Take(top).ToListAsync() : await q.ToListAsync();
             return Ok(values);
         }
 
         // co-occur 等：公司实体取 from ∪ to
         var froms = _db.GraphCandidateEdge.Where(e => e.EdgeType == edgeType).Select(e => e.FromEntity);
         var tos = _db.GraphCandidateEdge.Where(e => e.EdgeType == edgeType).Select(e => e.ToEntity);
-        var entities = await froms.Union(tos).Distinct().Take(top).ToListAsync();
+        var distinct = froms.Union(tos).Distinct();
+        var entities = top > 0 ? await distinct.Take(top).ToListAsync() : await distinct.ToListAsync();
         return Ok(entities.Select(v => new { value = v, count = 0 }));
     }
 

@@ -2,9 +2,7 @@ using AIStock.Core.Enums;
 using AIStock.Core.Interfaces;
 using AIStock.Core.Models;
 using AIStock.Data.Providers.Eastmoney;
-using AIStock.Infrastructure.Database.Context;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 
 namespace AIStock.Web.Controllers;
@@ -17,14 +15,12 @@ namespace AIStock.Web.Controllers;
 public class SectorController : ControllerBase
 {
     private readonly IDataProviderResolver _resolver;
-    private readonly AIStockDbContext _db;
     private readonly IMemoryCache _cache;
     private readonly ILogger<SectorController> _logger;
 
-    public SectorController(IDataProviderResolver resolver, AIStockDbContext db, IMemoryCache cache, ILogger<SectorController> logger)
+    public SectorController(IDataProviderResolver resolver, IMemoryCache cache, ILogger<SectorController> logger)
     {
         _resolver = resolver;
-        _db = db;
         _cache = cache;
         _logger = logger;
     }
@@ -33,21 +29,24 @@ public class SectorController : ControllerBase
     private EastmoneyProvider? Eastmoney()
         => _resolver.GetProviders(DataCapability.SectorRanking).FirstOrDefault() as EastmoneyProvider;
 
-    /// <summary>板块资金流排行（按主力净流入降序）。盘中缓存 60 秒、休市 10 分钟，减少对东财的实时请求。</summary>
+    /// <summary>
+    /// 板块资金流排行。direction=inflow：主力净流入降序（流入榜）；direction=outflow：弱势/流出板块（独立查询）。
+    /// 保留东财服务端排序。盘中缓存 60 秒、休市 10 分钟，减少对东财的实时请求。
+    /// </summary>
     [HttpGet("ranking")]
-    public async Task<ActionResult<List<SectorFlowData>>> GetRanking(CancellationToken ct)
+    public async Task<ActionResult<List<SectorFlowData>>> GetRanking([FromQuery] string direction = "inflow", CancellationToken ct = default)
     {
-        const string key = "sector:ranking";
+        var outflow = string.Equals(direction, "outflow", StringComparison.OrdinalIgnoreCase);
+        var key = $"sector:ranking:{(outflow ? "outflow" : "inflow")}";
         if (_cache.TryGetValue(key, out List<SectorFlowData>? cached) && cached != null)
             return Ok(cached);
 
         var em = Eastmoney();
         if (em == null) return Ok(new List<SectorFlowData>());
-        var sectors = await em.GetSectorRankingAsync(ct);
-        var ordered = sectors.OrderByDescending(s => s.NetInflow).ToList();
+        var sectors = await em.GetSectorRankingAsync(outflow, ct);
 
-        if (ordered.Count > 0) _cache.Set(key, ordered, CacheTtl());
-        return Ok(ordered);
+        if (sectors.Count > 0) _cache.Set(key, sectors, CacheTtl());
+        return Ok(sectors);
     }
 
     /// <summary>缓存时长：交易日盘中 60 秒，其余 10 分钟。</summary>
@@ -63,8 +62,8 @@ public class SectorController : ControllerBase
     }
 
     /// <summary>
-    /// 板块内强势个股：取板块成分股，join 最新快照按主力净流入降序，
-    /// 返回资金流入 + 涨幅（默认仅看上涨的，按资金流入排）。
+    /// 板块内强势个股：实时取板块内个股资金流（东财服务端按主力净流入降序），
+    /// 返回资金流入 + 涨幅 + 主力净占比。不依赖快照表，盘中即时反映。
     /// </summary>
     [HttpGet("{sectorCode}/strong-stocks")]
     public async Task<ActionResult> GetStrongStocks(string sectorCode, [FromQuery] int top = 10, CancellationToken ct = default)
@@ -76,28 +75,19 @@ public class SectorController : ControllerBase
         var em = Eastmoney();
         if (em == null) return Ok(Array.Empty<object>());
 
-        var codes = await em.GetSectorConstituentsAsync(sectorCode, ct);
-        if (codes.Count == 0) return Ok(Array.Empty<object>());
+        var flows = await em.GetSectorStockFlowAsync(sectorCode, top, ct);
+        var stocks = flows.Select(s => new
+        {
+            code = s.Code,
+            name = s.Name,
+            price = s.Price,
+            changePercent = s.ChangePercent,
+            mainNetInflow = s.MainNetInflow,
+            mainNetRatio = s.MainNetRatio,
+            isLimitUp = s.ChangePercent >= 9.8m,
+        }).ToList();
 
-        var latestDate = await _db.DailyMarketSnapshot.MaxAsync(s => (DateTime?)s.Date, ct);
-        if (latestDate == null) return Ok(Array.Empty<object>());
-
-        var stocks = await _db.DailyMarketSnapshot
-            .Where(s => s.Date == latestDate && codes.Contains(s.Code) && s.ChangePercent > 0)
-            .OrderByDescending(s => s.MainNetInflow)
-            .Take(top)
-            .Select(s => new
-            {
-                code = s.Code,
-                name = s.Name,
-                changePercent = s.ChangePercent,
-                mainNetInflow = s.MainNetInflow,
-                turnoverRate = s.TurnoverRate,
-                isLimitUp = s.IsLimitUp,
-            })
-            .ToListAsync(ct);
-
-        _cache.Set(key, stocks, CacheTtl());
+        if (stocks.Count > 0) _cache.Set(key, stocks, CacheTtl());
         return Ok(stocks);
     }
 }

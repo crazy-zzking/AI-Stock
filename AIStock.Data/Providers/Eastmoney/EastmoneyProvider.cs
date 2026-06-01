@@ -347,21 +347,23 @@ public class EastmoneyProvider : BaseProvider
 
     // ---- 板块能力 ----
 
-    private const string SectorRankingUrl = "https://push2dycalc.eastmoney.com/api/qt/clist/get";
+    private const string SectorRankingUrl = "https://push2.eastmoney.com/api/qt/clist/get";
     private const string SectorConstituentsUrl = "https://push2dycalc.eastmoney.com/api/qt/clist/get";
     private const string StockSectorsUrl = "https://datacenter.eastmoney.com/securities/api/data/v1/get";
 
     /// <summary>
-    /// 获取板块排名（资金流向）
+    /// 获取板块排名（资金流向）。outflow=false：主力净流入(f62)降序（流入榜）；
+    /// outflow=true：按涨跌幅(f3)升序(po=0) 取弱势/流出板块（独立查询，非流入榜尾部切片）。
+    /// fltt=2 数值为直接值（不除 100）。
     /// </summary>
-    public async Task<List<SectorFlowData>> GetSectorRankingAsync(CancellationToken ct = default)
+    public async Task<List<SectorFlowData>> GetSectorRankingAsync(bool outflow = false, CancellationToken ct = default)
     {
+        var (fid, po) = outflow ? ("f3", 0) : ("f62", 1);
         var url = SectorRankingUrl + "?" +
-                  "fs=m:90+e:2,m:90+e:3&" +
-                  "fltt=2&invt=2&" +
-                  "fields=f3,f4,f10,f12,f13,f14,f104,f105,f106,f615,f616,f621,f622,f623,f624,f625,f626&" +
-                  "fid=f621&po=1&pn=1&pz=50&np=1&" +
-                  $"ut={UserToken}";
+                  $"fid={fid}&po={po}&pz=50&pn=1&np=1&fltt=2&invt=2&" +
+                  "fs=m:90+t:3&" +
+                  "fields=f12,f14,f2,f3,f6,f62,f184,f66,f72,f78,f84&" +
+                  "ut=8dec03ba335b81bf4ebdf7b29ec27d15";
 
         try
         {
@@ -374,6 +376,72 @@ public class EastmoneyProvider : BaseProvider
             Logger.LogError(ex, "Failed to fetch sector ranking");
             return new List<SectorFlowData>();
         }
+    }
+
+    /// <summary>
+    /// 获取板块内个股资金流排行（实时，按主力净流入 f62 服务端降序）。
+    /// fs=b:{板块代码}，fltt=2 数值为直接值（涨幅 % / 净额元，不除 100）。
+    /// </summary>
+    public async Task<List<SectorStockFlow>> GetSectorStockFlowAsync(string sectorCode, int top = 10, CancellationToken ct = default)
+    {
+        var pz = Math.Clamp(top, 1, 50);
+        var url = SectorRankingUrl + "?" +
+                  $"np=1&fltt=2&invt=2&fs=b:{sectorCode}&fid=f62&pn=1&pz={pz}&po=1&" +
+                  "fields=f12,f14,f2,f3,f62,f184,f66,f72,f78,f84&" +
+                  "ut=fa5fd1943c7b386f172d6893dbfba10b";
+
+        try
+        {
+            var response = await SendEastmoneyRequestAsync(url, ct);
+            if (response == null) return new List<SectorStockFlow>();
+            return ParseSectorStockFlow(response);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to fetch stock flow for sector {SectorCode}", sectorCode);
+            return new List<SectorStockFlow>();
+        }
+    }
+
+    private List<SectorStockFlow> ParseSectorStockFlow(string json)
+    {
+        var result = new List<SectorStockFlow>();
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            if (!doc.RootElement.TryGetProperty("data", out var data) ||
+                data.ValueKind == JsonValueKind.Null ||
+                !data.TryGetProperty("diff", out var diff) ||
+                diff.ValueKind != JsonValueKind.Array)
+                return result;
+
+            foreach (var item in diff.EnumerateArray())
+            {
+                decimal Num(string f) =>
+                    item.TryGetProperty(f, out var v) && v.ValueKind == JsonValueKind.Number ? v.GetDecimal() : 0;
+                string Str(string f) =>
+                    item.TryGetProperty(f, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() ?? "" : "";
+
+                result.Add(new SectorStockFlow
+                {
+                    Code = Str("f12"),
+                    Name = Str("f14"),
+                    Price = Num("f2"),
+                    ChangePercent = Num("f3"),
+                    MainNetInflow = Num("f62"),
+                    MainNetRatio = Num("f184"),
+                    SuperLargeOrderNet = Num("f66"),
+                    LargeOrderNet = Num("f72"),
+                    MediumOrderNet = Num("f78"),
+                    SmallOrderNet = Num("f84"),
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Failed to parse sector stock flow");
+        }
+        return result;
     }
 
     /// <summary>
@@ -463,21 +531,34 @@ public class EastmoneyProvider : BaseProvider
         var result = new List<SectorFlowData>();
         try
         {
-            var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-            var response = JsonSerializer.Deserialize<SectorRankingResponse>(json, options);
+            using var doc = JsonDocument.Parse(json);
+            if (!doc.RootElement.TryGetProperty("data", out var data) ||
+                data.ValueKind == JsonValueKind.Null ||
+                !data.TryGetProperty("diff", out var diff) ||
+                diff.ValueKind != JsonValueKind.Array)
+                return result;
 
-            if (response?.Data?.Diff != null)
+            foreach (var item in diff.EnumerateArray())
             {
-                foreach (var item in response.Data.Diff)
+                decimal Num(string f) =>
+                    item.TryGetProperty(f, out var v) && v.ValueKind == JsonValueKind.Number ? v.GetDecimal() : 0;
+                string Str(string f) =>
+                    item.TryGetProperty(f, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() ?? "" : "";
+
+                // fltt=2：数值均为直接值（涨幅 % / 净流入元，不除 100）
+                result.Add(new SectorFlowData
                 {
-                    result.Add(new SectorFlowData
-                    {
-                        SectorCode = item.F12,
-                        SectorName = item.F14,
-                        ChangePercent = item.F3,
-                        NetInflow = item.F621
-                    });
-                }
+                    SectorCode = Str("f12"),
+                    SectorName = Str("f14"),
+                    Price = Num("f2"),
+                    ChangePercent = Num("f3"),
+                    NetInflow = Num("f62"),          // 主力净流入（元）
+                    SuperLargeOrderNet = Num("f66"),
+                    LargeOrderNet = Num("f72"),
+                    MediumOrderNet = Num("f78"),
+                    SmallOrderNet = Num("f84"),
+                    TurnoverAmount = Num("f6"),
+                });
             }
         }
         catch (Exception ex)

@@ -74,7 +74,8 @@ export interface SectorFlow {
   sectorCode: string; sectorName: string; changePercent: number;
   netInflow: number; price: number; turnoverAmount: number;
 }
-export const getSectorRanking = () => api.get<SectorFlow[]>('/sector/ranking');
+export const getSectorRanking = (direction: 'inflow' | 'outflow' = 'inflow') =>
+  api.get<SectorFlow[]>('/sector/ranking', { params: { direction } });
 export const getSectorStrongStocks = (sectorCode: string, top = 10) =>
   api.get(`/sector/${sectorCode}/strong-stocks`, { params: { top } });
 
@@ -104,7 +105,7 @@ export interface CandidateEdge {
 }
 export const getCandidateEdges = (edgeType?: string, entity?: string, top = 300) =>
   api.get<CandidateEdge[]>('/knowledge/candidate-edges', { params: { edgeType, entity, top } });
-export const getCandidateValues = (edgeType: string, top = 100) =>
+export const getCandidateValues = (edgeType: string, top = 0) =>
   api.get<{ value: string; count: number }[]>('/knowledge/candidate-edges/values', { params: { edgeType, top } });
 
 // ============ LLM ============
