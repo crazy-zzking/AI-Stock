@@ -108,23 +108,21 @@ public class StockSelectionService
     }
 
     /// <summary>
-    /// 取当日已冻结的选股结果：已落库当日批次直接返回（盘中刷新结果不跳动）；
-    /// 无则跑一次并落库冻结。需要重新选股请调 <see cref="RunAndSaveAsync"/>。
+    /// 取最近一次已记录的选股结果（盘中刷新结果不跳动）；一条都没有时跑一次并记录。
+    /// 需要重新选股请调 <see cref="RunAndSaveAsync"/>（追加新记录，不覆盖）。
     /// </summary>
     public async Task<List<StockSelectionResult>> GetOrCreateLatestAsync(int topN = 5, CancellationToken ct = default)
     {
-        var tradingDate = await _db.DailyMarketSnapshot.MaxAsync(s => (DateTime?)s.Date, ct);
-        if (tradingDate == null) return new();
-
-        var existing = await _db.SelectionResult
-            .FirstOrDefaultAsync(r => r.TradingDate == tradingDate.Value, ct);
-        if (existing != null)
-            return Deserialize(existing.ResultsJson, topN);
+        var latest = await _db.SelectionResult
+            .OrderByDescending(r => r.RunAt)
+            .FirstOrDefaultAsync(ct);
+        if (latest != null)
+            return Deserialize(latest.ResultsJson, topN);
 
         return await RunAndSaveAsync(new SelectionCriteria { TopN = topN }, ct);
     }
 
-    /// <summary>重新选股并落库（覆盖当日批次），返回结果。供手动刷新 / 收盘后任务调用。</summary>
+    /// <summary>重新选股并追加一条历史记录（不覆盖），返回结果。供手动刷新 / 收盘后任务调用。</summary>
     public async Task<List<StockSelectionResult>> RunAndSaveAsync(SelectionCriteria criteria, CancellationToken ct = default)
     {
         var results = await SelectAsync(criteria, ct);
@@ -132,27 +130,40 @@ public class StockSelectionService
         var tradingDate = await _db.DailyMarketSnapshot.MaxAsync(s => (DateTime?)s.Date, ct);
         if (tradingDate == null) return results;
 
-        var json = JsonSerializer.Serialize(results);
-        var row = await _db.SelectionResult.FirstOrDefaultAsync(r => r.TradingDate == tradingDate.Value, ct);
-        if (row == null)
+        _db.SelectionResult.Add(new SelectionResultEntity
         {
-            _db.SelectionResult.Add(new SelectionResultEntity
-            {
-                TradingDate = tradingDate.Value,
-                RunAt = DateTime.UtcNow,
-                TopN = criteria.TopN,
-                ResultsJson = json,
-            });
-        }
-        else
-        {
-            row.RunAt = DateTime.UtcNow;
-            row.TopN = criteria.TopN;
-            row.ResultsJson = json;
-        }
+            TradingDate = tradingDate.Value,
+            RunAt = DateTime.UtcNow,
+            TopN = criteria.TopN,
+            ResultsJson = JsonSerializer.Serialize(results),
+        });
         await _db.SaveChangesAsync(ct);
-        _logger.LogInformation("选股结果已冻结落库：{Date} TOP{Top}", tradingDate.Value.ToString("yyyy-MM-dd"), results.Count);
+        _logger.LogInformation("选股结果已记录：{Date} TOP{Top}（追加历史）", tradingDate.Value.ToString("yyyy-MM-dd"), results.Count);
         return results;
+    }
+
+    /// <summary>选股历史记录元信息（不含明细），按选股时间倒序。</summary>
+    public async Task<List<SelectionHistoryItem>> GetHistoryAsync(int take = 30, CancellationToken ct = default)
+    {
+        var rows = await _db.SelectionResult
+            .OrderByDescending(r => r.RunAt)
+            .Take(take <= 0 ? 30 : take)
+            .Select(r => new { r.Id, r.TradingDate, r.RunAt, r.TopN })
+            .ToListAsync(ct);
+        return rows.Select(r => new SelectionHistoryItem
+        {
+            Id = r.Id,
+            TradingDate = r.TradingDate,
+            RunAt = r.RunAt,
+            TopN = r.TopN,
+        }).ToList();
+    }
+
+    /// <summary>按 id 取某次选股的完整结果。</summary>
+    public async Task<List<StockSelectionResult>> GetByIdAsync(long id, CancellationToken ct = default)
+    {
+        var row = await _db.SelectionResult.FirstOrDefaultAsync(r => r.Id == id, ct);
+        return row == null ? new() : Deserialize(row.ResultsJson, 0);
     }
 
     private static List<StockSelectionResult> Deserialize(string json, int topN)

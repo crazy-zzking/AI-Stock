@@ -103,9 +103,14 @@ public class AIStockDbContext : DbContext
     public DbSet<DragonTigerSeatEntity> DragonTigerSeat { get; set; }
 
     /// <summary>
-    /// 选股结果快照（每交易日冻结一份 TOP-N，避免盘中刷新跳动）
+    /// 选股结果历史（每次选股追加一条，不覆盖）
     /// </summary>
     public DbSet<SelectionResultEntity> SelectionResult { get; set; }
+
+    /// <summary>
+    /// 每日复盘记录（一交易日一份）
+    /// </summary>
+    public DbSet<DailyReviewEntity> DailyReview { get; set; }
 
     public override int SaveChanges()
     {
@@ -294,8 +299,16 @@ public class AIStockDbContext : DbContext
             entity.HasIndex(e => e.Date);
         });
 
-        // 选股结果快照（每交易日一份，唯一键 trading_date）
+        // 选股结果历史（每次选股追加一条，不覆盖；按 run_at/trading_date 查询）
         modelBuilder.Entity<SelectionResultEntity>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => e.TradingDate);
+            entity.HasIndex(e => e.RunAt);
+        });
+
+        // 每日复盘（一交易日一份，唯一键 trading_date）
+        modelBuilder.Entity<DailyReviewEntity>(entity =>
         {
             entity.HasKey(e => e.Id);
             entity.HasIndex(e => e.TradingDate).IsUnique();

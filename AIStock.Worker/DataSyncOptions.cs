@@ -28,8 +28,14 @@ public class DataSyncOptions
     /// <summary>本轮最多同步多少只股票的K线（0 表示全部）</summary>
     public int MaxStocks { get; set; } = 300;
 
-    /// <summary>每只股票K线请求之间的节流间隔（毫秒），避免压垮数据源</summary>
+    /// <summary>每只股票K线请求之间的节流间隔（毫秒）。仅当 KlineBatchSize&lt;=1（退化为串行）时生效</summary>
     public int KlineThrottleMs { get; set; } = 200;
+
+    /// <summary>K线同步批大小（批内并发拉取）。&gt;1 时分批并行，=1 时退化为串行</summary>
+    public int KlineBatchSize { get; set; } = 8;
+
+    /// <summary>K线同步批间延迟（毫秒），避免被东财限流/封 IP</summary>
+    public int KlineBatchDelayMs { get; set; } = 100;
 
     /// <summary>是否同步股票明细（行业 + 概念，来自东财 F10 / 同花顺）</summary>
     public bool SyncDetails { get; set; } = true;

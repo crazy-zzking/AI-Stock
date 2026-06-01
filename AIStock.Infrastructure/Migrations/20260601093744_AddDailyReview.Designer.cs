@@ -12,8 +12,8 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace AIStock.Infrastructure.Migrations
 {
     [DbContext(typeof(AIStockDbContext))]
-    [Migration("20260601090216_AddSelectionResult")]
-    partial class AddSelectionResult
+    [Migration("20260601093744_AddDailyReview")]
+    partial class AddDailyReview
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -299,6 +299,48 @@ namespace AIStock.Infrastructure.Migrations
                         .IsUnique();
 
                     b.ToTable("daily_market_snapshot");
+                });
+
+            modelBuilder.Entity("AIStock.Infrastructure.Database.Entities.DailyReviewEntity", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<int>("DownCount")
+                        .HasColumnType("int")
+                        .HasColumnName("down_count");
+
+                    b.Property<DateTime>("GeneratedAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("generated_at");
+
+                    b.Property<int>("LimitUpCount")
+                        .HasColumnType("int")
+                        .HasColumnName("limit_up_count");
+
+                    b.Property<string>("ReportJson")
+                        .IsRequired()
+                        .HasColumnType("longtext")
+                        .HasColumnName("report_json");
+
+                    b.Property<DateTime>("TradingDate")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("trading_date");
+
+                    b.Property<int>("UpCount")
+                        .HasColumnType("int")
+                        .HasColumnName("up_count");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TradingDate")
+                        .IsUnique();
+
+                    b.ToTable("daily_review");
                 });
 
             modelBuilder.Entity("AIStock.Infrastructure.Database.Entities.DragonTigerEntity", b =>
@@ -1010,8 +1052,9 @@ namespace AIStock.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("TradingDate")
-                        .IsUnique();
+                    b.HasIndex("RunAt");
+
+                    b.HasIndex("TradingDate");
 
                     b.ToTable("selection_result");
                 });

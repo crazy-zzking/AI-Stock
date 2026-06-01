@@ -4,8 +4,9 @@ using System.ComponentModel.DataAnnotations.Schema;
 namespace AIStock.Infrastructure.Database.Entities;
 
 /// <summary>
-/// 选股结果快照 — 每个交易日冻结一份 TOP-N 选股结果，避免盘中每次刷新都重算导致结果跳动。
-/// 一行 = 一次选股批次（ResultsJson 存 List&lt;StockSelectionResult&gt; 序列化）。唯一键 trading_date。
+/// 选股结果历史 — 每次选股追加一条记录（不覆盖），用 run_at 记录选股时间。
+/// /latest 取最近一条，盘中刷新结果不跳动，直到下次重新选股再追加新记录。
+/// 一行 = 一次选股批次（ResultsJson 存 List&lt;StockSelectionResult&gt; 序列化）。
 /// </summary>
 [Table("selection_result")]
 public class SelectionResultEntity

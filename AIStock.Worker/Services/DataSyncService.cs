@@ -140,23 +140,56 @@ public partial class DataSyncService
         var totalInserted = 0;
         var processed = 0;
 
-        _logger.LogInformation("开始K线同步：{Count} 只股票（数据源：东方财富）", codes.Count);
+        // 一次性取出各股票库内最新日K日期，用于增量去重（DbContext 非线程安全，不能在并发任务里查库）
+        var klineMaxDates = await db.KlineData
+            .Where(k => k.Interval == interval)
+            .GroupBy(k => k.Code)
+            .Select(g => new { Code = g.Key, Last = g.Max(x => x.DateTime) })
+            .ToDictionaryAsync(x => x.Code, x => x.Last, ct);
 
-        foreach (var code in codes)
+        var batchSize = Math.Max(1, _options.KlineBatchSize);
+        var today = DateTime.Today;
+        _logger.LogInformation("开始K线同步：{Count} 只股票（数据源：东方财富，批大小 {Batch}）", codes.Count, batchSize);
+
+        for (int i = 0; i < codes.Count; i += batchSize)
         {
             if (ct.IsCancellationRequested) break;
-            try
-            {
-                // 库内该股票已有的最新日期，仅插入更新的部分
-                var lastDate = await db.KlineData
-                    .Where(k => k.Code == code && k.Interval == interval)
-                    .MaxAsync(k => (DateTime?)k.DateTime, ct);
+            var batch = codes.Skip(i).Take(batchSize).ToList();
 
-                var klines = await provider.GetKlinesAsync(code, KlineInterval.Daily, _options.KlineCount);
+            // 本批 stock_base 实体（用于读取/回写 LastKlineSyncDate，受 DbContext 跟踪）
+            var stockEnts = await db.StockBase
+                .Where(s => batch.Contains(s.Code))
+                .ToDictionaryAsync(s => s.Code, s => s, ct);
+
+            // 批内并发拉取（仅 HTTP + 读只读字典，不碰 DbContext）
+            var tasks = batch.Select(async code =>
+            {
+                // 最后同步日期：优先用 stock_base 记录，其次回退库内最新日K日期（首次迁移后兼容）
+                stockEnts.TryGetValue(code, out var ent);
+                DateTime? klineMax = klineMaxDates.TryGetValue(code, out var d) ? d : null;
+                DateTime? lastSync = ent?.LastKlineSyncDate ?? klineMax;
+                var lmt = ComputeKlineFetchCount(lastSync, today);
+                try
+                {
+                    var klines = await provider.GetKlinesAsync(code, KlineInterval.Daily, lmt);
+                    return (code, klines);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "K线拉取失败 {Code}", code);
+                    return (code, (List<AIStock.Core.Models.KlineData>?)null);
+                }
+            });
+            var results = await Task.WhenAll(tasks);
+
+            // DB 写入串行：按库内最新日期去重后落库，并回写 LastKlineSyncDate
+            foreach (var (code, klines) in results)
+            {
                 if (klines == null || klines.Count == 0) continue;
+                var hasLast = klineMaxDates.TryGetValue(code, out var lastDate);
 
                 var fresh = klines
-                    .Where(k => lastDate == null || k.DateTime > lastDate.Value)
+                    .Where(k => !hasLast || k.DateTime > lastDate)
                     .Select(k => new KlineDataEntity
                     {
                         Code = code,
@@ -178,24 +211,45 @@ public partial class DataSyncService
                 if (fresh.Count > 0)
                 {
                     db.KlineData.AddRange(fresh);
-                    await db.SaveChangesAsync(ct);
                     totalInserted += fresh.Count;
                 }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "K线同步失败 {Code}", code);
-            }
 
-            if (++processed % 50 == 0)
+                // 记录最后同步到的日K日期（取拉到的最新一根）
+                if (stockEnts.TryGetValue(code, out var stock))
+                    stock.LastKlineSyncDate = klines.Max(k => k.DateTime);
+            }
+            await db.SaveChangesAsync(ct);
+            processed += batch.Count;
+
+            if (processed % 50 == 0 || i + batchSize >= codes.Count)
                 _logger.LogInformation("K线同步进度：{Processed}/{Total}，累计新增 {Rows} 条", processed, codes.Count, totalInserted);
 
-            if (_options.KlineThrottleMs > 0)
-                await Task.Delay(_options.KlineThrottleMs, ct);
+            // 批间节流（批大小<=1 时退化为逐只节流，沿用 KlineThrottleMs）
+            var delay = batchSize > 1 ? _options.KlineBatchDelayMs : _options.KlineThrottleMs;
+            if (delay > 0 && i + batchSize < codes.Count)
+                await Task.Delay(delay, ct);
         }
 
         _logger.LogInformation("kline_data 同步完成：{Stocks} 只股票，新增 {Rows} 条K线", codes.Count, totalInserted);
         return totalInserted;
+    }
+
+    /// <summary>
+    /// 据"最后同步日期"决定本次拉取条数：
+    /// 从未同步(null) → 拉满 KlineCount（取深度历史）；
+    /// 否则按落后自然日折算交易日(×5/7) + 缓冲，区间 [2, KlineCount]。
+    /// 既能让日常增量只拉最近几根（快），又能在断更/缺口时一次补齐。
+    /// </summary>
+    private int ComputeKlineFetchCount(DateTime? lastSync, DateTime today)
+    {
+        var max = Math.Max(2, _options.KlineCount);
+        if (lastSync == null) return max; // 首次/无历史：按配置深度拉满
+
+        var daysBehind = (today.Date - lastSync.Value.Date).TotalDays;
+        if (daysBehind <= 0) return 2; // 已是最新，仍拉最近 2 根做校验/容错
+
+        var approxTradingDays = (int)Math.Ceiling(daysBehind * 5.0 / 7.0);
+        return Math.Clamp(approxTradingDays + 5, 2, max); // +5 缓冲，封顶 KlineCount
     }
 
     /// <summary>库内最新日K日期（无数据返回 null）</summary>

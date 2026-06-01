@@ -67,10 +67,21 @@ export const getLatestSelection = (topN = 5) =>
   api.get(`/selection/latest`, { params: { topN } });
 export const screenSelection = (criteria?: Record<string, unknown>) =>
   api.post('/selection/screen', criteria || {});
-// 重新选股并覆盖当日冻结批次（手动刷新选股结果）
+// 重新选股并追加一条历史记录（不覆盖）
 export const rerunSelection = (criteria?: Record<string, unknown>) =>
   api.post('/selection/run', criteria || {});
+// 选股历史记录列表（元信息，按选股时间倒序）
+export const getSelectionHistory = (take = 30) =>
+  api.get('/selection/history', { params: { take } });
+// 按 id 取某次选股的完整结果
+export const getSelectionById = (id: number) => api.get(`/selection/history/${id}`);
 export const getActivityPool = () => api.get('/selection/activity');
+
+// ============ 每日复盘 ============
+export const getLatestReview = () => api.get('/review/latest');
+export const getReviewByDate = (date: string) => api.get(`/review/${date}`);
+export const runReview = (date?: string) => api.post('/review/run', null, { params: date ? { date } : {} });
+export const getReviewHistory = (take = 30) => api.get('/review/history', { params: { take } });
 
 // ============ 板块资金流 ============
 export interface SectorFlow {

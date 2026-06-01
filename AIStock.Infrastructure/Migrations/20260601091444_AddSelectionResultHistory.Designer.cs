@@ -4,6 +4,7 @@ using AIStock.Infrastructure.Database.Context;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace AIStock.Infrastructure.Migrations
 {
     [DbContext(typeof(AIStockDbContext))]
-    partial class AIStockDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260601091444_AddSelectionResultHistory")]
+    partial class AddSelectionResultHistory
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -296,48 +299,6 @@ namespace AIStock.Infrastructure.Migrations
                         .IsUnique();
 
                     b.ToTable("daily_market_snapshot");
-                });
-
-            modelBuilder.Entity("AIStock.Infrastructure.Database.Entities.DailyReviewEntity", b =>
-                {
-                    b.Property<long>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint")
-                        .HasColumnName("id");
-
-                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<long>("Id"));
-
-                    b.Property<int>("DownCount")
-                        .HasColumnType("int")
-                        .HasColumnName("down_count");
-
-                    b.Property<DateTime>("GeneratedAt")
-                        .HasColumnType("datetime(6)")
-                        .HasColumnName("generated_at");
-
-                    b.Property<int>("LimitUpCount")
-                        .HasColumnType("int")
-                        .HasColumnName("limit_up_count");
-
-                    b.Property<string>("ReportJson")
-                        .IsRequired()
-                        .HasColumnType("longtext")
-                        .HasColumnName("report_json");
-
-                    b.Property<DateTime>("TradingDate")
-                        .HasColumnType("datetime(6)")
-                        .HasColumnName("trading_date");
-
-                    b.Property<int>("UpCount")
-                        .HasColumnType("int")
-                        .HasColumnName("up_count");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("TradingDate")
-                        .IsUnique();
-
-                    b.ToTable("daily_review");
                 });
 
             modelBuilder.Entity("AIStock.Infrastructure.Database.Entities.DragonTigerEntity", b =>
@@ -1084,10 +1045,6 @@ namespace AIStock.Infrastructure.Migrations
                     b.Property<bool>("IsDelisted")
                         .HasColumnType("tinyint(1)")
                         .HasColumnName("is_delisted");
-
-                    b.Property<DateTime?>("LastKlineSyncDate")
-                        .HasColumnType("datetime(6)")
-                        .HasColumnName("last_kline_sync_date");
 
                     b.Property<DateTime?>("ListDate")
                         .HasColumnType("datetime(6)")

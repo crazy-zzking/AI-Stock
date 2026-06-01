@@ -52,6 +52,20 @@ public class SelectionFactorScores
 }
 
 /// <summary>
+/// 选股历史记录元信息（列表展示用，不含明细）
+/// </summary>
+public class SelectionHistoryItem
+{
+    public long Id { get; set; }
+    /// <summary>选股所基于的交易日</summary>
+    public DateTime TradingDate { get; set; }
+    /// <summary>选股时间（UTC）</summary>
+    public DateTime RunAt { get; set; }
+    /// <summary>该次返回的 TOP-N</summary>
+    public int TopN { get; set; }
+}
+
+/// <summary>
 /// 选股结果（一只股票一张卡片）
 /// </summary>
 public class StockSelectionResult

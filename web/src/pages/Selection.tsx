@@ -51,13 +51,13 @@ const Selection: React.FC = () => {
     }
   };
 
-  // 重新选股：重算并覆盖当日冻结批次（区别于「刷新」只读已冻结结果）
+  // 重新选股：重算并追加一条历史记录（区别于「刷新」只读最近一次记录）
   const rerun = async (n: number) => {
     setRerunning(true);
     try {
       const res = await rerunSelection({ topN: n });
       setList(res.data || []);
-      message.success('已重新选股并更新当日结果');
+      message.success('已重新选股并记录本次结果');
     } catch {
       message.error('重新选股失败');
     } finally {
@@ -74,7 +74,7 @@ const Selection: React.FC = () => {
         <Space style={{ marginLeft: 16 }}>
           <InputNumber min={1} max={20} value={topN} onChange={(v) => setTopN(v || 5)} size="small" style={{ width: 70 }} />
           <Button icon={<ReloadOutlined />} size="small" onClick={() => load(topN)}>刷新</Button>
-          <Tooltip title="重新选股并覆盖当日结果（默认刷新只读当日已冻结的选股，盘中不跳动）">
+          <Tooltip title="重新选股并新增一条记录（不覆盖历史；默认刷新只读最近一次记录，盘中不跳动）">
             <Button size="small" type="primary" loading={rerunning} onClick={() => rerun(topN)}>重新选股</Button>
           </Tooltip>
         </Space>

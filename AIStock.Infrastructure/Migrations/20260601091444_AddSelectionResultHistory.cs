@@ -7,7 +7,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace AIStock.Infrastructure.Migrations
 {
     /// <inheritdoc />
-    public partial class AddSelectionResult : Migration
+    public partial class AddSelectionResultHistory : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
@@ -31,10 +31,14 @@ namespace AIStock.Infrastructure.Migrations
                 .Annotation("MySql:CharSet", "utf8mb4");
 
             migrationBuilder.CreateIndex(
+                name: "IX_selection_result_run_at",
+                table: "selection_result",
+                column: "run_at");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_selection_result_trading_date",
                 table: "selection_result",
-                column: "trading_date",
-                unique: true);
+                column: "trading_date");
         }
 
         /// <inheritdoc />

@@ -157,6 +157,7 @@ builder.Services.Configure<AIStock.Monitor.MonitorOptions>(
     builder.Configuration.GetSection(AIStock.Monitor.MonitorOptions.SectionName));
 builder.Services.AddMonitorServices();
 builder.Services.AddHostedService<AIStock.Web.Services.MonitorBackgroundService>();
+builder.Services.AddScoped<AIStock.Web.Services.DailyReviewService>();
 builder.Services.AddHostedService<AIStock.Web.Services.DailyReviewBackgroundService>();
 
 // 注册数据源Provider（HttpClient/Resolver/各Provider，统一扩展，与 Worker 共用）

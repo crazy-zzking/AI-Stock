@@ -87,6 +87,12 @@ public class StockBaseEntity
     public bool IsDelisted { get; set; }
 
     /// <summary>
+    /// 最后同步到的日K日期 — 据此决定下次拉取条数（增量续补/缺口补齐）
+    /// </summary>
+    [Column("last_kline_sync_date")]
+    public DateTime? LastKlineSyncDate { get; set; }
+
+    /// <summary>
     /// 创建时间
     /// </summary>
     [Column("created_at")]

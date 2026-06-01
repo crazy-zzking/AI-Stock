@@ -40,11 +40,27 @@ public class SelectionController : ControllerBase
         return Ok(results);
     }
 
-    /// <summary>重新选股并覆盖当日冻结批次（手动刷新选股）。</summary>
+    /// <summary>重新选股并追加一条历史记录（不覆盖），返回本次结果。</summary>
     [HttpPost("run")]
     public async Task<ActionResult<List<StockSelectionResult>>> Run([FromBody] SelectionCriteria? criteria, CancellationToken ct)
     {
         var results = await _selection.RunAndSaveAsync(criteria ?? new SelectionCriteria(), ct);
+        return Ok(results);
+    }
+
+    /// <summary>选股历史记录列表（元信息，按选股时间倒序）。</summary>
+    [HttpGet("history")]
+    public async Task<ActionResult<List<SelectionHistoryItem>>> History([FromQuery] int take = 30, CancellationToken ct = default)
+    {
+        var items = await _selection.GetHistoryAsync(take, ct);
+        return Ok(items);
+    }
+
+    /// <summary>按 id 取某次选股的完整结果。</summary>
+    [HttpGet("history/{id:long}")]
+    public async Task<ActionResult<List<StockSelectionResult>>> HistoryDetail(long id, CancellationToken ct)
+    {
+        var results = await _selection.GetByIdAsync(id, ct);
         return Ok(results);
     }
 

@@ -3,7 +3,8 @@ using AIStock.Core.Interfaces;
 namespace AIStock.Web.Services;
 
 /// <summary>
-/// 每日交易复盘服务 — 收盘后（默认 17:00）汇总当日订单统计并写入日志，用于灰度阶段人工复盘。
+/// 每日复盘后台服务 — 收盘后（默认 17:00）在交易日触发 DailyReviewService 生成复盘报告并落库，
+/// 同时把总结写入日志。报告内容（领涨板块/个股/归因/数据缺口）见 daily_review 表与 /api/review。
 /// </summary>
 public class DailyReviewBackgroundService : BackgroundService
 {
@@ -23,7 +24,7 @@ public class DailyReviewBackgroundService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        _logger.LogInformation("每日复盘服务启动，将在 {Hour}:00 输出日报", ReviewHour);
+        _logger.LogInformation("每日复盘服务启动，将在交易日 {Hour}:00 生成复盘报告", ReviewHour);
 
         while (!stoppingToken.IsCancellationRequested)
         {
@@ -45,50 +46,21 @@ public class DailyReviewBackgroundService : BackgroundService
 
     private async Task RunDailyReviewAsync(CancellationToken ct)
     {
-        var today = DateTime.Today;
-        var startTime = today;
-        var endTime = today.AddDays(1).AddSeconds(-1);
-
         using var scope = _scopeFactory.CreateScope();
-        var orderManager = scope.ServiceProvider.GetRequiredService<IOrderManager>();
-        var tradingGate = scope.ServiceProvider.GetRequiredService<ITradingGate>();
+        var sp = scope.ServiceProvider;
 
-        try
+        // 非交易日跳过
+        var calendar = sp.GetRequiredService<ITradingCalendar>();
+        if (!await calendar.IsTradingDayAsync(DateTime.Today, ct))
         {
-            var orders = await orderManager.GetOrdersAsync(startTime, endTime);
-
-            var totalOrders = orders.Count;
-            var successOrders = orders.Count(o => o.Status == Core.Enums.OrderStatus.Filled ||
-                                                   o.Status == Core.Enums.OrderStatus.Submitted);
-            var failedOrders = orders.Count(o => o.Status == Core.Enums.OrderStatus.Failed);
-            var buyOrders = orders.Count(o => o.Side?.ToLower() == "buy");
-            var sellOrders = orders.Count(o => o.Side?.ToLower() == "sell");
-            var totalValue = orders.Sum(o => o.Price * o.Volume);
-
-            _logger.LogInformation(
-                "===== 每日复盘 {Date} ===== " +
-                "mode={Mode} totalOrders={Total} success={Success} failed={Failed} " +
-                "buy={Buy} sell={Sell} totalValue={Value:N0} gateTodayCount={GateCount}",
-                today.ToString("yyyy-MM-dd"),
-                tradingGate.Mode,
-                totalOrders, successOrders, failedOrders,
-                buyOrders, sellOrders, totalValue,
-                tradingGate.TodayOrderCount);
-
-            if (failedOrders > 0)
-            {
-                _logger.LogWarning("今日有 {FailedCount} 笔订单失败，请检查日志排查原因", failedOrders);
-            }
-
-            if (totalOrders == 0)
-            {
-                _logger.LogInformation("今日无任何下单记录（DryRun模式或无信号触发）");
-            }
+            _logger.LogInformation("今日非交易日，跳过复盘");
+            return;
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "每日复盘数据获取失败");
-        }
+
+        var review = sp.GetRequiredService<DailyReviewService>();
+        var report = await review.GenerateAndSaveAsync(DateTime.Today, ct);
+        if (report != null)
+            _logger.LogInformation("===== 每日复盘 ===== {Summary}", report.Summary);
     }
 
     private static TimeSpan NextReviewDelay()
