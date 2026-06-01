@@ -84,7 +84,7 @@ public class EastmoneyProvider : BaseProvider
         try
         {
             var secid = GetMarketCode(code);
-            var url = $"{QuoteUrl}?secid={secid}&ut={UserToken}&fields=f43,f44,f45,f46,f47,f48,f50,f51,f52,f55,f57,f58,f60,f116,f117,f170,f162,f167";
+            var url = $"{QuoteUrl}?secid={secid}&ut={UserToken}&fields=f43,f44,f45,f46,f47,f48,f50,f51,f52,f55,f57,f58,f60,f116,f117,f168,f170,f162,f167";
             Logger.LogDebug("Requesting quote from: {Url}", url);
             
             var response = await SendEastmoneyRequestAsync(url);
@@ -141,8 +141,8 @@ public class EastmoneyProvider : BaseProvider
                 Volume = (long)GetDecimal(data.GetProperty("f47")) * 100,
                 Amount = GetDecimal(data.GetProperty("f48")),
                 ChangePercent = GetDecimal(data.GetProperty("f170"), 100),
-                ChangeAmount = GetDecimal(data.GetProperty("f116"), 100),
-                TurnoverRate = GetDecimal(data.GetProperty("f117"), 100),
+                ChangeAmount = GetDecimal(data.GetProperty("f43"), 100) - GetDecimal(data.GetProperty("f60"), 100),
+                TurnoverRate = data.TryGetProperty("f168", out var turnEl) ? GetDecimal(turnEl, 100) : 0,
                 VolumeRatio = GetDecimal(data.GetProperty("f50"), 100),
                 // 估值字段（东财 stock/get）。已联调校准 ：
                 // f116 总市值=元(不除)、f117 流通市值=元(不除)、f162 PE(动)÷100、f167 PB÷100；取不到则为 0。
