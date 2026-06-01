@@ -67,6 +67,9 @@ export const getLatestSelection = (topN = 5) =>
   api.get(`/selection/latest`, { params: { topN } });
 export const screenSelection = (criteria?: Record<string, unknown>) =>
   api.post('/selection/screen', criteria || {});
+// 重新选股并覆盖当日冻结批次（手动刷新选股结果）
+export const rerunSelection = (criteria?: Record<string, unknown>) =>
+  api.post('/selection/run', criteria || {});
 export const getActivityPool = () => api.get('/selection/activity');
 
 // ============ 板块资金流 ============

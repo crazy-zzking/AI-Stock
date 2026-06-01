@@ -5,7 +5,7 @@ import {
 } from 'antd';
 import { ReloadOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
-import { getLatestSelection } from '../api';
+import { getLatestSelection, rerunSelection } from '../api';
 
 interface FactorScores {
   capital: number; technical: number; position: number;
@@ -35,6 +35,7 @@ const DataItem: React.FC<{ label: string; value: React.ReactNode; color?: string
 const Selection: React.FC = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
+  const [rerunning, setRerunning] = useState(false);
   const [topN, setTopN] = useState(5);
   const [list, setList] = useState<SelectionResult[]>([]);
 
@@ -50,6 +51,20 @@ const Selection: React.FC = () => {
     }
   };
 
+  // 重新选股：重算并覆盖当日冻结批次（区别于「刷新」只读已冻结结果）
+  const rerun = async (n: number) => {
+    setRerunning(true);
+    try {
+      const res = await rerunSelection({ topN: n });
+      setList(res.data || []);
+      message.success('已重新选股并更新当日结果');
+    } catch {
+      message.error('重新选股失败');
+    } finally {
+      setRerunning(false);
+    }
+  };
+
   useEffect(() => { load(topN); /* eslint-disable-next-line */ }, []);
 
   return (
@@ -59,6 +74,9 @@ const Selection: React.FC = () => {
         <Space style={{ marginLeft: 16 }}>
           <InputNumber min={1} max={20} value={topN} onChange={(v) => setTopN(v || 5)} size="small" style={{ width: 70 }} />
           <Button icon={<ReloadOutlined />} size="small" onClick={() => load(topN)}>刷新</Button>
+          <Tooltip title="重新选股并覆盖当日结果（默认刷新只读当日已冻结的选股，盘中不跳动）">
+            <Button size="small" type="primary" loading={rerunning} onClick={() => rerun(topN)}>重新选股</Button>
+          </Tooltip>
         </Space>
       </h2>
 

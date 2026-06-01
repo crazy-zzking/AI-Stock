@@ -1,3 +1,4 @@
+using System.Text.Json;
 using AIStock.Core.Models;
 using AIStock.Infrastructure.Database.Context;
 using AIStock.Infrastructure.Database.Entities;
@@ -104,6 +105,60 @@ public class StockSelectionService
                 r.HotConcepts = cs.Where(hotConcepts.ContainsKey).ToList();
             }
         }
+    }
+
+    /// <summary>
+    /// 取当日已冻结的选股结果：已落库当日批次直接返回（盘中刷新结果不跳动）；
+    /// 无则跑一次并落库冻结。需要重新选股请调 <see cref="RunAndSaveAsync"/>。
+    /// </summary>
+    public async Task<List<StockSelectionResult>> GetOrCreateLatestAsync(int topN = 5, CancellationToken ct = default)
+    {
+        var tradingDate = await _db.DailyMarketSnapshot.MaxAsync(s => (DateTime?)s.Date, ct);
+        if (tradingDate == null) return new();
+
+        var existing = await _db.SelectionResult
+            .FirstOrDefaultAsync(r => r.TradingDate == tradingDate.Value, ct);
+        if (existing != null)
+            return Deserialize(existing.ResultsJson, topN);
+
+        return await RunAndSaveAsync(new SelectionCriteria { TopN = topN }, ct);
+    }
+
+    /// <summary>重新选股并落库（覆盖当日批次），返回结果。供手动刷新 / 收盘后任务调用。</summary>
+    public async Task<List<StockSelectionResult>> RunAndSaveAsync(SelectionCriteria criteria, CancellationToken ct = default)
+    {
+        var results = await SelectAsync(criteria, ct);
+
+        var tradingDate = await _db.DailyMarketSnapshot.MaxAsync(s => (DateTime?)s.Date, ct);
+        if (tradingDate == null) return results;
+
+        var json = JsonSerializer.Serialize(results);
+        var row = await _db.SelectionResult.FirstOrDefaultAsync(r => r.TradingDate == tradingDate.Value, ct);
+        if (row == null)
+        {
+            _db.SelectionResult.Add(new SelectionResultEntity
+            {
+                TradingDate = tradingDate.Value,
+                RunAt = DateTime.UtcNow,
+                TopN = criteria.TopN,
+                ResultsJson = json,
+            });
+        }
+        else
+        {
+            row.RunAt = DateTime.UtcNow;
+            row.TopN = criteria.TopN;
+            row.ResultsJson = json;
+        }
+        await _db.SaveChangesAsync(ct);
+        _logger.LogInformation("选股结果已冻结落库：{Date} TOP{Top}", tradingDate.Value.ToString("yyyy-MM-dd"), results.Count);
+        return results;
+    }
+
+    private static List<StockSelectionResult> Deserialize(string json, int topN)
+    {
+        var list = JsonSerializer.Deserialize<List<StockSelectionResult>>(json) ?? new();
+        return topN > 0 ? list.Take(topN).ToList() : list;
     }
 
     /// <summary>仅返回第一级活跃度粗筛池（调试/观察用）。</summary>

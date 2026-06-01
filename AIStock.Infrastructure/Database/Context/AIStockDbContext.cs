@@ -102,6 +102,11 @@ public class AIStockDbContext : DbContext
     /// </summary>
     public DbSet<DragonTigerSeatEntity> DragonTigerSeat { get; set; }
 
+    /// <summary>
+    /// 选股结果快照（每交易日冻结一份 TOP-N，避免盘中刷新跳动）
+    /// </summary>
+    public DbSet<SelectionResultEntity> SelectionResult { get; set; }
+
     public override int SaveChanges()
     {
         UpdateTimestamps();
@@ -287,6 +292,13 @@ public class AIStockDbContext : DbContext
             entity.HasIndex(e => new { e.Code, e.Date });
             entity.HasIndex(e => e.SeatName);
             entity.HasIndex(e => e.Date);
+        });
+
+        // 选股结果快照（每交易日一份，唯一键 trading_date）
+        modelBuilder.Entity<SelectionResultEntity>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => e.TradingDate).IsUnique();
         });
     }
 }

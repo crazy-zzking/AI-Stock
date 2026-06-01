@@ -21,7 +21,7 @@ public class SelectionController : ControllerBase
         _logger = logger;
     }
 
-    /// <summary>按自定义条件选股，返回 TOP-N。</summary>
+    /// <summary>按自定义条件实时选股（不落库，调试/试参用）。</summary>
     [HttpPost("screen")]
     public async Task<ActionResult<List<StockSelectionResult>>> Screen([FromBody] SelectionCriteria? criteria, CancellationToken ct)
     {
@@ -29,11 +29,22 @@ public class SelectionController : ControllerBase
         return Ok(results);
     }
 
-    /// <summary>按默认条件返回最新一期选股结果（供面板展示）。</summary>
+    /// <summary>
+    /// 返回当日已冻结的选股结果（供面板展示）。当日首次访问会生成并落库，
+    /// 之后盘中刷新返回同一份、结果不跳动。需重新选股请调 POST /run。
+    /// </summary>
     [HttpGet("latest")]
     public async Task<ActionResult<List<StockSelectionResult>>> Latest([FromQuery] int topN = 5, CancellationToken ct = default)
     {
-        var results = await _selection.SelectAsync(new SelectionCriteria { TopN = topN }, ct);
+        var results = await _selection.GetOrCreateLatestAsync(topN, ct);
+        return Ok(results);
+    }
+
+    /// <summary>重新选股并覆盖当日冻结批次（手动刷新选股）。</summary>
+    [HttpPost("run")]
+    public async Task<ActionResult<List<StockSelectionResult>>> Run([FromBody] SelectionCriteria? criteria, CancellationToken ct)
+    {
+        var results = await _selection.RunAndSaveAsync(criteria ?? new SelectionCriteria(), ct);
         return Ok(results);
     }
 
