@@ -49,7 +49,9 @@ public class JobScheduler : BackgroundService
     private async Task RunJobLoopAsync(IScheduledJob job, JobOptions opt, TimeSpan startupStagger, CancellationToken ct)
     {
         // 初始等待：启动跑则错峰后立即跑，否则等到下一个调度点
-        var initial = opt.RunOnStartup ? startupStagger.Add(TimeSpan.FromSeconds(5)) : (job.GetNextDelay() ?? NextDelay(opt));
+        var initial = opt.RunOnStartup
+            ? startupStagger.Add(TimeSpan.FromSeconds(5))
+            : (await job.GetNextDelayAsync(ct) ?? NextDelay(opt));
         try { await Task.Delay(initial, ct); } catch (OperationCanceledException) { return; }
 
         _logger.LogInformation("任务[{Name}]已启动，调度：{Schedule}", job.Name, DescribeSchedule(job, opt));
@@ -66,7 +68,7 @@ public class JobScheduler : BackgroundService
                 _logger.LogError(ex, "任务[{Name}]执行异常", job.Name);
             }
 
-            var delay = job.GetNextDelay() ?? NextDelay(opt);
+            var delay = await job.GetNextDelayAsync(ct) ?? NextDelay(opt);
             try { await Task.Delay(delay, ct); } catch (OperationCanceledException) { break; }
         }
     }
@@ -86,7 +88,7 @@ public class JobScheduler : BackgroundService
     }
 
     private static string DescribeSchedule(IScheduledJob job, JobOptions opt) =>
-        job.GetNextDelay() != null ? "动态间隔（由任务自定）"
+        job.HasDynamicSchedule ? "动态间隔（由任务自定）"
         : opt.DailyAtHour >= 0 ? $"每日 {opt.DailyAtHour}:00"
         : $"每 {(opt.IntervalSeconds > 0 ? opt.IntervalSeconds : 3600)} 秒";
 }

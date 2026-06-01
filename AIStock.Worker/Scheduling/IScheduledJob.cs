@@ -11,6 +11,9 @@ public interface IScheduledJob
     /// <summary>执行一次任务</summary>
     Task ExecuteAsync(CancellationToken ct);
 
-    /// <summary>自定义下次运行延迟（覆盖配置的固定间隔）；返回 null 则用调度器默认。</summary>
-    TimeSpan? GetNextDelay() => null;
+    /// <summary>是否使用自定义调度间隔（仅用于日志描述）。</summary>
+    bool HasDynamicSchedule => false;
+
+    /// <summary>自定义下次运行延迟（异步，可查交易日历）；返回 null 用调度器默认固定间隔。</summary>
+    Task<TimeSpan?> GetNextDelayAsync(CancellationToken ct) => Task.FromResult<TimeSpan?>(null);
 }

@@ -1,3 +1,4 @@
+using AIStock.Core.Interfaces;
 using AIStock.Worker.Services;
 using Microsoft.Extensions.Options;
 
@@ -86,17 +87,24 @@ public class ReportCollectJob : IScheduledJob
 public class KnowledgeStarCollectJob : IScheduledJob
 {
     private readonly IntelligenceSyncService _sync;
-    public KnowledgeStarCollectJob(IntelligenceSyncService sync) => _sync = sync;
+    private readonly ITradingCalendar _calendar;
+    public KnowledgeStarCollectJob(IntelligenceSyncService sync, ITradingCalendar calendar)
+    {
+        _sync = sync;
+        _calendar = calendar;
+    }
     public string Name => "knowledge-star";
     public Task ExecuteAsync(CancellationToken ct) => _sync.SyncKnowledgeStarAsync(ct);
 
-    /// <summary>交易日盘中(9:30-15:00) 5-10 分钟随机；其余(收盘/周末) 1-2 小时随机。</summary>
-    public TimeSpan? GetNextDelay()
+    public bool HasDynamicSchedule => true;
+
+    /// <summary>交易日盘中(9:30-15:00) 5-10 分钟随机；其余(收盘/周末/节假日) 1-2 小时随机。</summary>
+    public async Task<TimeSpan?> GetNextDelayAsync(CancellationToken ct)
     {
         var now = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow,
             TimeZoneInfo.FindSystemTimeZoneById("China Standard Time"));
-        var isWeekday = now.DayOfWeek != DayOfWeek.Saturday && now.DayOfWeek != DayOfWeek.Sunday;
-        if (isWeekday && PositionCacheService.IsInTradingHours(now))
+        var isTradingDay = await _calendar.IsTradingDayAsync(now.Date, ct);
+        if (isTradingDay && PositionCacheService.IsInTradingHours(now))
             return TimeSpan.FromMinutes(5 + Random.Shared.NextDouble() * 5);  // 5-10 分钟
         return TimeSpan.FromMinutes(60 + Random.Shared.NextDouble() * 60);    // 1-2 小时
     }
