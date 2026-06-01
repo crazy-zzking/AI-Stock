@@ -93,8 +93,10 @@ export interface CandidateEdge {
   from: string; to: string; edgeType: string;
   credibility: number; mentionCount: number; promoted: boolean; sourceUrl?: string;
 }
-export const getCandidateEdges = (edgeType?: string, top = 300) =>
-  api.get<CandidateEdge[]>('/knowledge/candidate-edges', { params: { edgeType, top } });
+export const getCandidateEdges = (edgeType?: string, entity?: string, top = 300) =>
+  api.get<CandidateEdge[]>('/knowledge/candidate-edges', { params: { edgeType, entity, top } });
+export const getCandidateValues = (edgeType: string, top = 100) =>
+  api.get<{ value: string; count: number }[]>('/knowledge/candidate-edges/values', { params: { edgeType, top } });
 
 // ============ LLM ============
 export const getLLMModels = () => api.get<LLMModel[]>('/llm/models');

@@ -69,10 +69,12 @@ public class KnowledgeController : ControllerBase
     /// edgeType 可选 concept(公司-概念) / co-occur(公司-公司)；不传则全部。
     /// </summary>
     [HttpGet("candidate-edges")]
-    public async Task<IActionResult> GetCandidateEdges([FromQuery] string? edgeType = null, [FromQuery] int top = 300)
+    public async Task<IActionResult> GetCandidateEdges(
+        [FromQuery] string? edgeType = null, [FromQuery] string? entity = null, [FromQuery] int top = 300)
     {
         var q = _db.GraphCandidateEdge.AsQueryable();
         if (!string.IsNullOrEmpty(edgeType)) q = q.Where(e => e.EdgeType == edgeType);
+        if (!string.IsNullOrEmpty(entity)) q = q.Where(e => e.FromEntity == entity || e.ToEntity == entity);
         var edges = await q
             .OrderByDescending(e => e.MentionCount)
             .ThenByDescending(e => e.Credibility)
@@ -89,6 +91,32 @@ public class KnowledgeController : ControllerBase
             })
             .ToListAsync();
         return Ok(edges);
+    }
+
+    /// <summary>
+    /// 某 edgeType 下可选的具体值（用于二级筛选）：
+    /// concept → 概念名（to_entity）；co-occur → 公司实体（from/to）。按出现次数降序。
+    /// </summary>
+    [HttpGet("candidate-edges/values")]
+    public async Task<IActionResult> GetCandidateValues([FromQuery] string edgeType, [FromQuery] int top = 100)
+    {
+        if (edgeType == "concept")
+        {
+            var values = await _db.GraphCandidateEdge
+                .Where(e => e.EdgeType == "concept")
+                .GroupBy(e => e.ToEntity)
+                .Select(g => new { value = g.Key, count = g.Count() })
+                .OrderByDescending(x => x.count)
+                .Take(top)
+                .ToListAsync();
+            return Ok(values);
+        }
+
+        // co-occur 等：公司实体取 from ∪ to
+        var froms = _db.GraphCandidateEdge.Where(e => e.EdgeType == edgeType).Select(e => e.FromEntity);
+        var tos = _db.GraphCandidateEdge.Where(e => e.EdgeType == edgeType).Select(e => e.ToEntity);
+        var entities = await froms.Union(tos).Distinct().Take(top).ToListAsync();
+        return Ok(entities.Select(v => new { value = v, count = 0 }));
     }
 
     #endregion

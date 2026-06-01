@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Card, Table, Tabs, Tag, message, Select, Empty, Row, Col, Input, Button, Space, List } from 'antd';
 import { ApartmentOutlined } from '@ant-design/icons';
-import { getChains, getChainCompanies, getCompanyRelations, getSuppliers, getCustomers, diffuseConcept, findRelationPath, getCandidateEdges } from '../api';
+import { getChains, getChainCompanies, getCompanyRelations, getSuppliers, getCustomers, diffuseConcept, findRelationPath, getCandidateEdges, getCandidateValues } from '../api';
 import type { CandidateEdge } from '../api';
 import LoadingSkeleton from '../components/LoadingSkeleton';
 import RelationGraph from '../components/RelationGraph';
@@ -31,17 +31,29 @@ const KnowledgeGraph: React.FC = () => {
 
   // 候选关系图谱（graph_candidate_edge）
   const [candEdgeType, setCandEdgeType] = useState<string>('concept');
+  const [candValue, setCandValue] = useState<string | undefined>(undefined);
+  const [candValues, setCandValues] = useState<{ value: string; count: number }[]>([]);
   const [candidateEdges, setCandidateEdges] = useState<CandidateEdge[]>([]);
 
   useEffect(() => {
     loadChains();
   }, []);
 
+  // edgeType 变 → 加载可选具体值 + 重置已选值
   useEffect(() => {
-    getCandidateEdges(candEdgeType === 'all' ? undefined : candEdgeType)
+    setCandValue(undefined);
+    if (candEdgeType === 'all') { setCandValues([]); return; }
+    getCandidateValues(candEdgeType)
+      .then((r) => setCandValues(r.data || []))
+      .catch(() => setCandValues([]));
+  }, [candEdgeType]);
+
+  // edgeType / 具体值 变 → 加载候选边
+  useEffect(() => {
+    getCandidateEdges(candEdgeType === 'all' ? undefined : candEdgeType, candValue)
       .then((r) => setCandidateEdges(r.data || []))
       .catch(() => setCandidateEdges([]));
-  }, [candEdgeType]);
+  }, [candEdgeType, candValue]);
 
   const loadChains = async () => {
     try {
@@ -128,6 +140,22 @@ const KnowledgeGraph: React.FC = () => {
               { value: 'all', label: '全部' },
             ]}
           />
+          {candEdgeType !== 'all' && (
+            <Select
+              showSearch
+              allowClear
+              value={candValue}
+              onChange={setCandValue}
+              style={{ width: 260 }}
+              placeholder={candEdgeType === 'concept' ? '选具体概念（可选）' : '选具体公司（可选）'}
+              options={candValues.map((v) => ({
+                value: v.value,
+                label: v.count > 0 ? `${v.value}（${v.count}）` : v.value,
+              }))}
+              filterOption={(input, opt) => String(opt?.label ?? '').includes(input)}
+              notFoundContent={candValues.length === 0 ? '暂无可选值' : undefined}
+            />
+          )}
           <span style={{ color: '#999', fontSize: 12 }}>
             绿实线=已晋升权威图谱，灰虚线=候选中；线越粗提及越多
           </span>
