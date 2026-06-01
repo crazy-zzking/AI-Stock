@@ -10,4 +10,7 @@ public interface IScheduledJob
 
     /// <summary>执行一次任务</summary>
     Task ExecuteAsync(CancellationToken ct);
+
+    /// <summary>自定义下次运行延迟（覆盖配置的固定间隔）；返回 null 则用调度器默认。</summary>
+    TimeSpan? GetNextDelay() => null;
 }

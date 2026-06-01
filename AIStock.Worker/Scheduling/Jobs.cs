@@ -82,13 +82,24 @@ public class ReportCollectJob : IScheduledJob
     public Task ExecuteAsync(CancellationToken ct) => _sync.SyncReportsAsync(ct);
 }
 
-/// <summary>知识星球采集任务（低频，防封）</summary>
+/// <summary>知识星球采集任务（盘中密集、盘后稀疏，随机间隔防封）</summary>
 public class KnowledgeStarCollectJob : IScheduledJob
 {
     private readonly IntelligenceSyncService _sync;
     public KnowledgeStarCollectJob(IntelligenceSyncService sync) => _sync = sync;
     public string Name => "knowledge-star";
     public Task ExecuteAsync(CancellationToken ct) => _sync.SyncKnowledgeStarAsync(ct);
+
+    /// <summary>交易日盘中(9:30-15:00) 5-10 分钟随机；其余(收盘/周末) 1-2 小时随机。</summary>
+    public TimeSpan? GetNextDelay()
+    {
+        var now = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow,
+            TimeZoneInfo.FindSystemTimeZoneById("China Standard Time"));
+        var isWeekday = now.DayOfWeek != DayOfWeek.Saturday && now.DayOfWeek != DayOfWeek.Sunday;
+        if (isWeekday && PositionCacheService.IsInTradingHours(now))
+            return TimeSpan.FromMinutes(5 + Random.Shared.NextDouble() * 5);  // 5-10 分钟
+        return TimeSpan.FromMinutes(60 + Random.Shared.NextDouble() * 60);    // 1-2 小时
+    }
 }
 
 /// <summary>候选边晋升任务（达到阈值的候选边转入权威图谱）</summary>
