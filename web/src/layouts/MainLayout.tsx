@@ -12,6 +12,7 @@ import {
   NodeIndexOutlined,
   SearchOutlined,
   FundOutlined,
+  FireOutlined,
   MessageOutlined,
   FileTextOutlined,
 } from '@ant-design/icons';
@@ -39,6 +40,11 @@ const menuItems = [
     key: '/selection',
     icon: <FundOutlined />,
     label: '选股',
+  },
+  {
+    key: '/sector',
+    icon: <FireOutlined />,
+    label: '板块资金',
   },
   {
     key: '/agents',

@@ -7,6 +7,7 @@ import MainLayout from './layouts/MainLayout';
 import Dashboard from './pages/Dashboard';
 import Positions from './pages/Positions';
 import Selection from './pages/Selection';
+import Sector from './pages/Sector';
 import Agents from './pages/Agents';
 import Strategy from './pages/Strategy';
 import AutoTrading from './pages/AutoTrading';
@@ -30,6 +31,7 @@ function App() {
               <Route path="auto-trading" element={<AutoTrading />} />
               <Route path="positions" element={<Positions />} />
               <Route path="selection" element={<Selection />} />
+              <Route path="sector" element={<Sector />} />
               <Route path="agents" element={<Agents />} />
               <Route path="strategy" element={<Strategy />} />
               <Route path="knowledge" element={<KnowledgeGraph />} />

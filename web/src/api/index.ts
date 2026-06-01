@@ -69,6 +69,15 @@ export const screenSelection = (criteria?: Record<string, unknown>) =>
   api.post('/selection/screen', criteria || {});
 export const getActivityPool = () => api.get('/selection/activity');
 
+// ============ 板块资金流 ============
+export interface SectorFlow {
+  sectorCode: string; sectorName: string; changePercent: number;
+  netInflow: number; price: number; turnoverAmount: number;
+}
+export const getSectorRanking = () => api.get<SectorFlow[]>('/sector/ranking');
+export const getSectorStrongStocks = (sectorCode: string, top = 10) =>
+  api.get(`/sector/${sectorCode}/strong-stocks`, { params: { top } });
+
 // ============ 知识图谱 ============
 export const getChains = () => api.get<string[]>('/knowledge/chains');
 export const getChainStructure = (chainName: string) =>
