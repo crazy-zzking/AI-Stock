@@ -33,7 +33,7 @@ public partial class DataSyncService
             return 0;
         }
 
-        var client = _httpClientFactory.CreateClient("default");
+        var client = _httpClientFactory.CreateClient("eastmoney"); // 东财F10走隧道代理（同花顺顺带，隧道代理通用）
         var batchSize = Math.Max(1, _options.DetailBatchSize);
         var processed = 0;
         var industryUpdated = 0;

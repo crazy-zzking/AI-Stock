@@ -1,3 +1,4 @@
+using System.Net;
 using AIStock.Core.Interfaces;
 using AIStock.Data.Providers;
 using AIStock.Data.Providers.Eastmoney;
@@ -36,6 +37,32 @@ public static class DependencyInjection
                 options.CircuitBreaker.MinimumThroughput = 10;
             });
 
+        // 东财专用 HttpClient：所有东方财富接口（行情/龙虎榜/研报等）统一走隧道代理，防封 IP
+        services.AddHttpClient("eastmoney")
+            .ConfigurePrimaryHttpMessageHandler(() =>
+            {
+                var proxy = configuration.GetSection("Proxy");
+                if (proxy.GetValue<bool>("UseTunnelProxy"))
+                {
+                    var host = proxy["TunnelHost"] ?? "c360.kdltps.com";
+                    var port = proxy.GetValue<int>("TunnelPort", 15818);
+                    var user = proxy["TunnelUsername"] ?? "";
+                    var pass = proxy["TunnelPassword"] ?? "";
+                    return new HttpClientHandler
+                    {
+                        Proxy = new WebProxy($"{host}:{port}") { Credentials = new NetworkCredential(user, pass) },
+                        UseProxy = true,
+                    };
+                }
+                return new HttpClientHandler();
+            })
+            .AddStandardResilienceHandler(options =>
+            {
+                options.Retry.MaxRetryAttempts = 3;
+                options.AttemptTimeout.Timeout = TimeSpan.FromSeconds(30);
+                options.CircuitBreaker.SamplingDuration = TimeSpan.FromMinutes(1);
+            });
+
         // 散户量化
         services.AddSingleton<IDataProvider>(sp =>
         {
@@ -50,29 +77,11 @@ public static class DependencyInjection
                 config["MyKey"] ?? "");
         });
 
-        // 东方财富（支持隧道代理）
+        // 东方财富（行情/估值/资金流）— HttpClient 用东财专用 client（带隧道代理 + 重试熔断）
         services.AddSingleton<IDataProvider>(sp =>
         {
             var logger = sp.GetRequiredService<ILogger<EastmoneyProvider>>();
-            var config = configuration.GetSection("Proxy");
-            var useTunnelProxy = config.GetValue<bool>("UseTunnelProxy");
-
-            HttpClient httpClient;
-            if (useTunnelProxy)
-            {
-                var tunnelHost = config["TunnelHost"] ?? "c360.kdltps.com";
-                var tunnelPort = config.GetValue<int>("TunnelPort", 15818);
-                var tunnelUsername = config["TunnelUsername"] ?? "";
-                var tunnelPassword = config["TunnelPassword"] ?? "";
-                httpClient = EastmoneyProvider.CreateHttpClientWithTunnelProxy(
-                    tunnelHost, tunnelPort, tunnelUsername, tunnelPassword);
-                logger.LogInformation("Eastmoney provider using tunnel proxy: {Host}:{Port}", tunnelHost, tunnelPort);
-            }
-            else
-            {
-                httpClient = sp.GetRequiredService<IHttpClientFactory>().CreateClient();
-            }
-
+            var httpClient = sp.GetRequiredService<IHttpClientFactory>().CreateClient("eastmoney");
             return new EastmoneyProvider(logger, httpClient);
         });
 

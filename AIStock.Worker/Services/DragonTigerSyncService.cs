@@ -40,7 +40,7 @@ public class DragonTigerSyncService
     public async Task<int> SyncAsync(DateTime? tradeDate = null, CancellationToken ct = default)
     {
         var date = tradeDate?.Date ?? await ResolveLatestTradingDayAsync(ct);
-        var client = _httpClientFactory.CreateClient("default");
+        var client = _httpClientFactory.CreateClient("eastmoney"); // 东财龙虎榜走隧道代理
 
         // 1. 拉榜单汇总
         string json;

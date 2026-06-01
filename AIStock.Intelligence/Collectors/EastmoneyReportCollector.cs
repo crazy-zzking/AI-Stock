@@ -30,7 +30,7 @@ public class EastmoneyReportCollector : IReportCollector
 
         try
         {
-            var client = _httpClientFactory.CreateClient();
+            var client = _httpClientFactory.CreateClient("eastmoney");
             client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
             client.DefaultRequestHeaders.Add("Referer", "https://data.eastmoney.com/report/stock.jshtml");
             client.DefaultRequestHeaders.Add("Accept", "application/json, text/javascript, */*; q=0.01");
@@ -130,7 +130,7 @@ public class EastmoneyReportCollector : IReportCollector
 
         try
         {
-            var client = _httpClientFactory.CreateClient();
+            var client = _httpClientFactory.CreateClient("eastmoney");
             client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
             client.DefaultRequestHeaders.Add("Referer", "https://data.eastmoney.com/");
 
@@ -189,7 +189,7 @@ public class EastmoneyReportCollector : IReportCollector
     {
         try
         {
-            var client = _httpClientFactory.CreateClient();
+            var client = _httpClientFactory.CreateClient("eastmoney");
             client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
 
             var response = await client.GetAsync(url, cancellationToken);
