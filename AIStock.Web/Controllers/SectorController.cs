@@ -5,6 +5,7 @@ using AIStock.Data.Providers.Eastmoney;
 using AIStock.Infrastructure.Database.Context;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace AIStock.Web.Controllers;
 
@@ -17,12 +18,14 @@ public class SectorController : ControllerBase
 {
     private readonly IDataProviderResolver _resolver;
     private readonly AIStockDbContext _db;
+    private readonly IMemoryCache _cache;
     private readonly ILogger<SectorController> _logger;
 
-    public SectorController(IDataProviderResolver resolver, AIStockDbContext db, ILogger<SectorController> logger)
+    public SectorController(IDataProviderResolver resolver, AIStockDbContext db, IMemoryCache cache, ILogger<SectorController> logger)
     {
         _resolver = resolver;
         _db = db;
+        _cache = cache;
         _logger = logger;
     }
 
@@ -30,15 +33,33 @@ public class SectorController : ControllerBase
     private EastmoneyProvider? Eastmoney()
         => _resolver.GetProviders(DataCapability.SectorRanking).FirstOrDefault() as EastmoneyProvider;
 
-    /// <summary>板块资金流排行（实时，按主力净流入降序；前端可取头部=流入榜、尾部=流出榜）。</summary>
+    /// <summary>板块资金流排行（按主力净流入降序）。盘中缓存 60 秒、休市 10 分钟，减少对东财的实时请求。</summary>
     [HttpGet("ranking")]
     public async Task<ActionResult<List<SectorFlowData>>> GetRanking(CancellationToken ct)
     {
+        const string key = "sector:ranking";
+        if (_cache.TryGetValue(key, out List<SectorFlowData>? cached) && cached != null)
+            return Ok(cached);
+
         var em = Eastmoney();
         if (em == null) return Ok(new List<SectorFlowData>());
         var sectors = await em.GetSectorRankingAsync(ct);
         var ordered = sectors.OrderByDescending(s => s.NetInflow).ToList();
+
+        if (ordered.Count > 0) _cache.Set(key, ordered, CacheTtl());
         return Ok(ordered);
+    }
+
+    /// <summary>缓存时长：交易日盘中 60 秒，其余 10 分钟。</summary>
+    private static TimeSpan CacheTtl()
+    {
+        var now = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow,
+            TimeZoneInfo.FindSystemTimeZoneById("China Standard Time"));
+        var t = now.TimeOfDay;
+        var inTrading = now.DayOfWeek != DayOfWeek.Saturday && now.DayOfWeek != DayOfWeek.Sunday
+            && ((t >= new TimeSpan(9, 30, 0) && t <= new TimeSpan(11, 30, 0))
+                || (t >= new TimeSpan(13, 0, 0) && t <= new TimeSpan(15, 0, 0)));
+        return inTrading ? TimeSpan.FromSeconds(60) : TimeSpan.FromMinutes(10);
     }
 
     /// <summary>
@@ -48,6 +69,10 @@ public class SectorController : ControllerBase
     [HttpGet("{sectorCode}/strong-stocks")]
     public async Task<ActionResult> GetStrongStocks(string sectorCode, [FromQuery] int top = 10, CancellationToken ct = default)
     {
+        var key = $"sector:strong:{sectorCode}:{top}";
+        if (_cache.TryGetValue(key, out object? cachedStocks) && cachedStocks != null)
+            return Ok(cachedStocks);
+
         var em = Eastmoney();
         if (em == null) return Ok(Array.Empty<object>());
 
@@ -72,6 +97,7 @@ public class SectorController : ControllerBase
             })
             .ToListAsync(ct);
 
+        _cache.Set(key, stocks, CacheTtl());
         return Ok(stocks);
     }
 }
