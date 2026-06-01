@@ -116,14 +116,20 @@ public partial class DataSyncService
         using var scope = _scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AIStockDbContext>();
 
-        var codesQuery = db.StockBase.Where(s => !s.IsDelisted).OrderBy(s => s.Code).Select(s => s.Code);
+        // 目标交易日 = 最近"已收盘"交易日（今日未过收盘时刻则取上一交易日）
+        var target = await GetLastClosedTradingDayAsync(_options.SyncHour, ct);
+
+        // 只取"未同步到目标交易日"的股票（已同步到 target 的直接跳过，不再每次全量拉取）
+        var codesQuery = db.StockBase
+            .Where(s => !s.IsDelisted && (s.LastKlineSyncDate == null || s.LastKlineSyncDate < target.Date))
+            .OrderBy(s => s.Code).Select(s => s.Code);
         if (_options.MaxStocks > 0)
             codesQuery = codesQuery.Take(_options.MaxStocks);
         var codes = await codesQuery.ToListAsync(ct);
 
         if (codes.Count == 0)
         {
-            _logger.LogWarning("stock_base 无股票，跳过K线同步（请先同步股票池）");
+            _logger.LogInformation("K线已全部同步到 {Target}，无需拉取", target.ToString("yyyy-MM-dd"));
             return 0;
         }
 
@@ -148,8 +154,8 @@ public partial class DataSyncService
             .ToDictionaryAsync(x => x.Code, x => x.Last, ct);
 
         var batchSize = Math.Max(1, _options.KlineBatchSize);
-        var today = DateTime.Today;
-        _logger.LogInformation("开始K线同步：{Count} 只股票（数据源：东方财富，批大小 {Batch}）", codes.Count, batchSize);
+        _logger.LogInformation("开始K线同步：{Count} 只待同步股票，目标交易日 {Target}（批大小 {Batch}）",
+            codes.Count, target.ToString("yyyy-MM-dd"), batchSize);
 
         for (int i = 0; i < codes.Count; i += batchSize)
         {
@@ -168,7 +174,7 @@ public partial class DataSyncService
                 stockEnts.TryGetValue(code, out var ent);
                 DateTime? klineMax = klineMaxDates.TryGetValue(code, out var d) ? d : null;
                 DateTime? lastSync = ent?.LastKlineSyncDate ?? klineMax;
-                var lmt = ComputeKlineFetchCount(lastSync, today);
+                var lmt = ComputeKlineFetchCount(lastSync, target);
                 try
                 {
                     if (lmt == 0) return (code, null);
@@ -187,9 +193,13 @@ public partial class DataSyncService
             foreach (var (code, klines) in results)
             {
                 if (klines == null || klines.Count == 0) continue;
-                var hasLast = klineMaxDates.TryGetValue(code, out var lastDate);
 
-                var fresh = klines
+                // 截断到目标交易日：剔除未收盘当日的成形中K线，避免落入不完整数据
+                var capped = klines.Where(k => k.DateTime.Date <= target.Date).ToList();
+                if (capped.Count == 0) continue;
+
+                var hasLast = klineMaxDates.TryGetValue(code, out var lastDate);
+                var fresh = capped
                     .Where(k => !hasLast || k.DateTime > lastDate)
                     .Select(k => new KlineDataEntity
                     {
@@ -215,9 +225,9 @@ public partial class DataSyncService
                     totalInserted += fresh.Count;
                 }
 
-                // 记录最后同步到的日K日期（取拉到的最新一根）
+                // 最后同步日期 = 最后一根K线的日期（截断到目标日内），非同步执行时间
                 if (stockEnts.TryGetValue(code, out var stock))
-                    stock.LastKlineSyncDate = klines.Max(k => k.DateTime);
+                    stock.LastKlineSyncDate = capped.Max(k => k.DateTime);
             }
             await db.SaveChangesAsync(ct);
             processed += batch.Count;
@@ -241,13 +251,13 @@ public partial class DataSyncService
     /// 否则按落后自然日折算交易日(×5/7) + 缓冲，区间 [2, KlineCount]。
     /// 既能让日常增量只拉最近几根（快），又能在断更/缺口时一次补齐。
     /// </summary>
-    private int ComputeKlineFetchCount(DateTime? lastSync, DateTime today)
+    private int ComputeKlineFetchCount(DateTime? lastSync, DateTime target)
     {
         var max = Math.Max(2, _options.KlineCount);
         if (lastSync == null) return max; // 首次/无历史：按配置深度拉满
 
-        var daysBehind = (today.Date - lastSync.Value.Date).TotalDays;
-        if (daysBehind <= 0) return 0; // 已是最新，仍拉最近 2 根做校验/容错
+        var daysBehind = (target.Date - lastSync.Value.Date).TotalDays;
+        if (daysBehind <= 0) return 0; // 已同步到目标交易日，无需拉取
 
         var approxTradingDays = (int)Math.Ceiling(daysBehind * 5.0 / 7.0);
         return Math.Clamp(approxTradingDays + 5, 2, max); // +5 缓冲，封顶 KlineCount

@@ -28,6 +28,14 @@ public class SelectionCriteria
     /// <summary>是否要求当日上龙虎榜</summary>
     public bool RequireDragonTiger { get; set; } = false;
 
+    /// <summary>排除"传统大盘股"的市值阈值（元）：仅当个股属传统行业 且 市值超过此值时才排除。0 = 不限。默认 500 亿</summary>
+    public decimal MaxTotalMarketCap { get; set; } = 50_000_000_000m;
+    /// <summary>是否排除"传统低弹性行业 且 大市值"的票（两条件同时满足才剔除）</summary>
+    public bool ExcludeTraditionalIndustry { get; set; } = true;
+    /// <summary>传统行业关键字：个股所属行业(stock_base.Industry)命中任一才算"传统行业"</summary>
+    public List<string> ExcludeIndustryKeywords { get; set; } = new()
+    { "金融", "银行", "保险", "证券", "房地产", "采矿", "建筑业", "交通运输", "石油", "钢铁", "电力", "燃气" };
+
     /// <summary>是否启用 LLM 生成核心逻辑（默认规则模板）</summary>
     public bool UseLlmNarrative { get; set; } = false;
 }

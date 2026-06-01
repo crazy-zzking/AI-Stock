@@ -59,6 +59,14 @@ public class StockSelectionEngine
             if (s.Rise20d > maxRise20dEff) continue;       // 追高排除（弱市压到 30%）
             if (s.Rsi > criteria.MaxRsi) continue;         // 超买排除
 
+            // 排除"传统低弹性行业 且 大市值"的票（如银行/电力/高速大盘股，涨不动）——两条件同时满足才剔除
+            if (criteria.ExcludeTraditionalIndustry && criteria.MaxTotalMarketCap > 0 &&
+                s.TotalMarketCap > criteria.MaxTotalMarketCap &&
+                context != null && context.IndustryByCode.TryGetValue(s.Code, out var industry) &&
+                !string.IsNullOrEmpty(industry) &&
+                criteria.ExcludeIndustryKeywords.Any(k => industry.Contains(k)))
+                continue;
+
             dragonTigerByCode.TryGetValue(s.Code, out var dt);
             if (criteria.RequireDragonTiger && dt == null) continue;
 
