@@ -289,14 +289,27 @@ public partial class DataSyncService
     // FetchTradingDaysAsync 已抽取为共享 ITradingCalendar 服务
 
     /// <summary>
-    /// 是否需要同步K线：库内最新K线日期落后于最近已收盘交易日，则需要（含库为空）。
+    /// 是否需要同步K线：只要还有股票未同步到最近已收盘交易日（含从未同步），就需要。
+    /// 按只判断（stock_base.last_kline_sync_date），避免"个别股票已到今天 → 全局最大日期达标 → 整体跳过、其余股票漏同步"。
     /// </summary>
     public async Task<(bool Need, DateTime? Last, DateTime Target)> ShouldSyncKlinesAsync(int closeHour, CancellationToken ct = default)
     {
-        var last = await GetLastKlineDateAsync(ct);
         var target = await GetLastClosedTradingDayAsync(closeHour, ct);
-        var need = last == null || last.Value.Date < target.Date;
-        return (need, last, target);
+
+        using var scope = _scopeFactory.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AIStockDbContext>();
+
+        // 仍有未同步到目标交易日的股票（从未同步或落后）→ 需要继续同步
+        var pending = await db.StockBase
+            .CountAsync(s => !s.IsDelisted &&
+                (s.LastKlineSyncDate == null || s.LastKlineSyncDate < target.Date), ct);
+
+        // 库内最新日K日期，仅用于日志展示
+        var last = await db.KlineData
+            .Where(k => k.Interval == nameof(KlineInterval.Daily))
+            .MaxAsync(k => (DateTime?)k.DateTime, ct);
+
+        return (pending > 0, last, target);
     }
 }
 
