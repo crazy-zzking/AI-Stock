@@ -6,6 +6,7 @@ import {
 import { ReloadOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { getLatestSelection, rerunSelection } from '../api';
+import { pct, upDownColor as upDown } from '../utils/format';
 
 interface FactorScores {
   capital: number; technical: number; position: number;
@@ -20,8 +21,7 @@ interface SelectionResult {
   marketRegime?: string;
 }
 
-const pct = (v: number) => `${v >= 0 ? '+' : ''}${(v ?? 0).toFixed(2)}%`;
-const upDown = (v: number) => (v >= 0 ? '#cf1322' : '#3f8600'); // A股习惯：红涨绿跌
+// 市值用「X.X亿」，无值显示 —（与全局 yi 略不同：单档亿、1 位小数）
 const yi = (v: number) => (v > 0 ? `${(v / 1e8).toFixed(1)}亿` : '—');
 
 const DataItem: React.FC<{ label: string; value: React.ReactNode; color?: string }> = ({ label, value, color }) => (

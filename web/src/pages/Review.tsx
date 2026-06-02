@@ -4,17 +4,10 @@ import {
 } from 'antd';
 import { ReloadOutlined, ThunderboltOutlined, CheckCircleTwoTone, CloseCircleTwoTone } from '@ant-design/icons';
 import { getLatestReview, runReview } from '../api';
+import Delta from '../components/Delta';
+import { pct, yi, upDownColor as upDown } from '../utils/format';
 
 const { Paragraph, Text } = Typography;
-
-const pct = (v?: number) => (v == null ? '—' : `${v >= 0 ? '+' : ''}${v.toFixed(2)}%`);
-const upDown = (v?: number) => ((v ?? 0) >= 0 ? '#cf1322' : '#3f8600');
-const yi = (v?: number) => {
-  const x = v ?? 0; const abs = Math.abs(x);
-  if (abs >= 1e8) return `${(x / 1e8).toFixed(2)}亿`;
-  if (abs >= 1e4) return `${(x / 1e4).toFixed(0)}万`;
-  return `${x.toFixed(0)}`;
-};
 
 interface DataGap { source: string; available: boolean; note: string; }
 interface SectorItem { sectorName: string; changePercent: number; netInflow: number; leadingStocks: string[]; reason: string; }
@@ -24,7 +17,7 @@ interface StockItem {
 }
 interface ThemeItem { concept: string; activeStockCount: number; leadingStocks: string[]; }
 interface SelItem { code: string; name: string; changePercent?: number; hit: boolean; }
-interface Review {
+interface ReviewData {
   tradingDate: string; generatedAt: string; summary: string;
   orders: { totalOrders: number; successOrders: number; failedOrders: number; buyOrders: number; sellOrders: number; totalValue: number; gateMode: string; };
   market: { totalCount: number; upCount: number; downCount: number; limitUpCount: number; totalMainNetInflow: number; avgChangePercent: number; };
@@ -36,7 +29,7 @@ interface Review {
 const Review: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState(false);
-  const [r, setR] = useState<Review | null>(null);
+  const [r, setR] = useState<ReviewData | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -92,16 +85,16 @@ const Review: React.FC = () => {
 
       {/* 市场宽度 + 交易统计 */}
       <Row gutter={16} style={{ marginBottom: 16 }}>
-        <Col span={4}><Card size="small"><Statistic title="上涨家数" value={m.upCount} valueStyle={{ color: '#cf1322' }} /></Card></Col>
-        <Col span={4}><Card size="small"><Statistic title="下跌家数" value={m.downCount} valueStyle={{ color: '#3f8600' }} /></Card></Col>
-        <Col span={4}><Card size="small"><Statistic title="涨停" value={m.limitUpCount} valueStyle={{ color: '#cf1322' }} /></Card></Col>
-        <Col span={4}><Card size="small"><Statistic title="平均涨幅" value={pct(m.avgChangePercent)} valueStyle={{ color: upDown(m.avgChangePercent) }} /></Card></Col>
-        <Col span={4}><Card size="small"><Statistic title="主力净额" value={yi(m.totalMainNetInflow)} valueStyle={{ color: upDown(m.totalMainNetInflow) }} /></Card></Col>
-        <Col span={4}><Card size="small"><Statistic title="当日下单" value={r.orders.totalOrders} suffix={`/ ${r.orders.gateMode}`} /></Card></Col>
+        <Col xs={12} sm={8} md={4}><Card size="small"><Statistic title="上涨家数" value={m.upCount} valueStyle={{ color: '#cf1322' }} /></Card></Col>
+        <Col xs={12} sm={8} md={4}><Card size="small"><Statistic title="下跌家数" value={m.downCount} valueStyle={{ color: '#3f8600' }} /></Card></Col>
+        <Col xs={12} sm={8} md={4}><Card size="small"><Statistic title="涨停" value={m.limitUpCount} valueStyle={{ color: '#cf1322' }} /></Card></Col>
+        <Col xs={12} sm={8} md={4}><Card size="small"><Statistic title="平均涨幅" value={pct(m.avgChangePercent)} valueStyle={{ color: upDown(m.avgChangePercent) }} /></Card></Col>
+        <Col xs={12} sm={8} md={4}><Card size="small"><Statistic title="主力净额" value={yi(m.totalMainNetInflow)} valueStyle={{ color: upDown(m.totalMainNetInflow) }} /></Card></Col>
+        <Col xs={12} sm={8} md={4}><Card size="small"><Statistic title="当日下单" value={r.orders.totalOrders} suffix={`/ ${r.orders.gateMode}`} /></Card></Col>
       </Row>
 
       <Row gutter={16}>
-        <Col span={14}>
+        <Col xs={24} lg={14}>
           {/* 领涨个股 + 涨因 */}
           <Card title="领涨个股 · 为什么涨" size="small" style={{ marginBottom: 16 }}>
             <Table
@@ -110,8 +103,8 @@ const Review: React.FC = () => {
                 { title: '名称', key: 'name', render: (_: unknown, s: StockItem) => (
                   <span>{s.name} <Text type="secondary" style={{ fontSize: 12 }}>{s.code}</Text>{s.isLimitUp && <Tag color="red" style={{ marginLeft: 4 }}>涨停</Tag>}</span>
                 ) },
-                { title: '涨幅', dataIndex: 'changePercent', width: 80, render: (v: number) => <span style={{ color: upDown(v) }}>{pct(v)}</span> },
-                { title: '主力', dataIndex: 'mainNetInflow', width: 90, render: (v: number) => <span style={{ color: upDown(v) }}>{yi(v)}</span> },
+                { title: '涨幅', dataIndex: 'changePercent', width: 80, render: (v: number) => <Delta value={v} /> },
+                { title: '主力', dataIndex: 'mainNetInflow', width: 90, render: (v: number) => <Delta value={v} mode="money" /> },
                 { title: '涨因', dataIndex: 'reason' },
               ]}
             />
@@ -124,15 +117,15 @@ const Review: React.FC = () => {
               locale={{ emptyText: '板块数据不可用（东财接口/隧道代理）' }}
               columns={[
                 { title: '板块', dataIndex: 'sectorName' },
-                { title: '涨幅', dataIndex: 'changePercent', width: 80, render: (v: number) => <span style={{ color: upDown(v) }}>{pct(v)}</span> },
-                { title: '主力净额', dataIndex: 'netInflow', width: 90, render: (v: number) => <span style={{ color: upDown(v) }}>{yi(v)}</span> },
+                { title: '涨幅', dataIndex: 'changePercent', width: 80, render: (v: number) => <Delta value={v} /> },
+                { title: '主力净额', dataIndex: 'netInflow', width: 90, render: (v: number) => <Delta value={v} mode="money" /> },
                 { title: '领涨股', dataIndex: 'leadingStocks', render: (v: string[]) => (v || []).join('、') },
               ]}
             />
           </Card>
         </Col>
 
-        <Col span={10}>
+        <Col xs={24} lg={10}>
           {/* 热门题材 */}
           <Card title="当下风口题材（活跃股扎堆）" size="small" style={{ marginBottom: 16 }}>
             {r.hotThemes.length === 0 ? <Text type="secondary">无</Text> : (
@@ -152,7 +145,7 @@ const Review: React.FC = () => {
                   <List.Item>
                     {it.hit ? <CheckCircleTwoTone twoToneColor="#cf1322" /> : <CloseCircleTwoTone twoToneColor="#999" />}
                     <span style={{ marginLeft: 8 }}>{it.name} <Text type="secondary" style={{ fontSize: 12 }}>{it.code}</Text></span>
-                    <span style={{ marginLeft: 'auto', color: upDown(it.changePercent) }}>{pct(it.changePercent)}</span>
+                    <span style={{ marginLeft: 'auto' }}><Delta value={it.changePercent} /></span>
                   </List.Item>
                 )} />
             </Card>

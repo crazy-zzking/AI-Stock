@@ -3,15 +3,7 @@ import { Card, Table, Tag, Row, Col, Spin, message, Button } from 'antd';
 import { ReloadOutlined } from '@ant-design/icons';
 import { getSectorRanking, getSectorStrongStocks } from '../api';
 import type { SectorFlow } from '../api';
-
-const yi = (v: number) => {
-  const abs = Math.abs(v ?? 0);
-  if (abs >= 1e8) return `${(v / 1e8).toFixed(2)}亿`;
-  if (abs >= 1e4) return `${(v / 1e4).toFixed(0)}万`;
-  return `${(v ?? 0).toFixed(0)}`;
-};
-const pct = (v: number) => `${v >= 0 ? '+' : ''}${(v ?? 0).toFixed(2)}%`;
-const upDown = (v: number) => (v >= 0 ? '#cf1322' : '#3f8600'); // 红涨绿跌
+import Delta from '../components/Delta';
 
 const Sector: React.FC = () => {
   const [loading, setLoading] = useState(true);
@@ -55,8 +47,8 @@ const Sector: React.FC = () => {
 
   const sectorCols = [
     { title: '板块', dataIndex: 'sectorName', key: 'name' },
-    { title: '涨幅', dataIndex: 'changePercent', key: 'chg', render: (v: number) => <span style={{ color: upDown(v) }}>{pct(v)}</span> },
-    { title: '主力净额', dataIndex: 'netInflow', key: 'net', render: (v: number) => <span style={{ color: upDown(v) }}>{yi(v)}</span> },
+    { title: '涨幅', dataIndex: 'changePercent', key: 'chg', render: (v: number) => <Delta value={v} /> },
+    { title: '主力净额', dataIndex: 'netInflow', key: 'net', render: (v: number) => <Delta value={v} mode="money" /> },
   ];
 
   const sectorTable = (title: string, data: SectorFlow[]) => (
@@ -86,8 +78,8 @@ const Sector: React.FC = () => {
       </h2>
 
       <Row gutter={16} style={{ marginBottom: 16 }}>
-        <Col span={12}>{sectorTable('主力净流入榜 TOP15', inflow)}</Col>
-        <Col span={12}>{sectorTable('主力净流出榜 TOP15', outflow)}</Col>
+        <Col xs={24} md={12}>{sectorTable('主力净流入榜 TOP15', inflow)}</Col>
+        <Col xs={24} md={12}>{sectorTable('主力净流出榜 TOP15', outflow)}</Col>
       </Row>
 
       <Card title={`${selected?.sectorName || ''} — 板块内个股资金流（按主力净流入排序）`} size="small">
@@ -100,9 +92,9 @@ const Sector: React.FC = () => {
             { title: '代码', dataIndex: 'code', key: 'code' },
             { title: '名称', dataIndex: 'name', key: 'name' },
             { title: '现价', dataIndex: 'price', key: 'price', render: (v: number) => (v ?? 0).toFixed(2) },
-            { title: '涨幅', dataIndex: 'changePercent', key: 'chg', render: (v: number) => <span style={{ color: upDown(v) }}>{pct(v)}</span> },
-            { title: '主力净流入', dataIndex: 'mainNetInflow', key: 'net', render: (v: number) => <span style={{ color: upDown(v) }}>{yi(v)}</span> },
-            { title: '主力占比', dataIndex: 'mainNetRatio', key: 'ratio', render: (v: number) => <span style={{ color: upDown(v) }}>{pct(v)}</span> },
+            { title: '涨幅', dataIndex: 'changePercent', key: 'chg', render: (v: number) => <Delta value={v} /> },
+            { title: '主力净流入', dataIndex: 'mainNetInflow', key: 'net', render: (v: number) => <Delta value={v} mode="money" /> },
+            { title: '主力占比', dataIndex: 'mainNetRatio', key: 'ratio', render: (v: number) => <Delta value={v} /> },
             { title: '', dataIndex: 'isLimitUp', key: 'lu', render: (v: boolean) => (v ? <Tag color="red">涨停</Tag> : null) },
           ]}
           locale={{ emptyText: '该板块暂无个股资金流数据（需东财接口可达）' }}

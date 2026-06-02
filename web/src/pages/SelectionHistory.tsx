@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { Card, Table, Tag, Row, Col, Spin, message, List, Statistic } from 'antd';
 import { getSelectionHistory, getSelectionPerformance } from '../api';
+import Delta from '../components/Delta';
+import { pct, upDownColor } from '../utils/format';
 
-const pct = (v?: number | null) =>
-  v == null ? '—' : `${v >= 0 ? '+' : ''}${v.toFixed(2)}%`;
-const upDown = (v?: number | null) => ((v ?? 0) >= 0 ? '#cf1322' : '#3f8600');
+const redNum = (v?: number | null) => <span style={{ color: '#cf1322', fontVariantNumeric: 'tabular-nums' }}>{pct(v)}</span>;
+const greenNum = (v?: number | null) => <span style={{ color: '#3f8600', fontVariantNumeric: 'tabular-nums' }}>{pct(v)}</span>;
 
 interface HistoryItem { id: number; tradingDate: string; runAt: string; topN: number; }
 interface PerfItem {
@@ -58,11 +59,11 @@ const SelectionHistory: React.FC = () => {
 
   const columns = [
     { title: '名称', key: 'name', render: (_: unknown, r: PerfItem) => <span>{r.name} <span style={{ color: '#999', fontSize: 12 }}>{r.code}</span></span> },
-    { title: '选股日涨幅', dataIndex: 'selectChangePercent', render: (v: number) => <span style={{ color: upDown(v) }}>{pct(v)}</span> },
-    { title: '次日(T+1)', dataIndex: 'nextDayChangePercent', render: (v: number | null) => <span style={{ color: upDown(v) }}>{pct(v)}</span> },
-    { title: '至今累计', dataIndex: 'currentChangePercent', render: (v: number | null) => <span style={{ color: upDown(v), fontWeight: 600 }}>{pct(v)}</span> },
-    { title: '最高涨幅', dataIndex: 'maxRisePercent', render: (v: number | null) => <span style={{ color: '#cf1322' }}>{pct(v)}</span> },
-    { title: '最低跌幅', dataIndex: 'maxDropPercent', render: (v: number | null) => <span style={{ color: '#3f8600' }}>{pct(v)}</span> },
+    { title: '选股日涨幅', dataIndex: 'selectChangePercent', render: (v: number) => <Delta value={v} /> },
+    { title: '次日(T+1)', dataIndex: 'nextDayChangePercent', render: (v: number | null) => <Delta value={v} /> },
+    { title: '至今累计', dataIndex: 'currentChangePercent', render: (v: number | null) => <Delta value={v} bold /> },
+    { title: '最高涨幅', dataIndex: 'maxRisePercent', render: (v: number | null) => redNum(v) },
+    { title: '最低跌幅', dataIndex: 'maxDropPercent', render: (v: number | null) => greenNum(v) },
     { title: '观察天数', dataIndex: 'forwardDays', render: (v: number) => (v > 0 ? `${v}日` : '—') },
   ];
 
@@ -70,7 +71,7 @@ const SelectionHistory: React.FC = () => {
     <div>
       <h2>历史选股 · 选后表现跟踪</h2>
       <Row gutter={16}>
-        <Col span={6}>
+        <Col xs={24} lg={6}>
           <Card title="历史批次" size="small">
             <List
               size="small"
@@ -90,7 +91,7 @@ const SelectionHistory: React.FC = () => {
             />
           </Card>
         </Col>
-        <Col span={18}>
+        <Col xs={24} lg={18}>
           <Card
             size="small"
             title={perf
@@ -102,9 +103,9 @@ const SelectionHistory: React.FC = () => {
             ) : (
               <>
                 <Row gutter={16} style={{ marginBottom: 12 }}>
-                  <Col span={6}><Statistic title="标的数" value={perf?.count ?? 0} /></Col>
-                  <Col span={6}><Statistic title="至今上涨" value={perf?.hitCount ?? 0} suffix={`/ ${perf?.count ?? 0}`} valueStyle={{ color: '#cf1322' }} /></Col>
-                  <Col span={6}><Statistic title="平均累计" value={pct(perf?.avgCurrentChange)} valueStyle={{ color: upDown(perf?.avgCurrentChange) }} /></Col>
+                  <Col xs={8}><Statistic title="标的数" value={perf?.count ?? 0} /></Col>
+                  <Col xs={8}><Statistic title="至今上涨" value={perf?.hitCount ?? 0} suffix={`/ ${perf?.count ?? 0}`} valueStyle={{ color: '#cf1322' }} /></Col>
+                  <Col xs={8}><Statistic title="平均累计" value={pct(perf?.avgCurrentChange)} valueStyle={{ color: upDownColor(perf?.avgCurrentChange) }} /></Col>
                 </Row>
                 <Table
                   size="small" rowKey="code" pagination={false}
