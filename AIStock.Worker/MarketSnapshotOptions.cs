@@ -13,6 +13,15 @@ public class MarketSnapshotOptions
     /// <summary>单次采集最大股票数（0 = 不限）。用于联调阶段限量</summary>
     public int MaxStocks { get; set; } = 0;
 
+    /// <summary>是否启用盘中采集（交易时段周期用腾讯批量刷新快照，支持盘中选股）</summary>
+    public bool EnableIntraday { get; set; } = true;
+
+    /// <summary>盘中采集间隔（分钟）</summary>
+    public int IntradayIntervalMinutes { get; set; } = 20;
+
+    /// <summary>盘中腾讯批量报价每批股票数</summary>
+    public int IntradayQuoteBatch { get; set; } = 60;
+
     /// <summary>龙虎榜数据接口地址（东财 datacenter，字段以实测为准）</summary>
     public string DragonTigerUrl { get; set; } =
         "https://datacenter-web.eastmoney.com/api/data/v1/get";

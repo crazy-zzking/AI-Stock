@@ -49,6 +49,10 @@ public class DailyMarketSnapshotEntity
     [Column("amplitude")]
     public decimal Amplitude { get; set; }
 
+    /// <summary>当日均价（盘中：现价站上均价为强势信号；收盘≈VWAP）</summary>
+    [Column("avg_price")]
+    public decimal AvgPrice { get; set; }
+
     /// <summary>是否涨停</summary>
     [Column("is_limit_up")]
     public bool IsLimitUp { get; set; }

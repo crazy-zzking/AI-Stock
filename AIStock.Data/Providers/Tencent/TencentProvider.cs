@@ -51,28 +51,7 @@ public class TencentProvider : BaseProvider
 
             // 解析腾讯行情数据（~分隔）
             var parts = response.Split('~');
-            if (parts.Length < 38) return null;
-
-            var quote = new QuoteData
-            {
-                Code = code,
-                Name = parts[1],
-                Price = decimal.TryParse(parts[3], out var price) ? price : 0,
-                PreClose = decimal.TryParse(parts[4], out var preClose) ? preClose : 0,
-                Open = decimal.TryParse(parts[5], out var open) ? open : 0,
-                Volume = long.TryParse(parts[6], out var vol) ? vol * 100 : 0,
-                OuterVolume = long.TryParse(parts[7], out var outerVol) ? outerVol * 100 : 0,
-                InnerVolume = long.TryParse(parts[8], out var innerVol) ? innerVol * 100 : 0,
-                High = decimal.TryParse(parts[33], out var high) ? high : 0,
-                Low = decimal.TryParse(parts[34], out var low) ? low : 0,
-                ChangePercent = decimal.TryParse(parts[32], out var changePct) ? changePct : 0,
-                ChangeAmount = decimal.TryParse(parts[31], out var changeAmt) ? changeAmt : 0,
-                Amount = decimal.TryParse(parts[37], out var amount) ? amount : 0,
-                Timestamp = DateTime.Now,
-                Source = ProviderId
-            };
-
-            return quote;
+            return ParseQuote(parts, code);
         }
         catch (Exception ex)
         {
@@ -102,28 +81,8 @@ public class TencentProvider : BaseProvider
             for (int i = 0; i < Math.Min(lines.Length, codeList.Count); i++)
             {
                 var parts = lines[i].Split('~');
-                if (parts.Length < 38) continue;
-
-                var quote = new QuoteData
-                {
-                    Code = codeList[i],
-                    Name = parts[1],
-                    Price = decimal.TryParse(parts[3], out var price) ? price : 0,
-                    PreClose = decimal.TryParse(parts[4], out var preClose) ? preClose : 0,
-                    Open = decimal.TryParse(parts[5], out var open) ? open : 0,
-                    Volume = long.TryParse(parts[6], out var vol) ? vol * 100 : 0,
-                    OuterVolume = long.TryParse(parts[7], out var outerVol) ? outerVol * 100 : 0,
-                    InnerVolume = long.TryParse(parts[8], out var innerVol) ? innerVol * 100 : 0,
-                    High = decimal.TryParse(parts[33], out var high) ? high : 0,
-                    Low = decimal.TryParse(parts[34], out var low) ? low : 0,
-                    ChangePercent = decimal.TryParse(parts[32], out var changePct) ? changePct : 0,
-                    ChangeAmount = decimal.TryParse(parts[31], out var changeAmt) ? changeAmt : 0,
-                    Amount = decimal.TryParse(parts[37], out var amount) ? amount : 0,
-                    Timestamp = DateTime.Now,
-                    Source = ProviderId
-                };
-
-                results.Add(quote);
+                var quote = ParseQuote(parts, codeList[i]);
+                if (quote != null) results.Add(quote);
             }
 
             return results;
@@ -133,6 +92,43 @@ public class TencentProvider : BaseProvider
             Logger.LogError(ex, "Failed to get batch quotes");
             return new List<QuoteData>();
         }
+    }
+
+    /// <summary>
+    /// 解析腾讯 q= 行情字段（~ 分隔）。索引为腾讯实测约定，盘中联调请核对一只样本。
+    /// 含扩展字段：换手率[38]/PE TTM[39]/流通市值亿[44]/总市值亿[45]/市净率[46]/量比[49]。
+    /// </summary>
+    private QuoteData? ParseQuote(string[] parts, string code)
+    {
+        if (parts.Length < 38) return null;
+        decimal D(int i) => i < parts.Length && decimal.TryParse(parts[i], out var v) ? v : 0;
+        long L(int i) => i < parts.Length && long.TryParse(parts[i], out var v) ? v : 0;
+
+        return new QuoteData
+        {
+            Code = code,
+            Name = parts[1],
+            Price = D(3),
+            PreClose = D(4),
+            Open = D(5),
+            Volume = L(6) * 100,
+            OuterVolume = L(7) * 100,
+            InnerVolume = L(8) * 100,
+            High = D(33),
+            Low = D(34),
+            ChangePercent = D(32),
+            ChangeAmount = D(31),
+            Amount = D(37) * 10_000m, // [37] 累计成交额(万元) → 元
+            TurnoverRate = D(38),
+            PeTtm = D(39),
+            FloatMarketCap = D(44) * 100_000_000m, // 亿 → 元
+            TotalMarketCap = D(45) * 100_000_000m,
+            Pb = D(46),
+            VolumeRatio = D(49),
+            AvgPrice = D(51), // 当日均价
+            Timestamp = DateTime.Now,
+            Source = ProviderId
+        };
     }
 
     /// <summary>

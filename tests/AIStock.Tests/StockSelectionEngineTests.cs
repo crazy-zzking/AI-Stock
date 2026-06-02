@@ -16,13 +16,15 @@ public class StockSelectionEngineTests
     private static DailyMarketSnapshotEntity Snap(
         string code, decimal mainNet = 30_000_000m, decimal rise20d = 15m,
         decimal rsi = 60m, bool macdGolden = true, decimal close = 11m, decimal ma20 = 10m,
-        bool limitUp = false) =>
+        bool limitUp = false, decimal ma5 = 10.8m, decimal ma10 = 10.4m) =>
         new()
         {
             Code = code,
             Name = code,
             Date = new DateTime(2026, 5, 12),
             Close = close,
+            Ma5 = ma5,
+            Ma10 = ma10,
             Ma20 = ma20,
             MainNetInflow = mainNet,
             Rise20d = rise20d,

@@ -127,13 +127,64 @@ public class PositionCacheJob : IScheduledJob
     public Task ExecuteAsync(CancellationToken ct) => _svc.RefreshCacheAsync(ct);
 }
 
-/// <summary>市场快照采集任务（收盘后，聚合行情/估值/资金流/技术指标供选股引擎）</summary>
+/// <summary>
+/// 市场快照采集任务。启用盘中(EnableIntraday)时：交易时段/收盘窗口用腾讯批量周期刷新快照(支持盘中选股)，
+/// 动态间隔；非交易时段跳过。未启用时：沿用收盘后全量(按配置 DailyAtHour)。
+/// </summary>
 public class MarketSnapshotSyncJob : IScheduledJob
 {
     private readonly MarketSnapshotSyncService _svc;
-    public MarketSnapshotSyncJob(MarketSnapshotSyncService svc) => _svc = svc;
+    private readonly ITradingCalendar _calendar;
+    private readonly MarketSnapshotOptions _options;
+    private readonly ILogger<MarketSnapshotSyncJob> _logger;
+
+    public MarketSnapshotSyncJob(MarketSnapshotSyncService svc, ITradingCalendar calendar,
+        IOptions<MarketSnapshotOptions> options, ILogger<MarketSnapshotSyncJob> logger)
+    {
+        _svc = svc;
+        _calendar = calendar;
+        _options = options.Value;
+        _logger = logger;
+    }
+
     public string Name => "market-snapshot";
-    public Task ExecuteAsync(CancellationToken ct) => _svc.SyncAsync(ct);
+
+    public async Task ExecuteAsync(CancellationToken ct)
+    {
+        if (!_options.EnableIntraday)
+        {
+            await _svc.SyncAsync(ct); // 未启用盘中：收盘后全量
+            return;
+        }
+
+        var now = DateTime.Now;
+        if (!await _calendar.IsTradingDayAsync(now.Date, ct)) { _logger.LogDebug("非交易日，跳过快照"); return; }
+        if (!InCollectWindow(now)) { _logger.LogDebug("非采集时段，跳过快照"); return; }
+
+        await _svc.SyncIntradayAsync(ct); // 盘中/收盘窗口：腾讯批量
+    }
+
+    public bool HasDynamicSchedule => _options.EnableIntraday;
+
+    public async Task<TimeSpan?> GetNextDelayAsync(CancellationToken ct)
+    {
+        if (!_options.EnableIntraday) return null; // 走配置(DailyAtHour/IntervalSeconds)
+        var now = DateTime.Now;
+        var isTradingDay = await _calendar.IsTradingDayAsync(now.Date, ct);
+        if (isTradingDay && InCollectWindow(now))
+            return TimeSpan.FromMinutes(Math.Max(1, _options.IntradayIntervalMinutes));
+        if (isTradingDay && now.TimeOfDay < new TimeSpan(9, 30, 0))
+            return new TimeSpan(9, 30, 0) - now.TimeOfDay; // 睡到开盘
+        return TimeSpan.FromMinutes(30); // 其它时段 30 分钟复评（ExecuteAsync 会快速跳过）
+    }
+
+    /// <summary>采集窗口：盘中 9:30-11:30 / 13:00-15:00，外加收盘补采 15:00-16:00。</summary>
+    private static bool InCollectWindow(DateTime now)
+    {
+        var t = now.TimeOfDay;
+        return (t >= new TimeSpan(9, 30, 0) && t <= new TimeSpan(11, 30, 0))
+            || (t >= new TimeSpan(13, 0, 0) && t <= new TimeSpan(16, 0, 0));
+    }
 }
 
 /// <summary>龙虎榜采集任务（收盘后）</summary>

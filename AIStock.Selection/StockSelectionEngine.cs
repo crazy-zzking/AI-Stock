@@ -198,14 +198,36 @@ public class StockSelectionEngine
         return 0m;
     }
 
-    // 技术面：MACD 金叉 + RSI 多头未超买 + 价在 MA20 上方
+    // 技术面：多种强势形态综合，MACD 金叉只是其一、不再主导。
+    // 涵盖 均线多头排列 / MACD / RSI(多头·回调到位·超卖反弹) / 盘中站上均价。
     private static decimal ScoreTechnical(DailyMarketSnapshotEntity s)
     {
         decimal score = 0;
-        if (s.MacdGoldenCross) score += 40;
-        if (s.Rsi is >= 50 and < 70) score += 30;   // 多头未超买
-        else if (s.Rsi is > 0 and < 50) score += 15; // 蓄势
-        if (s.Ma20 > 0 && s.Close >= s.Ma20) score += 30; // 站上 20 日线
+
+        // 1) 均线排列（最强趋势信号）
+        if (s.Ma5 > 0 && s.Ma10 > 0 && s.Ma20 > 0)
+        {
+            if (s.Ma5 >= s.Ma10 && s.Ma10 >= s.Ma20 && s.Close >= s.Ma5) score += 30; // 完美多头排列
+            else if (s.Close >= s.Ma20) score += 12;                                   // 至少站上中期均线
+        }
+        else if (s.Ma20 > 0 && s.Close >= s.Ma20) score += 12;
+
+        // 2) MACD：金叉/多头（普通一项，不主导）
+        if (s.MacdGoldenCross) score += 20;
+        else if (s.MacdDif > s.MacdDea) score += 10;
+
+        // 3) RSI 状态：多头健康 / 回调蓄势 / 超卖待反弹；超买不加分（且已被 MaxRsi 硬过滤）
+        score += s.Rsi switch
+        {
+            >= 50m and < 70m => 22m, // 多头健康
+            >= 40m and < 50m => 16m, // 回调到位/蓄势
+            > 0m and < 40m => 12m,   // 超卖待反弹
+            _ => 0m
+        };
+
+        // 4) 盘中站上均价（日内多头/主力护盘）
+        if (s.AvgPrice > 0 && s.Close >= s.AvgPrice) score += 10;
+
         return Math.Min(score, 100m);
     }
 
@@ -272,7 +294,11 @@ public class StockSelectionEngine
             tags.Add(seq.ConsecutiveInflowDays >= 2
                 ? $"主力连{seq.ConsecutiveInflowDays}日+{FormatWan(s.MainNetInflow)}"
                 : $"主力+{FormatWan(s.MainNetInflow)}");
+        if (s.Ma5 > 0 && s.Ma10 > 0 && s.Ma20 > 0 && s.Ma5 >= s.Ma10 && s.Ma10 >= s.Ma20 && s.Close >= s.Ma5)
+            tags.Add("多头排列");
         if (s.MacdGoldenCross) tags.Add("MACD刚金叉");
+        if (s.Rsi is > 0m and < 40m) tags.Add("超卖反弹");
+        if (s.AvgPrice > 0 && s.Close >= s.AvgPrice) tags.Add("站上均价");
         if (seq.BreakoutNewHigh) tags.Add("突破新高");
         else if (seq.PullbackStabilize) tags.Add("回踩企稳");
         if (activityFeatures.Contains("温和放量")) tags.Add("温和放量");

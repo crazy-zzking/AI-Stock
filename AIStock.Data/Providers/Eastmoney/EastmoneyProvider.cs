@@ -487,6 +487,51 @@ public class EastmoneyProvider : BaseProvider
     }
 
     /// <summary>
+    /// 全市场个股主力净流入（批量，clist 分页）。返回 code → 主力净流入(元)，用于盘中快照资金面。
+    /// </summary>
+    public async Task<Dictionary<string, decimal>> GetMarketMainFlowAsync(CancellationToken ct = default)
+    {
+        var result = new Dictionary<string, decimal>();
+        const string fs = "m:0+t:6,m:0+t:80,m:1+t:2,m:1+t:23,m:0+t:81+s:2048"; // 沪深京 A 股
+        for (int pn = 1; pn <= 60; pn++)
+        {
+            if (ct.IsCancellationRequested) break;
+            var url = SectorRankingUrl + "?" +
+                      $"fid=f62&po=1&pz=200&pn={pn}&np=1&fltt=2&invt=2&fs={fs}&fields=f12,f62&" +
+                      "ut=8dec03ba335b81bf4ebdf7b29ec27d15";
+            var resp = await SendEastmoneyRequestAsync(url, ct);
+            if (resp == null) break;
+
+            int count = 0;
+            try
+            {
+                using var doc = JsonDocument.Parse(resp);
+                if (!doc.RootElement.TryGetProperty("data", out var data) ||
+                    data.ValueKind == JsonValueKind.Null ||
+                    !data.TryGetProperty("diff", out var diff) ||
+                    diff.ValueKind != JsonValueKind.Array)
+                    break;
+
+                foreach (var item in diff.EnumerateArray())
+                {
+                    var code = item.TryGetProperty("f12", out var c) && c.ValueKind == JsonValueKind.String ? c.GetString() : null;
+                    if (string.IsNullOrEmpty(code)) continue;
+                    var flow = item.TryGetProperty("f62", out var f) && f.ValueKind == JsonValueKind.Number ? f.GetDecimal() : 0;
+                    result[code] = flow;
+                    count++;
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.LogWarning(ex, "解析市场资金流分页失败 pn={Pn}", pn);
+                break;
+            }
+            if (count < 200) break; // 不足一页 = 最后一页
+        }
+        return result;
+    }
+
+    /// <summary>
     /// 获取板块成分股
     /// </summary>
     public async Task<List<string>> GetSectorConstituentsAsync(string sectorCode, CancellationToken ct = default)

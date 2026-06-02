@@ -106,6 +106,11 @@ public record QuoteData
     public decimal Pb { get; init; }
 
     /// <summary>
+    /// 当日均价（VWAP，现价站上均价为盘中强势信号）
+    /// </summary>
+    public decimal AvgPrice { get; init; }
+
+    /// <summary>
     /// 数据时间
     /// </summary>
     public DateTime Timestamp { get; init; }

@@ -13,11 +13,16 @@ public class RuleLogicNarrator : ILogicNarrator
         var s = context.Snapshot;
         var parts = new List<string>();
 
-        // 技术面：MACD 金叉初期
-        if (s.MacdGoldenCross)
-        {
-            parts.Add($"MACD 刚金叉(DIF={s.MacdDif:F2}>DEA={s.MacdDea:F2})，处确认初期");
-        }
+        // 技术面：均线排列 / MACD / 均价（择强表述，MACD 只是其一）
+        var techBits = new List<string>();
+        if (s.Ma5 > 0 && s.Ma10 > 0 && s.Ma20 > 0 && s.Ma5 >= s.Ma10 && s.Ma10 >= s.Ma20 && s.Close >= s.Ma5)
+            techBits.Add("均线多头排列");
+        else if (s.Ma20 > 0 && s.Close >= s.Ma20)
+            techBits.Add("站上20日线");
+        if (s.MacdGoldenCross) techBits.Add($"MACD 刚金叉(DIF={s.MacdDif:F2}>DEA={s.MacdDea:F2})");
+        else if (s.MacdDif > s.MacdDea) techBits.Add("MACD 多头");
+        if (s.AvgPrice > 0 && s.Close >= s.AvgPrice) techBits.Add("站上均价");
+        if (techBits.Count > 0) parts.Add(string.Join("、", techBits));
 
         // 位置：低位 / 非追高
         if (s.Rise20d > 0)
@@ -49,7 +54,7 @@ public class RuleLogicNarrator : ILogicNarrator
         // RSI 状态
         if (s.Rsi > 0)
         {
-            var rsiState = s.Rsi >= 70 ? "偏超买需警惕" : s.Rsi >= 50 ? "多头未超买" : "蓄势";
+            var rsiState = s.Rsi >= 70 ? "偏超买需警惕" : s.Rsi >= 50 ? "多头未超买" : s.Rsi >= 40 ? "回调到位" : "超卖待反弹";
             parts.Add($"RSI {s.Rsi:F0}（{rsiState}）");
         }
 
