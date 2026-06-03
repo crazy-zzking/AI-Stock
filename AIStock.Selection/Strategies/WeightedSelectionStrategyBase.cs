@@ -70,6 +70,7 @@ public abstract class WeightedSelectionStrategyBase : ISelectionStrategy
                     Sector = Math.Round(factors.Sector, 1),
                 },
                 MarketRegime = regimeNote,
+                RecommendedStrategy = context?.Regime?.RecommendedStrategy ?? string.Empty,
             };
             result.CoreLogic = BuildCoreLogic(result, s, seq, hitHotConcepts);
 

@@ -19,7 +19,7 @@ interface SelectionResult {
   close: number; changePercent: number; totalMarketCap: number;
   rise20d: number; peTtm: number; mainNetInflow: number;
   totalScore: number; factors: FactorScores; coreLogic: string;
-  marketRegime?: string;
+  marketRegime?: string; recommendedStrategy?: string;
 }
 
 // 市值用「X.X亿」，无值显示 —（与全局 yi 略不同：单档亿、1 位小数）
@@ -108,6 +108,21 @@ const Selection: React.FC = () => {
           message={list[0].marketRegime}
         />
       )}
+
+      {(() => {
+        const rec = list[0]?.recommendedStrategy;
+        if (!rec || rec === strategy) return null;
+        const recName = strategies.find((s) => s.key === rec)?.name ?? rec;
+        return (
+          <Alert
+            type="warning"
+            showIcon
+            style={{ marginBottom: 12 }}
+            message={`当前市场状态建议使用「${recName}」策略（你当前选的是「${currentStrategy?.name ?? strategy}」）`}
+            action={<Button size="small" type="primary" onClick={() => setStrategy(rec)}>切换为{recName}</Button>}
+          />
+        );
+      })()}
 
       <Alert
         type="warning"

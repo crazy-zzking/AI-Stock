@@ -126,6 +126,7 @@ public class StockSelectionEngine
                 ActivityFeatures = hit.Features
             });
             result.MarketRegime = regimeNote;
+            result.RecommendedStrategy = regime?.RecommendedStrategy ?? string.Empty;
 
             results.Add(result);
         }

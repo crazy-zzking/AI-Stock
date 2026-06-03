@@ -72,8 +72,21 @@ public class SelectionWeights
     public decimal RegimeStrongFactor { get; set; } = 1.06m;
 }
 
-/// <summary>大盘环境等级</summary>
+/// <summary>大盘环境等级（用于选股松紧系数）</summary>
 public enum MarketRegimeLevel { Weak, Neutral, Strong }
+
+/// <summary>市场状态类型（决定推荐策略）</summary>
+public enum RegimeKind
+{
+    /// <summary>震荡市：指数横盘、热点轮动 → 低吸</summary>
+    Range,
+    /// <summary>趋势上涨：指数走强、普涨扩散 → 趋势跟随</summary>
+    TrendUp,
+    /// <summary>题材主导：涨停潮、结构性活跃 → 题材龙头</summary>
+    ThemeMarket,
+    /// <summary>风险释放：跌停扩散、情绪退潮 → 防守/低吸</summary>
+    RiskOff,
+}
 
 /// <summary>单个指数行情快照</summary>
 public class IndexQuote
@@ -92,12 +105,20 @@ public class IndexQuote
 public class MarketRegime
 {
     public MarketRegimeLevel Level { get; set; } = MarketRegimeLevel.Neutral;
+    /// <summary>市场状态类型（决定推荐策略）</summary>
+    public RegimeKind Kind { get; set; } = RegimeKind.Range;
+    /// <summary>推荐策略键（lowdip/trend/theme）</summary>
+    public string RecommendedStrategy { get; set; } = "lowdip";
     /// <summary>参与判断的各指数快照</summary>
     public List<IndexQuote> Indices { get; set; } = new();
     /// <summary>是否取到至少一个指数（取不到则仅用广度判断）</summary>
     public bool HasIndex => Indices.Count > 0;
     /// <summary>全市场上涨家数占比（0-1）</summary>
     public decimal AdvanceRatio { get; set; }
+    /// <summary>当日涨停家数</summary>
+    public int LimitUpCount { get; set; }
+    /// <summary>当日跌停家数（近似：跌幅≤-9.8%）</summary>
+    public int LimitDownCount { get; set; }
     /// <summary>文字描述</summary>
     public string Description { get; set; } = string.Empty;
 }
@@ -226,4 +247,7 @@ public class StockSelectionResult
 
     /// <summary>选股时的大盘环境描述（同一批选股相同）</summary>
     public string MarketRegime { get; set; } = string.Empty;
+
+    /// <summary>当前市场状态推荐的策略键（lowdip/trend/theme，前端据此提示切换）</summary>
+    public string RecommendedStrategy { get; set; } = string.Empty;
 }

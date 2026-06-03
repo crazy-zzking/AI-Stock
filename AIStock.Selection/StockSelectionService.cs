@@ -163,6 +163,17 @@ public class StockSelectionService
             : score <= -2 ? MarketRegimeLevel.Weak
             : MarketRegimeLevel.Neutral;
 
+        // 市场状态分类（4 态 + 推荐策略）
+        regime.LimitUpCount = latest.Count(s => s.IsLimitUp);
+        regime.LimitDownCount = latest.Count(s => s.ChangePercent <= -9.8m);
+        var avgIdxChange = regime.HasIndex ? regime.Indices.Average(i => i.ChangePercent) : 0m;
+        var aboveMa20Cnt = regime.Indices.Count(i => i.AboveMa20);
+        var cls = MarketRegimeClassifier.Classify(
+            avgIdxChange, aboveMa20Cnt, regime.Indices.Count,
+            regime.AdvanceRatio, regime.LimitUpCount, regime.LimitDownCount, latest.Count);
+        regime.Kind = cls.Kind;
+        regime.RecommendedStrategy = cls.RecommendedStrategy;
+
         var levelText = regime.Level switch
         {
             MarketRegimeLevel.Strong => "偏强",
@@ -172,7 +183,8 @@ public class StockSelectionService
         var idxText = regime.HasIndex
             ? string.Join("、", regime.Indices.Select(i => $"{i.Name}{i.ChangePercent:+0.0;-0.0}%{(i.AboveMa20 ? "↑20线" : "↓20线")}"))
             : "指数数据不可用";
-        regime.Description = $"大盘{levelText}：{idxText}；涨家占比 {regime.AdvanceRatio:P0}";
+        regime.Description = $"大盘{levelText}：{idxText}；涨家占比 {regime.AdvanceRatio:P0}；" +
+            $"涨停 {regime.LimitUpCount}/跌停 {regime.LimitDownCount}；市场状态：{cls.Label}";
         return regime;
     }
 
