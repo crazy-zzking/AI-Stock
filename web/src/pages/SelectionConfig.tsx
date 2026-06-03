@@ -9,9 +9,9 @@ import {
 } from '@ant-design/icons';
 import {
   getSelectionConfig, getSelectionConfigDefault, listSelectionConfig,
-  saveSelectionConfig, activateSelectionConfig, deleteSelectionConfig,
+  saveSelectionConfig, activateSelectionConfig, deleteSelectionConfig, getStrategies,
 } from '../api';
-import type { SelectionConfigItem, SelectionCriteriaDto } from '../api';
+import type { SelectionConfigItem, SelectionCriteriaDto, StrategyInfo } from '../api';
 
 const WEIGHT_FIELDS: { key: keyof SelectionCriteriaDto['weights']; label: string }[] = [
   { key: 'capital', label: '资金面' },
@@ -37,6 +37,10 @@ const SelectionConfig: React.FC = () => {
   const [saveOpen, setSaveOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveForm] = Form.useForm();
+  const [strategies, setStrategies] = useState<StrategyInfo[]>([]);
+  const [strategy, setStrategy] = useState('lowdip');
+
+  const currentStrategy = strategies.find((s) => s.key === strategy);
 
   // 实时监听 8 因子权重之和（按绝对权重加权，不强制=1，仅提示）
   const weights = Form.useWatch('weights', form);
@@ -45,10 +49,16 @@ const SelectionConfig: React.FC = () => {
     : 0;
 
   useEffect(() => {
+    getStrategies().then((r) => setStrategies(r.data || [])).catch(() => {});
     loadList();
-    loadActive();
+    loadActive('lowdip');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const onStrategyChange = (key: string) => {
+    setStrategy(key);
+    loadActive(key);
+  };
 
   const loadList = async () => {
     setLoading(true);
@@ -62,9 +72,9 @@ const SelectionConfig: React.FC = () => {
     }
   };
 
-  const loadActive = async () => {
+  const loadActive = async (key = strategy) => {
     try {
-      const res = await getSelectionConfig();
+      const res = await getSelectionConfig(key);
       form.setFieldsValue(res.data);
     } catch {
       message.error('加载生效配置失败');
@@ -113,7 +123,7 @@ const SelectionConfig: React.FC = () => {
 
   const openSave = () => {
     saveForm.resetFields();
-    saveForm.setFieldsValue({ name: '默认', version: '', remark: '', activate: true });
+    saveForm.setFieldsValue({ name: strategy, version: '', remark: '', activate: true });
     setSaveOpen(true);
   };
 
@@ -190,11 +200,27 @@ const SelectionConfig: React.FC = () => {
       />
 
       <Card
-        title="参数编辑"
+        title={
+          <Space>
+            参数编辑
+            <Select
+              size="small"
+              style={{ width: 150 }}
+              value={strategy}
+              onChange={onStrategyChange}
+              options={strategies.map((s) => ({ value: s.key, label: s.name }))}
+            />
+            {currentStrategy && (
+              <Tooltip title={`${currentStrategy.description}（适用：${currentStrategy.preferredRegime}）`}>
+                <Tag color="blue">{currentStrategy.preferredRegime}</Tag>
+              </Tooltip>
+            )}
+          </Space>
+        }
         style={{ marginBottom: 16 }}
         extra={
           <Space>
-            <Button icon={<RollbackOutlined />} onClick={loadActive}>载入生效配置</Button>
+            <Button icon={<RollbackOutlined />} onClick={() => loadActive()}>载入生效配置</Button>
             <Button icon={<ReloadOutlined />} onClick={loadDefault}>恢复代码默认</Button>
             <Button type="primary" icon={<SaveOutlined />} onClick={openSave}>保存为新版本</Button>
           </Space>
@@ -289,8 +315,8 @@ const SelectionConfig: React.FC = () => {
         destroyOnClose
       >
         <Form form={saveForm} layout="vertical" style={{ marginTop: 12 }}>
-          <Form.Item name="name" label="配置名" rules={[{ required: true, message: '请输入配置名' }]}>
-            <Input placeholder="默认" />
+          <Form.Item name="name" label="所属策略" rules={[{ required: true, message: '请选择策略' }]}>
+            <Select options={strategies.map((s) => ({ value: s.key, label: `${s.name}（${s.key}）` }))} />
           </Form.Item>
           <Form.Item
             name="version" label="版本号"

@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import {
   Card, Rate, Tag, Row, Col, Alert, Spin, message, Button,
-  InputNumber, Space, Typography, Tooltip,
+  InputNumber, Space, Typography, Tooltip, Select,
 } from 'antd';
 import { ReloadOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
-import { getLatestSelection, rerunSelection } from '../api';
+import { getLatestSelection, rerunSelection, getStrategies } from '../api';
+import type { StrategyInfo } from '../api';
 import { pct, upDownColor as upDown } from '../utils/format';
 
 interface FactorScores {
@@ -39,6 +40,10 @@ const Selection: React.FC = () => {
   const [rerunning, setRerunning] = useState(false);
   const [topN, setTopN] = useState(5);
   const [list, setList] = useState<SelectionResult[]>([]);
+  const [strategies, setStrategies] = useState<StrategyInfo[]>([]);
+  const [strategy, setStrategy] = useState<string>('lowdip');
+
+  const currentStrategy = strategies.find((s) => s.key === strategy);
 
   const load = async (n: number) => {
     setLoading(true);
@@ -52,13 +57,13 @@ const Selection: React.FC = () => {
     }
   };
 
-  // 重新选股：重算并追加一条历史记录（区别于「刷新」只读最近一次记录）
+  // 重新选股：按所选策略重算并追加一条历史记录（区别于「刷新」只读最近一次记录）
   const rerun = async (n: number) => {
     setRerunning(true);
     try {
-      const res = await rerunSelection({ topN: n });
+      const res = await rerunSelection({ topN: n }, strategy);
       setList(res.data || []);
-      message.success('已重新选股并记录本次结果');
+      message.success(`已用「${currentStrategy?.name ?? strategy}」策略重新选股`);
     } catch {
       message.error('重新选股失败');
     } finally {
@@ -66,16 +71,30 @@ const Selection: React.FC = () => {
     }
   };
 
-  useEffect(() => { load(topN); /* eslint-disable-next-line */ }, []);
+  useEffect(() => {
+    load(topN);
+    getStrategies().then((res) => setStrategies(res.data || [])).catch(() => {});
+    /* eslint-disable-next-line */
+  }, []);
 
   return (
     <div>
       <h2 style={{ marginBottom: 12 }}>
         明日可介入 — 短线弹性品种 TOP{topN}
         <Space style={{ marginLeft: 16 }}>
+          <Tooltip title={currentStrategy ? `${currentStrategy.description}（适用：${currentStrategy.preferredRegime}）` : '选择选股策略'}>
+            <Select
+              size="small"
+              style={{ width: 130 }}
+              value={strategy}
+              onChange={setStrategy}
+              options={strategies.map((s) => ({ value: s.key, label: s.name }))}
+              placeholder="策略"
+            />
+          </Tooltip>
           <InputNumber min={1} max={20} value={topN} onChange={(v) => setTopN(v || 5)} size="small" style={{ width: 70 }} />
           <Button icon={<ReloadOutlined />} size="small" onClick={() => load(topN)}>刷新</Button>
-          <Tooltip title="重新选股并新增一条记录（不覆盖历史；默认刷新只读最近一次记录，盘中不跳动）">
+          <Tooltip title="按所选策略重新选股并新增一条记录（不覆盖历史；刷新只读最近一次记录，盘中不跳动）">
             <Button size="small" type="primary" loading={rerunning} onClick={() => rerun(topN)}>重新选股</Button>
           </Tooltip>
         </Space>

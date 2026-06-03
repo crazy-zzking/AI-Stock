@@ -65,11 +65,14 @@ export const checkRisk = (data: Record<string, unknown>) =>
 // ============ 选股 ============
 export const getLatestSelection = (topN = 5) =>
   api.get(`/selection/latest`, { params: { topN } });
-export const screenSelection = (criteria?: Record<string, unknown>) =>
-  api.post('/selection/screen', criteria || {});
+export const screenSelection = (criteria?: Record<string, unknown>, strategy?: string) =>
+  api.post('/selection/screen', criteria || {}, { params: strategy ? { strategy } : {} });
 // 重新选股并追加一条历史记录（不覆盖）
-export const rerunSelection = (criteria?: Record<string, unknown>) =>
-  api.post('/selection/run', criteria || {});
+export const rerunSelection = (criteria?: Record<string, unknown>, strategy?: string) =>
+  api.post('/selection/run', criteria || {}, { params: strategy ? { strategy } : {} });
+// 可用选股策略清单
+export interface StrategyInfo { key: string; name: string; description: string; preferredRegime: string; }
+export const getStrategies = () => api.get<StrategyInfo[]>('/selection/strategies');
 // 选股历史记录列表（元信息，按选股时间倒序）
 export const getSelectionHistory = (take = 30) =>
   api.get('/selection/history', { params: { take } });
