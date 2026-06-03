@@ -73,6 +73,23 @@ export const rerunSelection = (criteria?: Record<string, unknown>, strategy?: st
 // 可用选股策略清单
 export interface StrategyInfo { key: string; name: string; description: string; preferredRegime: string; }
 export const getStrategies = () => api.get<StrategyInfo[]>('/selection/strategies');
+
+// ============ 选股回测 ============
+export interface BacktestTradeDto {
+  code: string; name: string; signalDate: string; entryDate: string; entryPrice: number;
+  exitDate: string; exitPrice: number; holdDays: number;
+  returnPct: number; maxRisePct: number; maxDropPct: number; win: boolean;
+}
+export interface BacktestReportDto {
+  holdDays: number; entry: string;
+  totalSignals: number; executedTrades: number; skippedNoData: number;
+  winRatePct: number; avgReturnPct: number; medianReturnPct: number;
+  profitFactor: number | null; stdDevPct: number; maxDrawdownPct: number;
+  avgMaxRisePct: number; avgMaxDropPct: number; bestReturnPct: number; worstReturnPct: number;
+  trades: BacktestTradeDto[];
+}
+export const getBacktest = (holdDays = 5, entry = 'NextOpen', from?: string, to?: string) =>
+  api.get<BacktestReportDto>('/selection/backtest', { params: { holdDays, entry, from, to } });
 // 选股历史记录列表（元信息，按选股时间倒序）
 export const getSelectionHistory = (take = 30) =>
   api.get('/selection/history', { params: { take } });
