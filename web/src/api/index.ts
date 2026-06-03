@@ -79,6 +79,41 @@ export const getSelectionById = (id: number) => api.get(`/selection/history/${id
 export const getSelectionPerformance = (id: number) => api.get(`/selection/history/${id}/performance`);
 export const getActivityPool = () => api.get('/selection/activity');
 
+// ============ 选股配置中心（版本化阈值 + 权重）============
+export interface SelectionWeights {
+  capital: number; technical: number; position: number; form: number;
+  dragonTiger: number; activity: number; theme: number; sector: number;
+  regimeWeakFactor: number; regimeStrongFactor: number;
+}
+export interface SelectionCriteriaDto {
+  topN: number;
+  healthyRiseMin: number; healthyRiseMax: number;
+  minVolumeRatio: number; shockAmplitude: number;
+  minMainNetInflow: number; maxRsi: number; maxRise20d: number;
+  requireDragonTiger: boolean;
+  maxTotalMarketCap: number; excludeTraditionalIndustry: boolean;
+  excludeIndustryKeywords: string[];
+  useLlmNarrative: boolean;
+  weights: SelectionWeights;
+}
+export interface SelectionConfigItem {
+  id: number; name: string; version: string; configJson: string;
+  isActive: boolean; remark?: string; createdAt: string; updatedAt: string;
+}
+export const getSelectionConfig = (name?: string) =>
+  api.get<SelectionCriteriaDto>('/selection/config', { params: name ? { name } : {} });
+export const getSelectionConfigDefault = () =>
+  api.get<SelectionCriteriaDto>('/selection/config/default');
+export const listSelectionConfig = () =>
+  api.get<SelectionConfigItem[]>('/selection/config/list');
+export const saveSelectionConfig = (body: {
+  name: string; version: string; remark?: string; activate: boolean; criteria: SelectionCriteriaDto;
+}) => api.post('/selection/config', body);
+export const activateSelectionConfig = (id: number) =>
+  api.post(`/selection/config/${id}/activate`);
+export const deleteSelectionConfig = (id: number) =>
+  api.delete(`/selection/config/${id}`);
+
 // ============ 每日复盘 ============
 export const getLatestReview = () => api.get('/review/latest');
 export const getReviewByDate = (date: string) => api.get(`/review/${date}`);
