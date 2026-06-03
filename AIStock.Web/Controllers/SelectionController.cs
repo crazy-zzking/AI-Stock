@@ -1,6 +1,7 @@
 using AIStock.Core.Models;
 using AIStock.Infrastructure.Database.Entities;
 using AIStock.Selection;
+using AIStock.Selection.Backtest;
 using Microsoft.AspNetCore.Mvc;
 
 namespace AIStock.Web.Controllers;
@@ -15,12 +16,15 @@ public class SelectionController : ControllerBase
 {
     private readonly StockSelectionService _selection;
     private readonly SelectionConfigService _config;
+    private readonly BacktestService _backtest;
     private readonly ILogger<SelectionController> _logger;
 
-    public SelectionController(StockSelectionService selection, SelectionConfigService config, ILogger<SelectionController> logger)
+    public SelectionController(StockSelectionService selection, SelectionConfigService config,
+        BacktestService backtest, ILogger<SelectionController> logger)
     {
         _selection = selection;
         _config = config;
+        _backtest = backtest;
         _logger = logger;
     }
 
@@ -144,6 +148,27 @@ public class SelectionController : ControllerBase
         public string? Remark { get; set; }
         public bool Activate { get; set; }
         public SelectionCriteria? Criteria { get; set; }
+    }
+
+    /// <summary>
+    /// 回测历史选股结果：把 [from,to] 区间内已落库的选股记录当信号，按持有期/买点用 K 线统计
+    /// 胜率/平均收益/盈亏比/回撤。entry: NextOpen(默认,T+1开盘) | SignalClose(信号日收盘)。
+    /// </summary>
+    [HttpGet("backtest")]
+    public async Task<ActionResult<BacktestReport>> Backtest(
+        [FromQuery] int holdDays = 5, [FromQuery] string entry = "NextOpen",
+        [FromQuery] string? from = null, [FromQuery] string? to = null, CancellationToken ct = default)
+    {
+        var config = new BacktestConfig
+        {
+            HoldDays = holdDays,
+            Entry = string.Equals(entry, "SignalClose", StringComparison.OrdinalIgnoreCase)
+                ? BacktestEntryTiming.SignalClose : BacktestEntryTiming.NextOpen,
+        };
+        DateTime? f = DateTime.TryParse(from, out var fd) ? fd : null;
+        DateTime? t = DateTime.TryParse(to, out var td) ? td : null;
+        var report = await _backtest.BacktestHistoryAsync(config, f, t, ct);
+        return Ok(report);
     }
 
     /// <summary>仅返回第一级活跃度粗筛池（调试/观察用）。</summary>

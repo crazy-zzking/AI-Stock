@@ -1,3 +1,4 @@
+using AIStock.Selection.Backtest;
 using AIStock.Selection.Narration;
 using AIStock.Selection.Strategies;
 using Microsoft.Extensions.DependencyInjection;
@@ -19,6 +20,7 @@ public static class DependencyInjection
         services.AddScoped<ISelectionStrategy, ThemeStrategy>();
 
         services.AddScoped<StockSelectionService>();
+        services.AddScoped<BacktestService>();
         return services;
     }
 }
