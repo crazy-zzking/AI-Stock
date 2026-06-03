@@ -5,6 +5,7 @@ using AIStock.Infrastructure.Database.Context;
 using AIStock.Infrastructure.Database.Entities;
 using AIStock.Selection;
 using AIStock.Selection.Narration;
+using AIStock.Selection.Strategies;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Xunit.Abstractions;
@@ -26,11 +27,17 @@ public class StockSelectionServiceTests
             .UseInMemoryDatabase($"sel-svc-{Guid.NewGuid()}")
             .Options);
 
-    private static StockSelectionService NewService(AIStockDbContext db) =>
-        new(db, new StockSelectionEngine(new RuleLogicNarrator()),
-            new EmptyResolver(),
+    private static StockSelectionService NewService(AIStockDbContext db)
+    {
+        var engine = new StockSelectionEngine(new RuleLogicNarrator());
+        var strategies = new ISelectionStrategy[]
+        {
+            new LowDipStrategy(engine), new TrendStrategy(), new ThemeStrategy(),
+        };
+        return new(db, strategies, new EmptyResolver(),
             new SelectionConfigService(db, NullLogger<SelectionConfigService>.Instance),
             NullLogger<StockSelectionService>.Instance);
+    }
 
     /// <summary>空数据源解析器：测试中不取指数，大盘环境仅由快照广度判断。</summary>
     private sealed class EmptyResolver : IDataProviderResolver

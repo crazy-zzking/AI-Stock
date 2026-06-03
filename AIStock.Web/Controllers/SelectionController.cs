@@ -24,11 +24,20 @@ public class SelectionController : ControllerBase
         _logger = logger;
     }
 
-    /// <summary>按自定义条件实时选股（不落库，调试/试参用）。body 为空则用配置中心生效配置。</summary>
+    /// <summary>可用选股策略清单（key/name/说明/适用环境）。</summary>
+    [HttpGet("strategies")]
+    public ActionResult Strategies()
+        => Ok(_selection.ListStrategies().Select(s => new
+        {
+            s.Key, s.Name, s.Description, s.PreferredRegime,
+        }));
+
+    /// <summary>按自定义条件实时选股（不落库，调试/试参用）。strategy 选策略(默认 lowdip)；body 为空则用该策略生效配置。</summary>
     [HttpPost("screen")]
-    public async Task<ActionResult<List<StockSelectionResult>>> Screen([FromBody] SelectionCriteria? criteria, CancellationToken ct)
+    public async Task<ActionResult<List<StockSelectionResult>>> Screen(
+        [FromBody] SelectionCriteria? criteria, [FromQuery] string? strategy, CancellationToken ct)
     {
-        var results = await _selection.SelectAsync(criteria, ct);
+        var results = await _selection.SelectAsync(criteria, strategy, ct);
         return Ok(results);
     }
 
@@ -43,11 +52,12 @@ public class SelectionController : ControllerBase
         return Ok(results);
     }
 
-    /// <summary>重新选股并追加一条历史记录（不覆盖），返回本次结果。body 为空则用生效配置。</summary>
+    /// <summary>重新选股并追加一条历史记录（不覆盖），返回本次结果。strategy 选策略；body 为空则用该策略生效配置。</summary>
     [HttpPost("run")]
-    public async Task<ActionResult<List<StockSelectionResult>>> Run([FromBody] SelectionCriteria? criteria, CancellationToken ct)
+    public async Task<ActionResult<List<StockSelectionResult>>> Run(
+        [FromBody] SelectionCriteria? criteria, [FromQuery] string? strategy, CancellationToken ct)
     {
-        var results = await _selection.RunAndSaveAsync(criteria, ct);
+        var results = await _selection.RunAndSaveAsync(criteria, strategy, ct);
         return Ok(results);
     }
 

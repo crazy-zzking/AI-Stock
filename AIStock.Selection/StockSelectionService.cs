@@ -5,6 +5,7 @@ using AIStock.Core.Models;
 using AIStock.Data.Providers.Eastmoney;
 using AIStock.Infrastructure.Database.Context;
 using AIStock.Infrastructure.Database.Entities;
+using AIStock.Selection.Strategies;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
@@ -17,29 +18,45 @@ namespace AIStock.Selection;
 public class StockSelectionService
 {
     private readonly AIStockDbContext _db;
-    private readonly StockSelectionEngine _engine;
+    private readonly IReadOnlyDictionary<string, ISelectionStrategy> _strategies;
     private readonly IDataProviderResolver _resolver;
     private readonly SelectionConfigService _config;
     private readonly ILogger<StockSelectionService> _logger;
 
     public StockSelectionService(
         AIStockDbContext db,
-        StockSelectionEngine engine,
+        IEnumerable<ISelectionStrategy> strategies,
         IDataProviderResolver resolver,
         SelectionConfigService config,
         ILogger<StockSelectionService> logger)
     {
         _db = db;
-        _engine = engine;
+        _strategies = strategies.ToDictionary(s => s.Key, StringComparer.OrdinalIgnoreCase);
         _resolver = resolver;
         _config = config;
         _logger = logger;
     }
 
-    /// <summary>执行选股，返回 TOP-N。criteria 为 null 时用配置中心当前生效配置。无快照数据时返回空。</summary>
-    public async Task<List<StockSelectionResult>> SelectAsync(SelectionCriteria? criteria = null, CancellationToken ct = default)
+    /// <summary>解析策略键 → 策略实例，未知键回退低吸（默认）。</summary>
+    private ISelectionStrategy ResolveStrategy(string? key)
     {
-        criteria ??= await _config.GetActiveCriteriaAsync(ct: ct);
+        if (!string.IsNullOrWhiteSpace(key) && _strategies.TryGetValue(key.Trim(), out var s)) return s;
+        return _strategies[StrategyKeys.LowDip];
+    }
+
+    /// <summary>可用策略清单（key/name/description/适用环境）。</summary>
+    public IReadOnlyList<ISelectionStrategy> ListStrategies()
+        => _strategies.Values.OrderBy(s => s.Key == StrategyKeys.LowDip ? 0 : 1).ThenBy(s => s.Key).ToList();
+
+    /// <summary>
+    /// 执行选股，返回 TOP-N。strategyKey 选择策略（默认低吸 lowdip）；
+    /// criteria 为 null 时用配置中心该策略当前生效配置。无快照数据时返回空。
+    /// </summary>
+    public async Task<List<StockSelectionResult>> SelectAsync(
+        SelectionCriteria? criteria = null, string? strategyKey = null, CancellationToken ct = default)
+    {
+        var strategy = ResolveStrategy(strategyKey);
+        criteria ??= await _config.GetActiveCriteriaAsync(strategy.Key, ct);
 
         var (latest, dragonByCode, sequenceByCode) = await LoadAsync(ct);
         if (latest.Count == 0)
@@ -65,10 +82,10 @@ public class StockSelectionService
         };
 
         var activePool = ActivityScreener.Screen(latest, criteria);
-        var results = _engine.Select(activePool, dragonByCode, sequenceByCode, criteria, context);
+        var results = strategy.Select(activePool, dragonByCode, sequenceByCode, criteria, context);
         EnrichIndustryConcepts(results, context);
-        _logger.LogInformation("选股完成：大盘[{Regime}]，活跃池 {Pool} 只，入选 TOP {Top}，当日热门题材 {Hot} 个",
-            regime.Level, activePool.Count, results.Count, hotConcepts.Count);
+        _logger.LogInformation("选股完成：策略[{Strategy}]，大盘[{Regime}]，活跃池 {Pool} 只，入选 TOP {Top}，当日热门题材 {Hot} 个",
+            strategy.Name, regime.Level, activePool.Count, results.Count, hotConcepts.Count);
         return results;
     }
 
@@ -269,16 +286,18 @@ public class StockSelectionService
         if (latest != null)
             return Deserialize(latest.ResultsJson, topN);
 
-        var criteria = await _config.GetActiveCriteriaAsync(ct: ct);
+        var criteria = await _config.GetActiveCriteriaAsync(StrategyKeys.LowDip, ct);
         criteria.TopN = topN;
-        return await RunAndSaveAsync(criteria, ct);
+        return await RunAndSaveAsync(criteria, StrategyKeys.LowDip, ct);
     }
 
-    /// <summary>重新选股并追加一条历史记录（不覆盖），返回结果。criteria 为 null 时用生效配置。供手动刷新 / 收盘后任务调用。</summary>
-    public async Task<List<StockSelectionResult>> RunAndSaveAsync(SelectionCriteria? criteria = null, CancellationToken ct = default)
+    /// <summary>重新选股并追加一条历史记录（不覆盖），返回结果。criteria 为 null 时用该策略生效配置。供手动刷新 / 收盘后任务调用。</summary>
+    public async Task<List<StockSelectionResult>> RunAndSaveAsync(
+        SelectionCriteria? criteria = null, string? strategyKey = null, CancellationToken ct = default)
     {
-        criteria ??= await _config.GetActiveCriteriaAsync(ct: ct);
-        var results = await SelectAsync(criteria, ct);
+        var strategy = ResolveStrategy(strategyKey);
+        criteria ??= await _config.GetActiveCriteriaAsync(strategy.Key, ct);
+        var results = await SelectAsync(criteria, strategy.Key, ct);
 
         var tradingDate = await _db.DailyMarketSnapshot.MaxAsync(s => (DateTime?)s.Date, ct);
         if (tradingDate == null) return results;
@@ -413,7 +432,7 @@ public class StockSelectionService
     /// <summary>仅返回第一级活跃度粗筛池（调试/观察用）。criteria 为 null 时用生效配置。</summary>
     public async Task<List<ActivityScreener.ActivityHit>> ScreenActivityAsync(SelectionCriteria? criteria = null, CancellationToken ct = default)
     {
-        criteria ??= await _config.GetActiveCriteriaAsync(ct: ct);
+        criteria ??= await _config.GetActiveCriteriaAsync(StrategyKeys.LowDip, ct);
         var (latest, _, _) = await LoadAsync(ct);
         return ActivityScreener.Screen(latest, criteria);
     }
