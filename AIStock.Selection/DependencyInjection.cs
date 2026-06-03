@@ -10,6 +10,7 @@ public static class DependencyInjection
         // 默认规则叙述器；如需 LLM 增强，替换为 LlmLogicNarrator 实现即可
         services.AddScoped<ILogicNarrator, RuleLogicNarrator>();
         services.AddScoped<StockSelectionEngine>();
+        services.AddScoped<SelectionConfigService>();
         services.AddScoped<StockSelectionService>();
         return services;
     }

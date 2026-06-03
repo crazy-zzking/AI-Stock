@@ -117,6 +117,11 @@ public class AIStockDbContext : DbContext
     /// </summary>
     public DbSet<ConceptBoardEntity> ConceptBoard { get; set; }
 
+    /// <summary>
+    /// 选股配置（版本化，IsActive 标记当前生效版本）
+    /// </summary>
+    public DbSet<SelectionConfigEntity> SelectionConfig { get; set; }
+
     public override int SaveChanges()
     {
         UpdateTimestamps();
@@ -324,6 +329,14 @@ public class AIStockDbContext : DbContext
         {
             entity.HasKey(e => e.BoardCode);
             entity.HasIndex(e => e.BoardType);
+        });
+
+        // 选股配置（版本化，同 Name+Version 唯一；按 Name 查生效版本）
+        modelBuilder.Entity<SelectionConfigEntity>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => new { e.Name, e.Version }).IsUnique();
+            entity.HasIndex(e => new { e.Name, e.IsActive });
         });
     }
 }

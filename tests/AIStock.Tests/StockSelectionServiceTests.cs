@@ -28,7 +28,9 @@ public class StockSelectionServiceTests
 
     private static StockSelectionService NewService(AIStockDbContext db) =>
         new(db, new StockSelectionEngine(new RuleLogicNarrator()),
-            new EmptyResolver(), NullLogger<StockSelectionService>.Instance);
+            new EmptyResolver(),
+            new SelectionConfigService(db, NullLogger<SelectionConfigService>.Instance),
+            NullLogger<StockSelectionService>.Instance);
 
     /// <summary>空数据源解析器：测试中不取指数，大盘环境仅由快照广度判断。</summary>
     private sealed class EmptyResolver : IDataProviderResolver

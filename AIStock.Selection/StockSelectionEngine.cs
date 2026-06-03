@@ -42,10 +42,11 @@ public class StockSelectionEngine
         var minInflowEff = level == MarketRegimeLevel.Weak
             ? Math.Max(criteria.MinMainNetInflow, 1m)   // 弱市要求主力实打实净流入（>0）
             : criteria.MinMainNetInflow;
+        var w = criteria.Weights ?? new SelectionWeights();
         var scoreFactor = level switch
         {
-            MarketRegimeLevel.Weak => 0.88m,
-            MarketRegimeLevel.Strong => 1.06m,
+            MarketRegimeLevel.Weak => w.RegimeWeakFactor,
+            MarketRegimeLevel.Strong => w.RegimeStrongFactor,
             _ => 1.0m
         };
         var regimeNote = regime?.Description ?? string.Empty;
@@ -82,9 +83,9 @@ public class StockSelectionEngine
             var theme = ScoreTheme(s.Code, context, out var hitHotConcepts);  // 题材合力
             var sector = ScoreSector(s.Code, context);                        // 板块强弱
 
-            var total = capital * 0.20m + technical * 0.16m + position * 0.18m
-                        + form * 0.12m + dragon * 0.06m + activity * 0.10m
-                        + theme * 0.10m + sector * 0.08m;
+            var total = capital * w.Capital + technical * w.Technical + position * w.Position
+                        + form * w.Form + dragon * w.DragonTiger + activity * w.Activity
+                        + theme * w.Theme + sector * w.Sector;
 
             // 涨停性质惩罚（多日）：区分低位首板（仍有空间，轻罚）与高位/连板（追高风险，重罚）
             total -= LimitUpPenalty(s, seq, criteria);

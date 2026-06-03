@@ -177,4 +177,35 @@ public class StockSelectionEngineTests
 
         Assert.Empty(results);
     }
+
+    [Fact]
+    public void Select_ConfigurableWeights_AffectTotalScore()
+    {
+        // 资金满分股：把资金权重置 0 后，综合分应明显低于默认权重（验证配置中心权重确实生效）
+        var pool = new List<ActivityScreener.ActivityHit> { Hit(Snap("A", mainNet: 100_000_000m)) };
+
+        var withDefault = NewEngine().Select(pool, NoDragon, new SelectionCriteria());
+        var zeroCapital = new SelectionCriteria();
+        zeroCapital.Weights.Capital = 0m;
+        var withZeroCapital = NewEngine().Select(pool, NoDragon, zeroCapital);
+
+        Assert.True(withDefault[0].TotalScore > withZeroCapital[0].TotalScore);
+    }
+
+    [Fact]
+    public void Select_DefaultWeights_MatchHistoricalConstants()
+    {
+        // 默认权重必须等于引擎历史硬写值（0.20/0.16/0.18/0.12/0.06/0.10/0.10/0.08），保证不配置时行为不变
+        var w = new SelectionWeights();
+        Assert.Equal(0.20m, w.Capital);
+        Assert.Equal(0.16m, w.Technical);
+        Assert.Equal(0.18m, w.Position);
+        Assert.Equal(0.12m, w.Form);
+        Assert.Equal(0.06m, w.DragonTiger);
+        Assert.Equal(0.10m, w.Activity);
+        Assert.Equal(0.10m, w.Theme);
+        Assert.Equal(0.08m, w.Sector);
+        Assert.Equal(0.88m, w.RegimeWeakFactor);
+        Assert.Equal(1.06m, w.RegimeStrongFactor);
+    }
 }

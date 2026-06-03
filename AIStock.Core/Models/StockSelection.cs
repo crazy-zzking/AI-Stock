@@ -38,6 +38,38 @@ public class SelectionCriteria
 
     /// <summary>是否启用 LLM 生成核心逻辑（默认规则模板）</summary>
     public bool UseLlmNarrative { get; set; } = false;
+
+    /// <summary>多因子打分权重 + 大盘环境系数（默认值即引擎历史硬写值，配置中心可覆盖）</summary>
+    public SelectionWeights Weights { get; set; } = new();
+}
+
+/// <summary>
+/// 多因子打分权重与大盘环境系数。默认值与引擎历史硬写常量一致，保证不配置时行为不变。
+/// 由配置中心（selection_config）按版本下发；引擎按"绝对权重加权"，各权重之和不要求等于 1。
+/// </summary>
+public class SelectionWeights
+{
+    /// <summary>资金面权重（主力净流入 + 连续净流入）</summary>
+    public decimal Capital { get; set; } = 0.20m;
+    /// <summary>技术面权重（均线/MACD/RSI/均价）</summary>
+    public decimal Technical { get; set; } = 0.16m;
+    /// <summary>位置权重（20 日涨幅，非追高）</summary>
+    public decimal Position { get; set; } = 0.18m;
+    /// <summary>形态权重（多日序列：突破/回踩/阶梯放量）</summary>
+    public decimal Form { get; set; } = 0.12m;
+    /// <summary>龙虎榜权重</summary>
+    public decimal DragonTiger { get; set; } = 0.06m;
+    /// <summary>活跃度权重（一级粗筛分）</summary>
+    public decimal Activity { get; set; } = 0.10m;
+    /// <summary>题材权重（命中当日热门题材合力）</summary>
+    public decimal Theme { get; set; } = 0.10m;
+    /// <summary>板块权重（所属行业当日强弱）</summary>
+    public decimal Sector { get; set; } = 0.08m;
+
+    /// <summary>弱市综合分系数（&lt;1 收紧）</summary>
+    public decimal RegimeWeakFactor { get; set; } = 0.88m;
+    /// <summary>强市综合分系数（&gt;1 放宽）</summary>
+    public decimal RegimeStrongFactor { get; set; } = 1.06m;
 }
 
 /// <summary>大盘环境等级</summary>

@@ -19,23 +19,28 @@ public class StockSelectionService
     private readonly AIStockDbContext _db;
     private readonly StockSelectionEngine _engine;
     private readonly IDataProviderResolver _resolver;
+    private readonly SelectionConfigService _config;
     private readonly ILogger<StockSelectionService> _logger;
 
     public StockSelectionService(
         AIStockDbContext db,
         StockSelectionEngine engine,
         IDataProviderResolver resolver,
+        SelectionConfigService config,
         ILogger<StockSelectionService> logger)
     {
         _db = db;
         _engine = engine;
         _resolver = resolver;
+        _config = config;
         _logger = logger;
     }
 
-    /// <summary>执行选股，返回 TOP-N。无快照数据时返回空。</summary>
-    public async Task<List<StockSelectionResult>> SelectAsync(SelectionCriteria criteria, CancellationToken ct = default)
+    /// <summary>执行选股，返回 TOP-N。criteria 为 null 时用配置中心当前生效配置。无快照数据时返回空。</summary>
+    public async Task<List<StockSelectionResult>> SelectAsync(SelectionCriteria? criteria = null, CancellationToken ct = default)
     {
+        criteria ??= await _config.GetActiveCriteriaAsync(ct: ct);
+
         var (latest, dragonByCode, sequenceByCode) = await LoadAsync(ct);
         if (latest.Count == 0)
         {
@@ -264,12 +269,15 @@ public class StockSelectionService
         if (latest != null)
             return Deserialize(latest.ResultsJson, topN);
 
-        return await RunAndSaveAsync(new SelectionCriteria { TopN = topN }, ct);
+        var criteria = await _config.GetActiveCriteriaAsync(ct: ct);
+        criteria.TopN = topN;
+        return await RunAndSaveAsync(criteria, ct);
     }
 
-    /// <summary>重新选股并追加一条历史记录（不覆盖），返回结果。供手动刷新 / 收盘后任务调用。</summary>
-    public async Task<List<StockSelectionResult>> RunAndSaveAsync(SelectionCriteria criteria, CancellationToken ct = default)
+    /// <summary>重新选股并追加一条历史记录（不覆盖），返回结果。criteria 为 null 时用生效配置。供手动刷新 / 收盘后任务调用。</summary>
+    public async Task<List<StockSelectionResult>> RunAndSaveAsync(SelectionCriteria? criteria = null, CancellationToken ct = default)
     {
+        criteria ??= await _config.GetActiveCriteriaAsync(ct: ct);
         var results = await SelectAsync(criteria, ct);
 
         var tradingDate = await _db.DailyMarketSnapshot.MaxAsync(s => (DateTime?)s.Date, ct);
@@ -402,9 +410,10 @@ public class StockSelectionService
         return topN > 0 ? list.Take(topN).ToList() : list;
     }
 
-    /// <summary>仅返回第一级活跃度粗筛池（调试/观察用）。</summary>
-    public async Task<List<ActivityScreener.ActivityHit>> ScreenActivityAsync(SelectionCriteria criteria, CancellationToken ct = default)
+    /// <summary>仅返回第一级活跃度粗筛池（调试/观察用）。criteria 为 null 时用生效配置。</summary>
+    public async Task<List<ActivityScreener.ActivityHit>> ScreenActivityAsync(SelectionCriteria? criteria = null, CancellationToken ct = default)
     {
+        criteria ??= await _config.GetActiveCriteriaAsync(ct: ct);
         var (latest, _, _) = await LoadAsync(ct);
         return ActivityScreener.Screen(latest, criteria);
     }
