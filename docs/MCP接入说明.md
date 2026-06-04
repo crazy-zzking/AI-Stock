@@ -31,7 +31,7 @@ dotnet build -c Release        # 产物：bin/Release/net9.0/AIStock.Mcp.exe
 ```
 
 - **连接串通过 `env` 注入**（不要写进 `appsettings.json` 后提交，避免泄密）。
-- 数据库与 `AIStock.Web` 用同一个；回放回测读 `daily_market_snapshot` / `kline_data` / `stock_*`，写 `selection_config`。
+- 数据库与 `AIStock.Web` 用同一个。回放回测**从 `kline_data` 重建技术面 + `daily_capital_flow` 补资金面 + 指数日K判大盘**（不依赖 `daily_market_snapshot`）；读 `stock_base`，写 `selection_config`。
 - 重启 Claude Desktop 后，对话中即可让模型调用这些工具。
 
 ## 三、工具清单
@@ -60,4 +60,5 @@ dotnet build -c Release        # 产物：bin/Release/net9.0/AIStock.Mcp.exe
   回放按"截至当日"的历史指数构造环境，与实盘共用 `RegimeEvaluator`、口径一致且无前视。指数历史未采集时自动降级为仅广度判断。
 - **回测不计交易成本/滑点/涨跌停不可成交**；等权独立成交，最大回撤为收益序列近似。
 - `save_config(activate=true)` 会**直接改变实际选股使用的参数**（已按你的要求开放给模型）；如需回退，用 `list_configs` 找旧版本，激活逻辑同 `/api/selection/config/{id}/activate` 或前端选股配置页。
-- 历史回放深度受 `daily_market_snapshot` 已采集的天数限制；天数越多，回测越可信。
+- **回放数据前置**：回放不依赖 `daily_market_snapshot`，改用 `kline_data`(技术面) + `daily_capital_flow`(资金面) + 指数日K(大盘)。先让 Worker 跑这几个任务：`kline`(个股日K)、`capital-flow`(历史资金流，首次较重)、`index-kline`(指数历史)。**历史回放深度 = K 线覆盖范围**（不再受 snapshot 采集起点限制）；K 线越长，回测越可信。
+- **回放 vs 实盘口径差**：量比/均价为 K 线近似（实盘取自行情接口）；回放历史市值不可得 → 不做"传统大盘股市值排除"。技术面(MA/MACD/RSI)与实盘同口径，其余因子一致。
