@@ -21,6 +21,7 @@ public static class DependencyInjection
 
         services.AddScoped<StockSelectionService>();
         services.AddScoped<BacktestService>();
+        services.AddScoped<ReplayBacktestService>();
         return services;
     }
 }

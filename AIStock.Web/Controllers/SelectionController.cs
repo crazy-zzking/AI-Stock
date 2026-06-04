@@ -17,14 +17,16 @@ public class SelectionController : ControllerBase
     private readonly StockSelectionService _selection;
     private readonly SelectionConfigService _config;
     private readonly BacktestService _backtest;
+    private readonly ReplayBacktestService _replay;
     private readonly ILogger<SelectionController> _logger;
 
     public SelectionController(StockSelectionService selection, SelectionConfigService config,
-        BacktestService backtest, ILogger<SelectionController> logger)
+        BacktestService backtest, ReplayBacktestService replay, ILogger<SelectionController> logger)
     {
         _selection = selection;
         _config = config;
         _backtest = backtest;
+        _replay = replay;
         _logger = logger;
     }
 
@@ -168,6 +170,30 @@ public class SelectionController : ControllerBase
         DateTime? f = DateTime.TryParse(from, out var fd) ? fd : null;
         DateTime? t = DateTime.TryParse(to, out var td) ? td : null;
         var report = await _backtest.BacktestHistoryAsync(config, f, t, ct);
+        return Ok(report);
+    }
+
+    /// <summary>
+    /// 参数回放回测：用给定参数(body=criteria，为空则用该策略生效配置)在 [from,to] 历史快照上
+    /// 逐日重跑选股并回测。供大模型自动调参对比。from/to 缺省=最近30天。
+    /// </summary>
+    [HttpPost("backtest/replay")]
+    public async Task<ActionResult<BacktestReport>> ReplayBacktest(
+        [FromBody] SelectionCriteria? criteria,
+        [FromQuery] string? strategy, [FromQuery] string? from, [FromQuery] string? to,
+        [FromQuery] int holdDays = 5, [FromQuery] string entry = "NextOpen", CancellationToken ct = default)
+    {
+        var c = criteria ?? await _config.GetActiveCriteriaAsync(
+            string.IsNullOrWhiteSpace(strategy) ? SelectionConfigService.DefaultName : strategy, ct);
+        var toD = DateTime.TryParse(to, out var td) ? td : DateTime.Today;
+        var fromD = DateTime.TryParse(from, out var fd) ? fd : toD.AddDays(-30);
+        var config = new BacktestConfig
+        {
+            HoldDays = holdDays,
+            Entry = string.Equals(entry, "SignalClose", StringComparison.OrdinalIgnoreCase)
+                ? BacktestEntryTiming.SignalClose : BacktestEntryTiming.NextOpen,
+        };
+        var report = await _replay.BacktestParamsAsync(strategy, c, fromD, toD, config, ct);
         return Ok(report);
     }
 
