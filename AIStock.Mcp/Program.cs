@@ -1,3 +1,4 @@
+using AIStock.Feature;
 using AIStock.Infrastructure.Database.Context;
 using AIStock.Selection;
 using AIStock.Selection.Backtest;
@@ -24,6 +25,9 @@ if (string.IsNullOrWhiteSpace(conn))
         "或通过环境变量 ConnectionStrings__MySQL 提供（Claude Desktop mcpServers.env）。");
 
 builder.Services.AddDbContext<AIStockDbContext>(o => o.UseMySql(conn, ServerVersion.Parse("8.0.0")));
+
+// 技术指标计算（回放重建快照依赖）
+builder.Services.AddFeatureServices();
 
 // 选股能力（仅注册回放/回测/配置所需，不含依赖外部行情源的 StockSelectionService）
 builder.Services.AddScoped<ILogicNarrator, RuleLogicNarrator>();

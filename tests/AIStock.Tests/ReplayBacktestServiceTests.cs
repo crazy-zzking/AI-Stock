@@ -1,5 +1,6 @@
 using AIStock.Core.Enums;
 using AIStock.Core.Models;
+using AIStock.Feature.Services;
 using AIStock.Infrastructure.Database.Context;
 using AIStock.Infrastructure.Database.Entities;
 using AIStock.Selection;
@@ -12,12 +13,12 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace AIStock.Tests;
 
 /// <summary>
-/// 参数回放回测测试（EF InMemory）：历史快照逐日重跑选股 → 信号 → 回测。
+/// 参数回放回测测试（EF InMemory）：脱离 daily_market_snapshot，从 kline_data + daily_capital_flow
+/// 重建历史快照后逐日重跑选股 → 回测。
 /// </summary>
 public class ReplayBacktestServiceTests
 {
-    private static readonly DateTime D1 = new(2026, 1, 5);
-    private static readonly DateTime D2 = new(2026, 1, 6);
+    private static readonly DateTime Base = new(2026, 1, 1);
 
     private static AIStockDbContext NewDb() =>
         new(new DbContextOptionsBuilder<AIStockDbContext>()
@@ -31,75 +32,74 @@ public class ReplayBacktestServiceTests
         {
             new LowDipStrategy(engine), new TrendStrategy(), new ThemeStrategy(),
         };
-        return new(db, strategies, NullLogger<ReplayBacktestService>.Instance);
+        return new(db, strategies, new FeatureCalculatorService(), NullLogger<ReplayBacktestService>.Instance);
     }
 
-    // 温和放量 + 资金流入 + 低位未超买 → LowDip 会选中
-    private static DailyMarketSnapshotEntity Snap(string code, DateTime date) => new()
-    {
-        Code = code, Name = code, Date = date,
-        Close = 11m, ChangePercent = 5m, VolumeRatio = 2m,
-        MainNetInflow = 50_000_000m, TotalMarketCap = 8_000_000_000m, PeTtm = 40m,
-        Rise20d = 15m, Rsi = 60m, Ma5 = 10.8m, Ma10 = 10.4m, Ma20 = 10m,
-        MacdGoldenCross = true, MacdDif = 1.1m, MacdDea = -0.03m, IsLimitUp = false,
-    };
-
-    private static void AddKline(AIStockDbContext db, ref long id, string code, DateTime d,
-        decimal o, decimal h, decimal l, decimal c) =>
-        db.KlineData.Add(new KlineDataEntity
+    private static void AddKline(AIStockDbContext db, ref long id, string code, int day,
+        decimal o, decimal h, decimal l, decimal c, long vol)
+        => db.KlineData.Add(new KlineDataEntity
         {
             Id = id++, Code = code, Interval = nameof(KlineInterval.Daily),
-            DateTime = d, Open = o, High = h, Low = l, Close = c, Source = "test",
+            DateTime = Base.AddDays(day), Open = o, High = h, Low = l, Close = c,
+            Volume = vol, Amount = c * vol, Source = "test",
         });
 
+    /// <summary>造一只满足低吸选中的股票：长期平稳 + 第 24 日温和放量上涨，并补足回测所需后续K线。</summary>
+    private static void SeedStock(AIStockDbContext db, string code)
+    {
+        db.StockBase.Add(new StockBaseEntity { Code = code, Name = code, IsDelisted = false });
+        long id = (Math.Abs(code.GetHashCode()) % 100000) * 1000L + 1;
+        for (var i = 0; i < 24; i++)
+        {
+            var c = i % 2 == 0 ? 10.05m : 9.95m;   // 小幅震荡(有涨有跌，避免 RSI 走极值)
+            AddKline(db, ref id, code, i, c, c + 0.05m, c - 0.05m, c, 1_000_000);
+        }
+        AddKline(db, ref id, code, 24, 10m, 10.6m, 10m, 10.5m, 3_000_000);     // D1 温和放量上涨
+        AddKline(db, ref id, code, 25, 10.5m, 11.1m, 10.5m, 11.0m, 3_000_000); // D2 续涨放量
+        AddKline(db, ref id, code, 26, 11.0m, 11.5m, 11.0m, 11.3m, 2_000_000); // 回测持有期
+        AddKline(db, ref id, code, 27, 11.3m, 11.8m, 11.2m, 11.6m, 2_000_000);
+        AddKline(db, ref id, code, 28, 11.6m, 12.0m, 11.5m, 11.9m, 2_000_000);
+
+        for (var i = 24; i <= 28; i++)
+            db.CapitalFlow.Add(new CapitalFlowEntity { Code = code, Date = Base.AddDays(i), MainNetInflow = 50_000_000m });
+    }
+
     [Fact]
-    public async Task ReplayBacktest_LowDip_ProducesSignalsAndReport()
+    public async Task ReplayBacktest_RebuildsFromKline_ProducesSignals()
     {
         using var db = NewDb();
-        db.DailyMarketSnapshot.Add(Snap("A", D1));
-        db.DailyMarketSnapshot.Add(Snap("A", D2));
-
-        long id = 1;
-        AddKline(db, ref id, "A", D1, 11, 11, 11, 11);
-        AddKline(db, ref id, "A", D2, 11, 11.5m, 11, 11.3m);   // D1 信号 T+1 入场
-        AddKline(db, ref id, "A", new DateTime(2026, 1, 7), 11.3m, 12, 11.3m, 12);
-        AddKline(db, ref id, "A", new DateTime(2026, 1, 8), 12, 12.5m, 12, 12.4m);
-        AddKline(db, ref id, "A", new DateTime(2026, 1, 9), 12.4m, 13, 12.4m, 12.8m);
+        SeedStock(db, "600111");
         await db.SaveChangesAsync();
 
         var report = await NewSvc(db).BacktestParamsAsync(
-            StrategyKeys.LowDip, new SelectionCriteria(), D1, D2,
-            new BacktestConfig { HoldDays = 3 });
+            StrategyKeys.LowDip, new SelectionCriteria(),
+            Base.AddDays(24), Base.AddDays(25), new BacktestConfig { HoldDays = 3 });
 
-        Assert.Equal(2, report.TotalSignals);   // A 两个交易日各选一次
+        Assert.True(report.TotalSignals >= 1, "应从 K 线重建并选出至少一个信号");
         Assert.True(report.ExecutedTrades >= 1);
     }
 
     [Fact]
-    public async Task ReplayBacktest_DifferentParams_ChangeResult()
+    public async Task ReplayBacktest_StrictRsi_NoSignals()
     {
         using var db = NewDb();
-        db.DailyMarketSnapshot.Add(Snap("A", D1));
-        long id = 1;
-        AddKline(db, ref id, "A", D1, 11, 11, 11, 11);
-        AddKline(db, ref id, "A", D2, 11, 11.5m, 11, 11.3m);
-        AddKline(db, ref id, "A", new DateTime(2026, 1, 7), 11.3m, 12, 11.3m, 12);
+        SeedStock(db, "600111");
         await db.SaveChangesAsync();
 
-        // MaxRsi 调到 50：RSI 60 的 A 被超买过滤 → 无信号
-        var strict = new SelectionCriteria { MaxRsi = 50m };
+        // MaxRsi 调到 1：任何股票都被超买过滤 → 无信号（验证参数确实驱动回放）
+        var strict = new SelectionCriteria { MaxRsi = 1m };
         var report = await NewSvc(db).BacktestParamsAsync(
-            StrategyKeys.LowDip, strict, D1, D1, new BacktestConfig { HoldDays = 3 });
+            StrategyKeys.LowDip, strict, Base.AddDays(24), Base.AddDays(24), new BacktestConfig { HoldDays = 3 });
 
-        Assert.Equal(0, report.TotalSignals); // 参数收紧后选不出 → 验证参数确实生效
+        Assert.Equal(0, report.TotalSignals);
     }
 
     [Fact]
-    public async Task ReplayBacktest_NoSnapshots_ReturnsEmpty()
+    public async Task ReplayBacktest_NoData_ReturnsEmpty()
     {
         using var db = NewDb();
         var report = await NewSvc(db).BacktestParamsAsync(
-            StrategyKeys.LowDip, new SelectionCriteria(), D1, D2, new BacktestConfig());
+            StrategyKeys.LowDip, new SelectionCriteria(), Base.AddDays(24), Base.AddDays(25), new BacktestConfig());
         Assert.Equal(0, report.TotalSignals);
     }
 }

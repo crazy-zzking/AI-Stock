@@ -1,4 +1,5 @@
 using AIStock.Core.Enums;
+using AIStock.Core.Interfaces;
 using AIStock.Core.Models;
 using AIStock.Infrastructure.Database.Context;
 using AIStock.Infrastructure.Database.Entities;
@@ -17,13 +18,16 @@ public class ReplayBacktestService
 {
     private readonly AIStockDbContext _db;
     private readonly IReadOnlyDictionary<string, ISelectionStrategy> _strategies;
+    private readonly IFeatureCalculator _featureCalculator;
     private readonly ILogger<ReplayBacktestService> _logger;
 
     public ReplayBacktestService(
-        AIStockDbContext db, IEnumerable<ISelectionStrategy> strategies, ILogger<ReplayBacktestService> logger)
+        AIStockDbContext db, IEnumerable<ISelectionStrategy> strategies,
+        IFeatureCalculator featureCalculator, ILogger<ReplayBacktestService> logger)
     {
         _db = db;
         _strategies = strategies.ToDictionary(s => s.Key, StringComparer.OrdinalIgnoreCase);
+        _featureCalculator = featureCalculator;
         _logger = logger;
     }
 
@@ -41,14 +45,12 @@ public class ReplayBacktestService
         var strategy = Resolve(strategyKey);
         const int seqWindow = 45; // 多日序列回看自然日
 
-        // 批量预载：[from-缓冲, to] 全部快照（缓冲供序列特征回看）
+        // [from-缓冲, to] 的快照：不读 daily_market_snapshot，改从 kline_data + 资金流表重建（缓冲供序列特征回看）
         var since = from.Date.AddDays(-(seqWindow + 15));
-        var allShots = await _db.DailyMarketSnapshot
-            .Where(s => s.Date >= since && s.Date <= to.Date)
-            .ToListAsync(ct);
+        var allShots = await RebuildAllSnapshotsAsync(since, to.Date, ct);
         if (allShots.Count == 0)
         {
-            _logger.LogWarning("回放回测：区间内无快照数据");
+            _logger.LogWarning("回放回测：区间内无可重建的快照（检查 kline_data 是否覆盖该区间）");
             return new BacktestReport { HoldDays = config.HoldDays, Entry = config.Entry.ToString() };
         }
 
@@ -147,6 +149,58 @@ public class ReplayBacktestService
         _logger.LogInformation("回放回测完成：策略[{S}]，{Days} 个交易日，信号 {Sig}，成交 {Exe}，胜率 {Win}%，盈亏比 {Pf}",
             strategy.Name, tradingDays.Count, report.TotalSignals, report.ExecutedTrades, report.WinRatePct, report.ProfitFactor);
         return report;
+    }
+
+    /// <summary>
+    /// 用 kline_data + daily_capital_flow 重建 [since,to] 全市场每个交易日的快照（内存），
+    /// 替代 daily_market_snapshot。技术面同口径(IFeatureCalculator)，资金面来自资金流表。
+    /// </summary>
+    private async Task<List<DailyMarketSnapshotEntity>> RebuildAllSnapshotsAsync(
+        DateTime since, DateTime to, CancellationToken ct)
+    {
+        const string daily = nameof(KlineInterval.Daily);
+        var klineBufStart = since.AddDays(-90); // 指标回看缓冲（MA20/MACD 收敛）
+        var indexSecids = RegimeEvaluator.MarketIndices.Select(i => i.Secid).ToHashSet();
+
+        var raw = await _db.KlineData
+            .Where(k => k.Interval == daily && k.DateTime >= klineBufStart && k.DateTime <= to)
+            .Select(k => new { k.Code, k.DateTime, k.Open, k.High, k.Low, k.Close, k.Volume, k.Amount, k.TurnoverRate })
+            .ToListAsync(ct);
+
+        var flows = (await _db.CapitalFlow
+                .Where(c => c.Date >= since && c.Date <= to)
+                .Select(c => new { c.Code, c.Date, c.MainNetInflow })
+                .ToListAsync(ct))
+            .ToDictionary(x => (x.Code, x.Date.Date), x => x.MainNetInflow);
+
+        var names = await _db.StockBase
+            .Select(s => new { s.Code, s.Name })
+            .ToDictionaryAsync(x => x.Code, x => x.Name, ct);
+
+        var result = new List<DailyMarketSnapshotEntity>();
+        foreach (var g in raw.Where(k => !indexSecids.Contains(k.Code)).GroupBy(k => k.Code))
+        {
+            var series = g.OrderBy(k => k.DateTime)
+                .Select(k => new KlineData
+                {
+                    DateTime = k.DateTime, Open = k.Open, High = k.High, Low = k.Low,
+                    Close = k.Close, Volume = k.Volume, Amount = k.Amount, TurnoverRate = k.TurnoverRate ?? 0,
+                })
+                .ToList();
+            var name = names.TryGetValue(g.Key, out var n) ? n : g.Key;
+
+            for (var i = 0; i < series.Count; i++)
+            {
+                var d = series[i].DateTime.Date;
+                if (d < since || d > to) continue;
+                if (i + 1 < 21) continue; // 不足 21 根无法重建
+                var window = series.Take(i + 1).ToList();
+                var flow = flows.TryGetValue((g.Key, d), out var mf) ? mf : 0m;
+                var snap = SnapshotRebuilder.Rebuild(g.Key, name, window, flow, _featureCalculator);
+                if (snap != null) result.Add(snap);
+            }
+        }
+        return result;
     }
 
     private async Task<Dictionary<string, List<BacktestBar>>> LoadBarsAsync(
