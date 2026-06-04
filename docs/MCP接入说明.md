@@ -56,7 +56,8 @@ dotnet build -c Release        # 产物：bin/Release/net9.0/AIStock.Mcp.exe
 
 ## 五、注意
 
-- **回放回测的大盘环境是无指数简化版**（不调外部行情接口，用全市场广度+涨停跌停近似），与实盘环境系数略有差异。
+- **回放回测的大盘环境用历史指数**：需 Worker 的 `index-kline` 任务先把指数历史日K落库（启动即回补）；
+  回放按"截至当日"的历史指数构造环境，与实盘共用 `RegimeEvaluator`、口径一致且无前视。指数历史未采集时自动降级为仅广度判断。
 - **回测不计交易成本/滑点/涨跌停不可成交**；等权独立成交，最大回撤为收益序列近似。
 - `save_config(activate=true)` 会**直接改变实际选股使用的参数**（已按你的要求开放给模型）；如需回退，用 `list_configs` 找旧版本，激活逻辑同 `/api/selection/config/{id}/activate` 或前端选股配置页。
 - 历史回放深度受 `daily_market_snapshot` 已采集的天数限制；天数越多，回测越可信。

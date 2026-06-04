@@ -57,8 +57,12 @@ public static class SelectionContextBuilder
         return strength;
     }
 
-    /// <summary>无指数简化大盘环境：仅用全市场广度 + 涨停/跌停近似 Level/Kind（回放用）。</summary>
-    public static MarketRegime BuildRegimeFromBreadth(IReadOnlyList<DailyMarketSnapshotEntity> dayShots)
+    /// <summary>
+    /// 回放大盘环境：给定"截至当日"的历史指数行情 + 当日全市场广度，走与实盘一致的 RegimeEvaluator。
+    /// indices 为空（指数历史未采集）时优雅降级为仅广度判断。
+    /// </summary>
+    public static MarketRegime BuildRegime(
+        IReadOnlyList<DailyMarketSnapshotEntity> dayShots, IReadOnlyList<IndexQuote> indices)
     {
         var regime = new MarketRegime();
         if (dayShots.Count == 0) return regime;
@@ -66,23 +70,19 @@ public static class SelectionContextBuilder
         regime.AdvanceRatio = Math.Round((decimal)dayShots.Count(s => s.ChangePercent > 0) / dayShots.Count, 2);
         regime.LimitUpCount = dayShots.Count(s => s.IsLimitUp);
         regime.LimitDownCount = dayShots.Count(s => s.ChangePercent <= -9.8m);
+        regime.Indices = indices.ToList();
 
-        // Level（无指数，仅广度）：用于策略弱市收紧/强市放宽
-        var score = 0;
-        if (regime.AdvanceRatio > 0.55m) score++;
-        else if (regime.AdvanceRatio is > 0m and < 0.4m) score--;
-        if (regime.LimitDownCount >= 20 && regime.LimitDownCount > regime.LimitUpCount) score--;
-        regime.Level = score >= 1 ? MarketRegimeLevel.Strong
-            : score <= -1 ? MarketRegimeLevel.Weak
-            : MarketRegimeLevel.Neutral;
-
-        var cls = MarketRegimeClassifier.Classify(
-            avgIndexChange: 0m, indicesAboveMa20: 0, indexCount: 0,
-            advanceRatio: regime.AdvanceRatio, limitUpCount: regime.LimitUpCount,
-            limitDownCount: regime.LimitDownCount, totalStocks: dayShots.Count);
-        regime.Kind = cls.Kind;
-        regime.RecommendedStrategy = cls.RecommendedStrategy;
-        regime.Description = $"[回放]广度 {regime.AdvanceRatio:P0}，涨停 {regime.LimitUpCount}/跌停 {regime.LimitDownCount}";
+        var (level, kind, rec, _) = RegimeEvaluator.Evaluate(
+            indices, regime.AdvanceRatio, regime.LimitUpCount, regime.LimitDownCount, dayShots.Count);
+        regime.Level = level;
+        regime.Kind = kind;
+        regime.RecommendedStrategy = rec;
+        regime.Description = $"[回放]{(indices.Count > 0 ? "指数+" : "")}广度 {regime.AdvanceRatio:P0}，" +
+            $"涨停 {regime.LimitUpCount}/跌停 {regime.LimitDownCount}";
         return regime;
     }
+
+    /// <summary>无指数简化版（兼容旧调用）：等价于 BuildRegime(dayShots, 空指数)。</summary>
+    public static MarketRegime BuildRegimeFromBreadth(IReadOnlyList<DailyMarketSnapshotEntity> dayShots)
+        => BuildRegime(dayShots, Array.Empty<IndexQuote>());
 }

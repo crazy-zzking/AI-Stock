@@ -79,6 +79,17 @@ public class ReplayBacktestService
                 g => (IReadOnlyDictionary<string, DragonTigerEntity>)g.GroupBy(x => x.Code)
                         .ToDictionary(x => x.Key, x => x.First()));
 
+        // 预载历史指数日 K（kline_data 中以 secid 为 code），供逐日构造"截至当日"的大盘环境（无前视）。
+        // 指数历史未采集时该字典为空 → 回放降级为仅广度判断。
+        const string daily = nameof(KlineInterval.Daily);
+        var indexSecids = RegimeEvaluator.MarketIndices.Select(i => i.Secid).ToList();
+        var indexBarsByCode = (await _db.KlineData
+                .Where(k => k.Interval == daily && indexSecids.Contains(k.Code) && k.DateTime <= to.Date)
+                .Select(k => new { k.Code, k.DateTime, k.Close })
+                .ToListAsync(ct))
+            .GroupBy(k => k.Code)
+            .ToDictionary(g => g.Key, g => g.OrderBy(x => x.DateTime).Select(x => (x.DateTime, x.Close)).ToList());
+
         var emptyDragons = new Dictionary<string, DragonTigerEntity>();
         var signals = new List<BacktestSignal>();
 
@@ -86,9 +97,19 @@ public class ReplayBacktestService
         {
             var dayShots = shotsByDate[day];
 
+            // 构造"截至当日"的历史指数行情（无前视）
+            var indices = new List<IndexQuote>();
+            foreach (var (name, secid) in RegimeEvaluator.MarketIndices)
+            {
+                if (!indexBarsByCode.TryGetValue(secid, out var ser)) continue;
+                var closes = ser.Where(b => b.DateTime.Date <= day).TakeLast(30).Select(b => b.Close).ToList();
+                var q = RegimeEvaluator.QuoteFromCloses(name, closes);
+                if (q != null) indices.Add(q);
+            }
+
             var context = new SelectionContext
             {
-                Regime = SelectionContextBuilder.BuildRegimeFromBreadth(dayShots),
+                Regime = SelectionContextBuilder.BuildRegime(dayShots, indices),
                 HotConcepts = SelectionContextBuilder.ComputeHotConcepts(dayShots, conceptsByCode),
                 ConceptsByCode = conceptsByCode,
                 IndustryByCode = industryByCode,

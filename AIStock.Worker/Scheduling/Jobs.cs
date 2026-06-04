@@ -195,3 +195,12 @@ public class DragonTigerCollectJob : IScheduledJob
     public string Name => "dragon-tiger";
     public Task ExecuteAsync(CancellationToken ct) => _svc.SyncAsync(null, ct); // 自动取最近交易日
 }
+
+/// <summary>指数日K同步任务（收盘后；供回放回测构造历史大盘环境）</summary>
+public class IndexKlineSyncJob : IScheduledJob
+{
+    private readonly IndexKlineSyncService _svc;
+    public IndexKlineSyncJob(IndexKlineSyncService svc) => _svc = svc;
+    public string Name => "index-kline";
+    public Task ExecuteAsync(CancellationToken ct) => _svc.SyncAsync(ct: ct);
+}

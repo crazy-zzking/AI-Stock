@@ -89,17 +89,6 @@ public class StockSelectionService
         return results;
     }
 
-    // 同时判断的主要指数（名称 + 东财 secid）。指数代码前缀与个股不同，需显式 secid。
-    private static readonly (string Name, string Secid)[] MarketIndices =
-    {
-        ("上证", "1.000001"),   // 上证综指
-        ("深成", "0.399001"),   // 深证成指
-        ("创业", "0.399006"),   // 创业板指
-        ("沪深300", "1.000300"),
-        ("科创50", "1.000688"), // 上证科创板50成份指数
-        ("北证50", "0.899050"), // 北证50
-    };
-
     /// <summary>
     /// 判断大盘环境：综合多个主要指数（当日涨跌幅 + 是否站上 20 日线）与全市场涨跌广度。
     /// 取不到指数时仅用广度判断。弱市选股趋严、强市略放宽（在引擎里生效）。
@@ -115,22 +104,13 @@ public class StockSelectionService
         if (em != null)
         {
             // 多指数并发拉取
-            var tasks = MarketIndices.Select(async ix =>
+            var tasks = RegimeEvaluator.MarketIndices.Select(async ix =>
             {
                 try
                 {
                     var kl = await em.GetIndexDailyAsync(ix.Secid, 30, ct);
-                    if (kl.Count < 2) return null;
                     var closes = kl.OrderBy(k => k.DateTime).Select(k => k.Close).ToList();
-                    var last = closes[^1];
-                    var prev = closes[^2];
-                    var ma20 = closes.Count >= 20 ? closes.TakeLast(20).Average() : closes.Average();
-                    return new IndexQuote
-                    {
-                        Name = ix.Name,
-                        ChangePercent = prev > 0 ? Math.Round((last - prev) / prev * 100m, 2) : 0,
-                        AboveMa20 = last >= ma20,
-                    };
+                    return RegimeEvaluator.QuoteFromCloses(ix.Name, closes);
                 }
                 catch (Exception ex)
                 {
@@ -143,36 +123,14 @@ public class StockSelectionService
         if (!regime.HasIndex)
             _logger.LogWarning("选股：指数数据均不可用，按全市场涨跌广度判断大盘");
 
-        // —— 综合打分：指数均值涨跌 / 多数指数是否站上20线 / 全市场涨家占比 ——
-        var score = 0;
-        if (regime.HasIndex)
-        {
-            var avgChange = regime.Indices.Average(i => i.ChangePercent);
-            if (avgChange > 0.5m) score++;
-            else if (avgChange < -0.5m) score--;
-
-            var aboveCount = regime.Indices.Count(i => i.AboveMa20);
-            var half = regime.Indices.Count / 2.0;
-            if (aboveCount > half) score++;
-            else if (aboveCount < half) score--;
-        }
-        if (regime.AdvanceRatio > 0.55m) score++;
-        else if (regime.AdvanceRatio > 0m && regime.AdvanceRatio < 0.4m) score--;
-
-        regime.Level = score >= 2 ? MarketRegimeLevel.Strong
-            : score <= -2 ? MarketRegimeLevel.Weak
-            : MarketRegimeLevel.Neutral;
-
-        // 市场状态分类（4 态 + 推荐策略）
+        // —— 综合评估 Level/Kind/推荐策略（与回放共用 RegimeEvaluator，口径一致）——
         regime.LimitUpCount = latest.Count(s => s.IsLimitUp);
         regime.LimitDownCount = latest.Count(s => s.ChangePercent <= -9.8m);
-        var avgIdxChange = regime.HasIndex ? regime.Indices.Average(i => i.ChangePercent) : 0m;
-        var aboveMa20Cnt = regime.Indices.Count(i => i.AboveMa20);
-        var cls = MarketRegimeClassifier.Classify(
-            avgIdxChange, aboveMa20Cnt, regime.Indices.Count,
-            regime.AdvanceRatio, regime.LimitUpCount, regime.LimitDownCount, latest.Count);
-        regime.Kind = cls.Kind;
-        regime.RecommendedStrategy = cls.RecommendedStrategy;
+        var (level, kind, rec, kindLabel) = RegimeEvaluator.Evaluate(
+            regime.Indices, regime.AdvanceRatio, regime.LimitUpCount, regime.LimitDownCount, latest.Count);
+        regime.Level = level;
+        regime.Kind = kind;
+        regime.RecommendedStrategy = rec;
 
         var levelText = regime.Level switch
         {
@@ -184,7 +142,7 @@ public class StockSelectionService
             ? string.Join("、", regime.Indices.Select(i => $"{i.Name}{i.ChangePercent:+0.0;-0.0}%{(i.AboveMa20 ? "↑20线" : "↓20线")}"))
             : "指数数据不可用";
         regime.Description = $"大盘{levelText}：{idxText}；涨家占比 {regime.AdvanceRatio:P0}；" +
-            $"涨停 {regime.LimitUpCount}/跌停 {regime.LimitDownCount}；市场状态：{cls.Label}";
+            $"涨停 {regime.LimitUpCount}/跌停 {regime.LimitDownCount}；市场状态：{kindLabel}";
         return regime;
     }
 
