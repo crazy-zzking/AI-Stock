@@ -15,6 +15,8 @@ dotnet build -c Release        # 产物：bin/Release/net9.0/AIStock.Mcp.exe
 
 ## 二、在 Claude Desktop 接入
 
+> **不需要手动运行/常驻 MCP 进程**：stdio MCP server 由 Claude Desktop 按配置**自动以子进程拉起、关闭时自动终止**（不用 `dotnet run`、不占端口）。它**自包含直连数据库，也不需要 `AIStock.Web` 在运行**。你只需：编译 exe → 配置 → 重启 Claude Desktop。
+
 编辑 `%APPDATA%\Claude\claude_desktop_config.json`：
 
 ```json
