@@ -122,6 +122,11 @@ public class AIStockDbContext : DbContext
     /// </summary>
     public DbSet<SelectionConfigEntity> SelectionConfig { get; set; }
 
+    /// <summary>
+    /// 每日资金流历史（回放回测补资金面）
+    /// </summary>
+    public DbSet<CapitalFlowEntity> CapitalFlow { get; set; }
+
     public override int SaveChanges()
     {
         UpdateTimestamps();
@@ -337,6 +342,14 @@ public class AIStockDbContext : DbContext
             entity.HasKey(e => e.Id);
             entity.HasIndex(e => new { e.Name, e.Version }).IsUnique();
             entity.HasIndex(e => new { e.Name, e.IsActive });
+        });
+
+        // 每日资金流历史（同 code+date 唯一；按 date 查）
+        modelBuilder.Entity<CapitalFlowEntity>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => new { e.Code, e.Date }).IsUnique();
+            entity.HasIndex(e => e.Date);
         });
     }
 }

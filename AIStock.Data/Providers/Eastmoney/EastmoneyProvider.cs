@@ -371,6 +371,53 @@ public class EastmoneyProvider : BaseProvider
     }
 
     /// <summary>
+    /// 获取历史每日资金流（fflow/daykline lmt=0 返回全历史；解析全部 klines，供回放回测补资金面）。
+    /// </summary>
+    public async Task<List<CapitalFlowData>> GetCapitalFlowHistoryAsync(string code, CancellationToken ct = default)
+    {
+        var result = new List<CapitalFlowData>();
+        try
+        {
+            var secid = GetMarketCode(code);
+            var url = $"{CapitalFlowUrl}?lmt=0&klt=101&secid={secid}&ut={UserToken}&fields1=f1,f2,f3,f7&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61,f62,f63,f64,f65";
+            var response = await SendEastmoneyRequestAsync(url);
+            if (response == null) return result;
+
+            using var jsonDoc = JsonDocument.Parse(response);
+            var root = jsonDoc.RootElement;
+            if (!root.TryGetProperty("data", out var data) || data.ValueKind == JsonValueKind.Null)
+                return result;
+
+            foreach (var item in data.GetProperty("klines").EnumerateArray())
+            {
+                var parts = item.GetString()?.Split(',');
+                if (parts == null || parts.Length < 6) continue;
+                if (!DateTime.TryParse(parts[0], out var date)) continue;
+                if (!decimal.TryParse(parts[1], out var main)) continue;
+                result.Add(new CapitalFlowData
+                {
+                    Code = code,
+                    Date = date,
+                    // 顺序：时间, 主力, 小单, 中单, 大单, 超大单
+                    MainNetInflow = main,
+                    SmallNetInflow = Parse(parts, 2),
+                    MediumNetInflow = Parse(parts, 3),
+                    LargeNetInflow = Parse(parts, 4),
+                    SuperLargeNetInflow = Parse(parts, 5),
+                    Source = ProviderId,
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "获取历史资金流失败 {Code}", code);
+        }
+        return result;
+
+        static decimal Parse(string[] p, int i) => i < p.Length && decimal.TryParse(p[i], out var v) ? v : 0m;
+    }
+
+    /// <summary>
     /// 健康检查
     /// </summary>
     public override async Task<bool> IsHealthyAsync()

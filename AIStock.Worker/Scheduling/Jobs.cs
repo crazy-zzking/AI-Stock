@@ -204,3 +204,12 @@ public class IndexKlineSyncJob : IScheduledJob
     public string Name => "index-kline";
     public Task ExecuteAsync(CancellationToken ct) => _svc.SyncAsync(ct: ct);
 }
+
+/// <summary>资金流历史同步任务（收盘后；供回放回测补资金面）</summary>
+public class CapitalFlowSyncJob : IScheduledJob
+{
+    private readonly CapitalFlowSyncService _svc;
+    public CapitalFlowSyncJob(CapitalFlowSyncService svc) => _svc = svc;
+    public string Name => "capital-flow";
+    public Task ExecuteAsync(CancellationToken ct) => _svc.SyncAsync(ct: ct);
+}
