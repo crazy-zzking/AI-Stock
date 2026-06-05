@@ -83,6 +83,18 @@ public class LLMModelConfigEntity
     public string? Description { get; set; }
 
     /// <summary>
+    /// 是否启用思考模式（仅 api.deepseek.com 支持）
+    /// </summary>
+    [Column("enable_thinking")]
+    public bool EnableThinking { get; set; }
+
+    /// <summary>
+    /// 思考 Token 预算
+    /// </summary>
+    [Column("thinking_budget_tokens")]
+    public int? ThinkingBudgetTokens { get; set; }
+
+    /// <summary>
     /// 创建时间
     /// </summary>
     [Column("created_at")]

@@ -137,6 +137,12 @@ public class OpenAICompatibleProvider : ILLMProvider
             var message = firstChoice.GetProperty("message");
             var responseContent = message.GetProperty("content").GetString() ?? string.Empty;
 
+            string? thinkingContent = null;
+            if (message.TryGetProperty("reasoning_content", out var reasoningElement))
+            {
+                thinkingContent = reasoningElement.GetString();
+            }
+
             TokenUsage? usage = null;
             if (responseObj.TryGetProperty("usage", out var usageElement))
             {
@@ -152,6 +158,7 @@ public class OpenAICompatibleProvider : ILLMProvider
             {
                 Success = true,
                 Content = responseContent,
+                ThinkingContent = thinkingContent,
                 ModelId = config.Id,
                 ModelName = config.Name,
                 Usage = usage,
@@ -231,6 +238,17 @@ public class OpenAICompatibleProvider : ILLMProvider
             if (chunkObj.TryGetProperty("choices", out var choices) && choices.GetArrayLength() > 0)
             {
                 var delta = choices[0].GetProperty("delta");
+
+                // 思考过程 delta（DeepSeek reasoning_content），以 \x02THINK\x02 开头标记
+                if (delta.TryGetProperty("reasoning_content", out var reasoningDelta))
+                {
+                    var thinkText = reasoningDelta.GetString();
+                    if (!string.IsNullOrEmpty(thinkText))
+                    {
+                        yield return "\x02THINK\x02" + thinkText;
+                    }
+                }
+
                 if (delta.TryGetProperty("content", out var contentElement))
                 {
                     var text = contentElement.GetString();
@@ -270,6 +288,17 @@ public class OpenAICompatibleProvider : ILLMProvider
         if (temperature.HasValue)
         {
             body["temperature"] = (double)temperature.Value;
+        }
+
+        // DeepSeek 思考模式：仅 api.deepseek.com 且配置开启时注入
+        if (config.EnableThinking && config.BaseUrl.Contains("api.deepseek.com", StringComparison.OrdinalIgnoreCase))
+        {
+            var budgetTokens = config.ThinkingBudgetTokens ?? 8000;
+            body["thinking"] = new Dictionary<string, object>
+            {
+                ["type"] = "enabled",
+                ["budget_tokens"] = budgetTokens
+            };
         }
 
         return JsonSerializer.Serialize(body, new JsonSerializerOptions

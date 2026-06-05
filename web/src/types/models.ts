@@ -190,6 +190,8 @@ export interface LLMModel {
   maxTokens: number;
   temperature: number;
   description: string;
+  enableThinking?: boolean;
+  thinkingBudgetTokens?: number;
 }
 
 // --- 知识图谱 ---

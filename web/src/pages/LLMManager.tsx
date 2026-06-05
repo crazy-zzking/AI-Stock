@@ -1,12 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import {
   Card, Table, Tag, Row, Col, Statistic, message, Button, Modal, Form,
-  Input, InputNumber, Switch, Space, Popconfirm, Tooltip,
+  Input, InputNumber, Switch, Space, Popconfirm, Tooltip, Divider,
 } from 'antd';
 import {
   RobotOutlined, CheckCircleOutlined, CloseCircleOutlined,
-  PlusOutlined, EditOutlined, DeleteOutlined, ReloadOutlined,
+  PlusOutlined, EditOutlined, DeleteOutlined, ReloadOutlined, BulbOutlined,
 } from '@ant-design/icons';
+
 import { getLLMModels, addLLMModel, updateLLMModel, deleteLLMModel, refreshLLMModels } from '../api';
 import LoadingSkeleton from '../components/LoadingSkeleton';
 import type { LLMModel } from '../types/models';
@@ -19,6 +20,8 @@ const LLMManager: React.FC = () => {
   const [editingModel, setEditingModel] = useState<LLMModel | null>(null);
   const [saving, setSaving] = useState(false);
   const [form] = Form.useForm();
+  const watchedBaseUrl: string = Form.useWatch('baseUrl', form) ?? '';
+  const isDeepSeek = watchedBaseUrl.includes('api.deepseek.com');
 
   useEffect(() => { loadModels(); }, []);
 
@@ -114,6 +117,15 @@ const LLMManager: React.FC = () => {
       render: (v: number) => v?.toFixed(2),
     },
     { title: '描述', dataIndex: 'description', key: 'description', ellipsis: true },
+    {
+      title: '思考模式', dataIndex: 'enableThinking', key: 'enableThinking', width: 90,
+      render: (v: boolean, record: LLMModel) =>
+        record.baseUrl?.includes('api.deepseek.com') ? (
+          <Tag icon={<BulbOutlined />} color={v ? 'gold' : 'default'}>
+            {v ? '开启' : '关闭'}
+          </Tag>
+        ) : null,
+    },
     {
       title: '操作', key: 'actions', width: 120,
       render: (_: unknown, record: LLMModel) => (
@@ -273,6 +285,29 @@ const LLMManager: React.FC = () => {
           <Form.Item name="description" label="描述">
             <Input.TextArea rows={2} placeholder="模型用途说明（可选）" />
           </Form.Item>
+          {isDeepSeek && (
+            <>
+              <Divider style={{ fontSize: 13 }}>
+                <BulbOutlined /> DeepSeek 思考模式
+              </Divider>
+              <Row gutter={16}>
+                <Col span={8}>
+                  <Form.Item name="enableThinking" label="开启思考" valuePropName="checked">
+                    <Switch checkedChildren="开" unCheckedChildren="关" />
+                  </Form.Item>
+                </Col>
+                <Col span={16}>
+                  <Form.Item
+                    name="thinkingBudgetTokens"
+                    label="思考 Token 预算"
+                    extra="最小 1000，不填默认 8000"
+                  >
+                    <InputNumber min={1000} max={32000} step={1000} style={{ width: '100%' }} placeholder="8000" />
+                  </Form.Item>
+                </Col>
+              </Row>
+            </>
+          )}
         </Form>
       </Modal>
     </div>

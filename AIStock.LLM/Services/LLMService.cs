@@ -63,7 +63,7 @@ public class LLMService : ILLMService
         activity?.SetTag("llm.model_id", modelId);
         activity?.SetTag("llm.temperature", (double)request.Temperature);
 
-        var configs = await GetModelConfigsAsync();
+         var configs = await GetModelConfigsAsync();
 
         if (!configs.TryGetValue(modelId, out var config))
         {
@@ -177,6 +177,8 @@ public class LLMService : ILLMService
         entity.MaxTokens = config.MaxTokens;
         entity.Temperature = config.Temperature;
         entity.Description = config.Description;
+        entity.EnableThinking = config.EnableThinking;
+        entity.ThinkingBudgetTokens = config.ThinkingBudgetTokens;
         entity.UpdatedAt = DateTime.Now;
 
         await _dbContext.SaveChangesAsync();
@@ -285,7 +287,9 @@ public class LLMService : ILLMService
             TimeoutSeconds = entity.TimeoutSeconds,
             MaxTokens = entity.MaxTokens,
             Temperature = entity.Temperature,
-            Description = entity.Description
+            Description = entity.Description,
+            EnableThinking = entity.EnableThinking,
+            ThinkingBudgetTokens = entity.ThinkingBudgetTokens
         };
     }
 
@@ -303,7 +307,9 @@ public class LLMService : ILLMService
             TimeoutSeconds = config.TimeoutSeconds,
             MaxTokens = config.MaxTokens,
             Temperature = config.Temperature,
-            Description = config.Description
+            Description = config.Description,
+            EnableThinking = config.EnableThinking,
+            ThinkingBudgetTokens = config.ThinkingBudgetTokens
         };
     }
 

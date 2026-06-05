@@ -39,6 +39,11 @@ public class LLMResponse
     /// 响应时间（毫秒）
     /// </summary>
     public long ResponseTimeMs { get; set; }
+
+    /// <summary>
+    /// 思考过程（DeepSeek reasoning_content，仅思考模式下返回）
+    /// </summary>
+    public string? ThinkingContent { get; set; }
 }
 
 /// <summary>

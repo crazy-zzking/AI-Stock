@@ -1,3 +1,5 @@
+using System.Text.Encodings.Web;
+using System.Text.Json;
 using AIStock.Core.Interfaces;
 using AIStock.Core.Models;
 using AIStock.Infrastructure.Database.Context;
@@ -18,6 +20,11 @@ public class EventEngineService
     private readonly IIntensityScorer _intensityScorer;
     private readonly IMessageBus _messageBus;
     private readonly ILogger<EventEngineService> _logger;
+
+    private static readonly JsonSerializerOptions _jsonOptions = new()
+    {
+        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+    };
 
     public EventEngineService(
         AIStockDbContext dbContext,
@@ -76,16 +83,16 @@ public class EventEngineService
                 SentimentScore = sentiment.Score,
                 Importance = intensity.Importance,
                 Credibility = intensity.Credibility,
-                RelatedStocks = string.Join(",", report.RelatedStocks),
+                RelatedStocks = string.Join(",", eventData.RelatedCompanies.Select(x=>x.Value)),
                 RelatedConcepts = string.Join(",", eventData.RelatedConcepts),
-                LLMAnalysis = System.Text.Json.JsonSerializer.Serialize(new
+                LLMAnalysis = JsonSerializer.Serialize(new
                 {
                     sentiment,
                     intensity,
                     eventData.PositiveDirections,
                     eventData.NegativeDirections,
                     eventData.RelatedProducts
-                }),
+                }, _jsonOptions),
                 EventTime = report.PublishTime
             };
 
@@ -161,14 +168,14 @@ public class EventEngineService
                 Credibility = intensity.Credibility,
                 RelatedStocks = string.Join(",", news.RelatedStocks),
                 RelatedConcepts = string.Join(",", eventData.RelatedConcepts.Union(news.RelatedConcepts)),
-                LLMAnalysis = System.Text.Json.JsonSerializer.Serialize(new
+                LLMAnalysis = JsonSerializer.Serialize(new
                 {
                     sentiment,
                     intensity,
                     eventData.PositiveDirections,
                     eventData.NegativeDirections,
                     eventData.RelatedProducts
-                }),
+                }, _jsonOptions),
                 EventTime = news.PublishTime
             };
 
@@ -232,14 +239,14 @@ public class EventEngineService
                 Importance = intensity.Importance,
                 Credibility = intensity.Credibility,
                 RelatedConcepts = string.Join(",", eventData.RelatedConcepts),
-                LLMAnalysis = System.Text.Json.JsonSerializer.Serialize(new
+                LLMAnalysis = JsonSerializer.Serialize(new
                 {
                     sentiment,
                     intensity,
                     eventData.PositiveDirections,
                     eventData.NegativeDirections,
                     eventData.RelatedProducts
-                }),
+                }, _jsonOptions),
                 EventTime = DateTime.Now
             };
 
@@ -405,14 +412,14 @@ public class EventEngineService
             Credibility = essay.CredibilityScore,
             RelatedStocks = string.Join(",", stocks),
             RelatedConcepts = string.Join(",", concepts),
-            LLMAnalysis = System.Text.Json.JsonSerializer.Serialize(new
+            LLMAnalysis = JsonSerializer.Serialize(new
             {
                 essay.CredibilityScore,
                 essay.Summary,
                 essay.Conclusion,
                 essay.RiskWarnings,
                 content.Author
-            }),
+            }, _jsonOptions),
             EventTime = content.PublishTime
         };
 

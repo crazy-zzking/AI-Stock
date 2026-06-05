@@ -59,4 +59,14 @@ public class LLMConfig
     /// 描述
     /// </summary>
     public string? Description { get; set; }
+
+    /// <summary>
+    /// 是否启用思考模式（仅 api.deepseek.com 支持）
+    /// </summary>
+    public bool EnableThinking { get; set; }
+
+    /// <summary>
+    /// 思考 Token 预算（默认 8000，最小 1000）
+    /// </summary>
+    public int? ThinkingBudgetTokens { get; set; }
 }
