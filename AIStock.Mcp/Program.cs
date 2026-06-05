@@ -35,6 +35,7 @@ builder.Services.AddScoped<StockSelectionEngine>();
 builder.Services.AddScoped<ISelectionStrategy, LowDipStrategy>();
 builder.Services.AddScoped<ISelectionStrategy, TrendStrategy>();
 builder.Services.AddScoped<ISelectionStrategy, ThemeStrategy>();
+builder.Services.AddScoped<ISelectionStrategyProvider, SelectionStrategyProvider>();
 builder.Services.AddScoped<SelectionConfigService>();
 builder.Services.AddScoped<BacktestService>();
 builder.Services.AddScoped<ReplayBacktestService>();

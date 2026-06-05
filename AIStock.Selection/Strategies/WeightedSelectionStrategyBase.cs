@@ -68,6 +68,8 @@ public abstract class WeightedSelectionStrategyBase : ISelectionStrategy
                     Form = Math.Round(factors.Form, 1),
                     Theme = Math.Round(factors.Theme, 1),
                     Sector = Math.Round(factors.Sector, 1),
+                    Volatility = Math.Round(factors.Volatility, 1),
+                    RelativeStrength = Math.Round(factors.RelativeStrength, 1),
                 },
                 MarketRegime = regimeNote,
                 RecommendedStrategy = context?.Regime?.RecommendedStrategy ?? string.Empty,

@@ -93,4 +93,77 @@ public class SelectionStrategyTests
         Assert.Equal(new[] { "lowdip", "trend", "theme" }, keys);
         Assert.Equal(3, keys.Distinct().Count());
     }
+
+    // —— 可配置策略框架等价性：用 ConfigurableSelectionStrategy + 内置定义 复刻内置策略，结果须逐项一致 ——
+
+    private static void AssertSameSelection(
+        IReadOnlyList<StockSelectionResult> expected, IReadOnlyList<StockSelectionResult> actual)
+    {
+        Assert.Equal(expected.Count, actual.Count);
+        for (var i = 0; i < expected.Count; i++)
+        {
+            Assert.Equal(expected[i].Code, actual[i].Code);
+            Assert.Equal(expected[i].TotalScore, actual[i].TotalScore);
+            Assert.Equal(expected[i].RatingStars, actual[i].RatingStars);
+            Assert.Equal(expected[i].Factors.Technical, actual[i].Factors.Technical);
+            Assert.Equal(expected[i].Factors.Position, actual[i].Factors.Position);
+            Assert.Equal(expected[i].Factors.Capital, actual[i].Factors.Capital);
+        }
+    }
+
+    private static List<ActivityScreener.ActivityHit> VariedPool() => new()
+    {
+        Hit(Snap("A", rsi: 75m, rise20d: 30m, close: 12m, ma20: 10m)),
+        Hit(Snap("B", rsi: 60m, rise20d: 10m)),
+        Hit(Snap("C", rsi: 50m, rise20d: 45m, close: 13m, mainNet: 80_000_000m)),
+        Hit(Snap("D", rsi: 65m, close: 9m, ma20: 10m)),   // 跌破MA20：趋势硬过滤剔除
+        Hit(Snap("E", rsi: 30m, rise20d: 5m)),
+    };
+
+    [Fact]
+    public void Configurable_ReplicatesBuiltinTrend()
+    {
+        var pool = VariedPool();
+        var crit = new SelectionCriteria { TopN = 10 };
+
+        var builtin = new TrendStrategy().Select(pool, NoDragon, NoSeq, crit);
+        var configurable = new ConfigurableSelectionStrategy(BuiltinStrategyDefinitions.Trend())
+            .Select(pool, NoDragon, NoSeq, crit);
+
+        Assert.NotEmpty(builtin);
+        AssertSameSelection(builtin, configurable);
+    }
+
+    [Fact]
+    public void Configurable_ReplicatesBuiltinLowDip()
+    {
+        var pool = VariedPool();
+        var crit = new SelectionCriteria { TopN = 10 };
+
+        var builtin = LowDip().Select(pool, NoDragon, NoSeq, crit);
+        var configurable = new ConfigurableSelectionStrategy(BuiltinStrategyDefinitions.LowDip())
+            .Select(pool, NoDragon, NoSeq, crit);
+
+        Assert.NotEmpty(builtin);
+        AssertSameSelection(builtin, configurable);
+    }
+
+    [Fact]
+    public void Configurable_ReplicatesBuiltinTheme()
+    {
+        var pool = new List<ActivityScreener.ActivityHit> { Hit(Snap("A")), Hit(Snap("B")) };
+        var ctx = new SelectionContext
+        {
+            ConceptsByCode = new Dictionary<string, List<string>> { ["A"] = new() { "人工智能" }, ["B"] = new() { "冷门概念" } },
+            HotConcepts = new Dictionary<string, int> { ["人工智能"] = 5 },
+        };
+        var crit = new SelectionCriteria { TopN = 10 };
+
+        var builtin = new ThemeStrategy().Select(pool, NoDragon, NoSeq, crit, ctx);
+        var configurable = new ConfigurableSelectionStrategy(BuiltinStrategyDefinitions.Theme())
+            .Select(pool, NoDragon, NoSeq, crit, ctx);
+
+        Assert.NotEmpty(builtin);
+        AssertSameSelection(builtin, configurable);
+    }
 }

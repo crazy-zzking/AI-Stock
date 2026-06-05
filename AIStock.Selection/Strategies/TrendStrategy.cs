@@ -44,6 +44,8 @@ public class TrendStrategy : WeightedSelectionStrategyBase
             Activity = Math.Min(hit.ActivityScore, 100m),
             Theme = SelectionScorers.Theme(s.Code, ctx, out hitHotConcepts),
             Sector = SelectionScorers.Sector(s.Code, ctx),
+            Volatility = SelectionScorers.Volatility(seq),
+            RelativeStrength = SelectionScorers.RelativeStrength(s, ctx),
         };
 
     // 趋势策略追强，不惩罚涨停/连板（强势特征）；仅对极端单日暴涨轻微提示由位置分体现。

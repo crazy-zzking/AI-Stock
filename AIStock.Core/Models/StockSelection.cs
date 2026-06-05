@@ -66,6 +66,12 @@ public class SelectionWeights
     /// <summary>板块权重（所属行业当日强弱）</summary>
     public decimal Sector { get; set; } = 0.08m;
 
+    // —— 扩展因子（默认权重 0：不配置即不参与，保持历史行为不变）——
+    /// <summary>波动/风险权重（近 5 日平均振幅，低波动=稳健=高分）。默认 0 不启用。</summary>
+    public decimal Volatility { get; set; } = 0m;
+    /// <summary>相对强度权重（个股 20 日涨幅相对大盘基准的超额）。默认 0 不启用。</summary>
+    public decimal RelativeStrength { get; set; } = 0m;
+
     /// <summary>弱市综合分系数（&lt;1 收紧）</summary>
     public decimal RegimeWeakFactor { get; set; } = 0.88m;
     /// <summary>强市综合分系数（&gt;1 放宽）</summary>
@@ -96,6 +102,8 @@ public class IndexQuote
     public decimal ChangePercent { get; set; }
     /// <summary>是否站上 20 日均线</summary>
     public bool AboveMa20 { get; set; }
+    /// <summary>近 20 日涨幅（%），供个股相对强度基准</summary>
+    public decimal Rise20d { get; set; }
 }
 
 /// <summary>
@@ -144,6 +152,10 @@ public class SelectionFactorScores
     public decimal Theme { get; set; }
     /// <summary>板块（所属行业当日强弱：板块联动/资金共识）</summary>
     public decimal Sector { get; set; }
+    /// <summary>波动/风险（近 5 日平均振幅，低波动=稳健=高分）</summary>
+    public decimal Volatility { get; set; }
+    /// <summary>相对强度（个股 20 日涨幅相对大盘基准的超额）</summary>
+    public decimal RelativeStrength { get; set; }
 }
 
 /// <summary>

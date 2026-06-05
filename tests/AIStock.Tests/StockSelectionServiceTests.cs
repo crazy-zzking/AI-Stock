@@ -34,7 +34,8 @@ public class StockSelectionServiceTests
         {
             new LowDipStrategy(engine), new TrendStrategy(), new ThemeStrategy(),
         };
-        return new(db, strategies, new EmptyResolver(),
+        var provider = new SelectionStrategyProvider(strategies, db, NullLogger<SelectionStrategyProvider>.Instance);
+        return new(db, provider, new EmptyResolver(),
             new SelectionConfigService(db, NullLogger<SelectionConfigService>.Instance),
             NullLogger<StockSelectionService>.Instance);
     }

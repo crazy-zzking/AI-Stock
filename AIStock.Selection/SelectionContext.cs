@@ -21,4 +21,7 @@ public class SelectionContext
 
     /// <summary>板块强度：行业名 → 当日强度分（0-100，按行业平均涨幅分位）</summary>
     public IReadOnlyDictionary<string, decimal> IndustryStrength { get; set; } = new Dictionary<string, decimal>();
+
+    /// <summary>大盘基准近 20 日涨幅（%）：参与指数 Rise20d 均值，供个股相对强度。null=指数不可用（相对强度退化为中性）。</summary>
+    public decimal? BenchmarkRise20d { get; set; }
 }

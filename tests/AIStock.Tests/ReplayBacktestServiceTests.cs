@@ -32,7 +32,8 @@ public class ReplayBacktestServiceTests
         {
             new LowDipStrategy(engine), new TrendStrategy(), new ThemeStrategy(),
         };
-        return new(db, strategies, new FeatureCalculatorService(), NullLogger<ReplayBacktestService>.Instance);
+        var provider = new SelectionStrategyProvider(strategies, db, NullLogger<SelectionStrategyProvider>.Instance);
+        return new(db, provider, new FeatureCalculatorService(), NullLogger<ReplayBacktestService>.Instance);
     }
 
     private static void AddKline(AIStockDbContext db, ref long id, string code, int day,

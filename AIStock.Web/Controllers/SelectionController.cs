@@ -30,13 +30,13 @@ public class SelectionController : ControllerBase
         _logger = logger;
     }
 
-    /// <summary>可用选股策略清单（key/name/说明/适用环境）。</summary>
+    /// <summary>可用选股策略清单（key/name/说明/适用环境，含数据库自建策略）。</summary>
     [HttpGet("strategies")]
-    public ActionResult Strategies()
-        => Ok(_selection.ListStrategies().Select(s => new
-        {
-            s.Key, s.Name, s.Description, s.PreferredRegime,
-        }));
+    public async Task<ActionResult> Strategies(CancellationToken ct)
+    {
+        var list = await _selection.ListStrategiesAsync(ct);
+        return Ok(list.Select(s => new { s.Key, s.Name, s.Description, s.PreferredRegime }));
+    }
 
     /// <summary>按自定义条件实时选股（不落库，调试/试参用）。strategy 选策略(默认 lowdip)；body 为空则用该策略生效配置。</summary>
     [HttpPost("screen")]

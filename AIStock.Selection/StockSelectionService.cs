@@ -18,35 +18,32 @@ namespace AIStock.Selection;
 public class StockSelectionService
 {
     private readonly AIStockDbContext _db;
-    private readonly IReadOnlyDictionary<string, ISelectionStrategy> _strategies;
+    private readonly ISelectionStrategyProvider _strategyProvider;
     private readonly IDataProviderResolver _resolver;
     private readonly SelectionConfigService _config;
     private readonly ILogger<StockSelectionService> _logger;
 
     public StockSelectionService(
         AIStockDbContext db,
-        IEnumerable<ISelectionStrategy> strategies,
+        ISelectionStrategyProvider strategyProvider,
         IDataProviderResolver resolver,
         SelectionConfigService config,
         ILogger<StockSelectionService> logger)
     {
         _db = db;
-        _strategies = strategies.ToDictionary(s => s.Key, StringComparer.OrdinalIgnoreCase);
+        _strategyProvider = strategyProvider;
         _resolver = resolver;
         _config = config;
         _logger = logger;
     }
 
-    /// <summary>解析策略键 → 策略实例，未知键回退低吸（默认）。</summary>
-    private ISelectionStrategy ResolveStrategy(string? key)
-    {
-        if (!string.IsNullOrWhiteSpace(key) && _strategies.TryGetValue(key.Trim(), out var s)) return s;
-        return _strategies[StrategyKeys.LowDip];
-    }
+    /// <summary>解析策略键 → 策略实例（含数据库自建策略），未知键回退低吸（默认）。</summary>
+    private Task<ISelectionStrategy> ResolveStrategyAsync(string? key, CancellationToken ct)
+        => _strategyProvider.ResolveAsync(key, ct);
 
-    /// <summary>可用策略清单（key/name/description/适用环境）。</summary>
-    public IReadOnlyList<ISelectionStrategy> ListStrategies()
-        => _strategies.Values.OrderBy(s => s.Key == StrategyKeys.LowDip ? 0 : 1).ThenBy(s => s.Key).ToList();
+    /// <summary>可用策略清单（key/name/description/适用环境，含数据库自建策略）。</summary>
+    public Task<IReadOnlyList<ISelectionStrategy>> ListStrategiesAsync(CancellationToken ct = default)
+        => _strategyProvider.GetAllAsync(ct);
 
     /// <summary>
     /// 执行选股，返回 TOP-N。strategyKey 选择策略（默认低吸 lowdip）；
@@ -55,7 +52,7 @@ public class StockSelectionService
     public async Task<List<StockSelectionResult>> SelectAsync(
         SelectionCriteria? criteria = null, string? strategyKey = null, CancellationToken ct = default)
     {
-        var strategy = ResolveStrategy(strategyKey);
+        var strategy = await ResolveStrategyAsync(strategyKey, ct);
         criteria ??= await _config.GetActiveCriteriaAsync(strategy.Key, ct);
 
         var (latest, dragonByCode, sequenceByCode) = await LoadAsync(ct);
@@ -79,6 +76,8 @@ public class StockSelectionService
             ConceptsByCode = conceptsByCode,
             IndustryByCode = industryByCode,
             IndustryStrength = industryStrength,
+            BenchmarkRise20d = regime.Indices.Count > 0
+                ? Math.Round(regime.Indices.Average(i => i.Rise20d), 2) : null,
         };
 
         var activePool = ActivityScreener.Screen(latest, criteria);
@@ -265,7 +264,7 @@ public class StockSelectionService
     public async Task<List<StockSelectionResult>> RunAndSaveAsync(
         SelectionCriteria? criteria = null, string? strategyKey = null, CancellationToken ct = default)
     {
-        var strategy = ResolveStrategy(strategyKey);
+        var strategy = await ResolveStrategyAsync(strategyKey, ct);
         criteria ??= await _config.GetActiveCriteriaAsync(strategy.Key, ct);
         var results = await SelectAsync(criteria, strategy.Key, ct);
 

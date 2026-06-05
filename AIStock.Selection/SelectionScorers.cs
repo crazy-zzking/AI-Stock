@@ -136,6 +136,37 @@ public static class SelectionScorers
         return Math.Min(score, 100m);
     }
 
+    /// <summary>波动/风险：近 5 日平均振幅越低=越稳健（埋伏型偏好低波动，压回撤）。无数据中性 50。</summary>
+    public static decimal Volatility(SequenceFeatures seq)
+    {
+        var amp = seq.AvgAmplitude5;
+        if (amp <= 0m) return 50m;
+        return amp switch
+        {
+            <= 4m => 100m,
+            <= 6m => 80m,
+            <= 9m => 60m,
+            <= 12m => 40m,
+            _ => 20m,
+        };
+    }
+
+    /// <summary>相对强度：个股 20 日涨幅相对大盘基准的超额。跑赢大盘=资金认可=高分。无基准时中性 50。</summary>
+    public static decimal RelativeStrength(DailyMarketSnapshotEntity s, SelectionContext? ctx)
+    {
+        if (ctx?.BenchmarkRise20d is not decimal bench) return 50m;
+        var excess = s.Rise20d - bench;
+        return excess switch
+        {
+            >= 20m => 100m,
+            >= 10m => 85m,
+            >= 3m => 70m,
+            >= -3m => 55m,
+            >= -10m => 40m,
+            _ => 25m,
+        };
+    }
+
     /// <summary>位置（低吸口径）：20 日涨幅越低（但已启动）越优，非追高。</summary>
     public static decimal Position(DailyMarketSnapshotEntity s) => s.Rise20d switch
     {
@@ -209,7 +240,8 @@ public static class SelectionScorers
     public static decimal WeightedTotal(SelectionFactorScores f, SelectionWeights w)
         => f.Capital * w.Capital + f.Technical * w.Technical + f.Position * w.Position
          + f.Form * w.Form + f.DragonTiger * w.DragonTiger + f.Activity * w.Activity
-         + f.Theme * w.Theme + f.Sector * w.Sector;
+         + f.Theme * w.Theme + f.Sector * w.Sector + f.Volatility * w.Volatility
+         + f.RelativeStrength * w.RelativeStrength;
 
     /// <summary>大盘环境综合分系数。</summary>
     public static decimal RegimeFactor(MarketRegimeLevel level, SelectionWeights w) => level switch

@@ -26,11 +26,13 @@ public static class RegimeEvaluator
         var last = closesAsc[^1];
         var prev = closesAsc[^2];
         var ma20 = closesAsc.Count >= 20 ? closesAsc.TakeLast(20).Average() : closesAsc.Average();
+        var close20Ago = closesAsc.Count >= 21 ? closesAsc[^21] : closesAsc[0];
         return new IndexQuote
         {
             Name = name,
             ChangePercent = prev > 0 ? Math.Round((last - prev) / prev * 100m, 2) : 0,
             AboveMa20 = last >= ma20,
+            Rise20d = close20Ago > 0 ? Math.Round((last - close20Ago) / close20Ago * 100m, 2) : 0,
         };
     }
 

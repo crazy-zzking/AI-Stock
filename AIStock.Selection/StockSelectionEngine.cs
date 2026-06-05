@@ -81,10 +81,13 @@ public class StockSelectionEngine
             var activity = Math.Min(hit.ActivityScore, 100m);
             var theme = SelectionScorers.Theme(s.Code, context, out var hitHotConcepts);  // 题材合力
             var sector = SelectionScorers.Sector(s.Code, context);                        // 板块强弱
+            var volatility = SelectionScorers.Volatility(seq);                            // 波动/风险（低波动高分）
+            var relStrength = SelectionScorers.RelativeStrength(s, context);              // 相对大盘强度
 
             var total = capital * w.Capital + technical * w.Technical + position * w.Position
                         + form * w.Form + dragon * w.DragonTiger + activity * w.Activity
-                        + theme * w.Theme + sector * w.Sector;
+                        + theme * w.Theme + sector * w.Sector + volatility * w.Volatility
+                        + relStrength * w.RelativeStrength;
 
             // 涨停性质惩罚（多日）：区分低位首板（仍有空间，轻罚）与高位/连板（追高风险，重罚）
             total -= SelectionScorers.LimitUpPenalty(s, seq, criteria);
@@ -115,7 +118,9 @@ public class StockSelectionEngine
                     Activity = Math.Round(activity, 1),
                     Form = Math.Round(form, 1),
                     Theme = Math.Round(theme, 1),
-                    Sector = Math.Round(sector, 1)
+                    Sector = Math.Round(sector, 1),
+                    Volatility = Math.Round(volatility, 1),
+                    RelativeStrength = Math.Round(relStrength, 1)
                 }
             };
 

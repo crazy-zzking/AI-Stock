@@ -23,6 +23,8 @@ public record SequenceFeatures
     public int LimitUpCountIn10 { get; init; }
     /// <summary>当前连续涨停板数（连板）</summary>
     public int ConsecutiveLimitUp { get; init; }
+    /// <summary>近 5 日平均振幅（%），衡量波动/风险</summary>
+    public decimal AvgAmplitude5 { get; init; }
 }
 
 /// <summary>
@@ -44,6 +46,10 @@ public static class SequenceAnalyzer
         var last5 = TakeLast(asc, 5);
         var inflow5 = last5.Count(x => x.MainNetInflow > 0);
         var cum5 = last5.Sum(x => x.MainNetInflow);
+
+        // 近 5 日平均振幅（波动/风险）
+        var amps5 = last5.Where(x => x.Amplitude > 0).Select(x => x.Amplitude).ToList();
+        var avgAmp5 = amps5.Count > 0 ? Math.Round(amps5.Average(), 2) : 0m;
 
         // 阶梯放量：近 3 日量比均 ≥1 且最新不弱于 3 日前
         var stair = false;
@@ -85,6 +91,7 @@ public static class SequenceAnalyzer
             PullbackStabilize = pullback,
             LimitUpCountIn10 = limitUp10,
             ConsecutiveLimitUp = consecLimit,
+            AvgAmplitude5 = avgAmp5,
         };
     }
 

@@ -17,23 +17,19 @@ namespace AIStock.Selection.Backtest;
 public class ReplayBacktestService
 {
     private readonly AIStockDbContext _db;
-    private readonly IReadOnlyDictionary<string, ISelectionStrategy> _strategies;
+    private readonly ISelectionStrategyProvider _strategyProvider;
     private readonly IFeatureCalculator _featureCalculator;
     private readonly ILogger<ReplayBacktestService> _logger;
 
     public ReplayBacktestService(
-        AIStockDbContext db, IEnumerable<ISelectionStrategy> strategies,
+        AIStockDbContext db, ISelectionStrategyProvider strategyProvider,
         IFeatureCalculator featureCalculator, ILogger<ReplayBacktestService> logger)
     {
         _db = db;
-        _strategies = strategies.ToDictionary(s => s.Key, StringComparer.OrdinalIgnoreCase);
+        _strategyProvider = strategyProvider;
         _featureCalculator = featureCalculator;
         _logger = logger;
     }
-
-    private ISelectionStrategy Resolve(string? key)
-        => !string.IsNullOrWhiteSpace(key) && _strategies.TryGetValue(key.Trim(), out var s)
-            ? s : _strategies[StrategyKeys.LowDip];
 
     /// <summary>
     /// 回放回测：[from,to] 内每个交易日用 criteria 跑策略选股 → 信号 → 回测。
@@ -42,7 +38,7 @@ public class ReplayBacktestService
         string? strategyKey, SelectionCriteria criteria, DateTime from, DateTime to,
         BacktestConfig config, CancellationToken ct = default)
     {
-        var strategy = Resolve(strategyKey);
+        var strategy = await _strategyProvider.ResolveAsync(strategyKey, ct);
         const int seqWindow = 45; // 多日序列回看自然日
 
         // [from-缓冲, to] 的快照：不读 daily_market_snapshot，改从 kline_data + 资金流表重建（缓冲供序列特征回看）
@@ -116,6 +112,8 @@ public class ReplayBacktestService
                 ConceptsByCode = conceptsByCode,
                 IndustryByCode = industryByCode,
                 IndustryStrength = SelectionContextBuilder.ComputeSectorStrength(dayShots, industryByCode),
+                BenchmarkRise20d = indices.Count > 0
+                    ? Math.Round(indices.Average(i => i.Rise20d), 2) : null,
             };
 
             var activePool = ActivityScreener.Screen(dayShots.ToList(), criteria);

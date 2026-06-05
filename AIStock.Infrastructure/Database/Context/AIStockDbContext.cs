@@ -127,6 +127,11 @@ public class AIStockDbContext : DbContext
     /// </summary>
     public DbSet<CapitalFlowEntity> CapitalFlow { get; set; }
 
+    /// <summary>
+    /// 用户自建选股策略定义（数据驱动，内置策略不入此表）
+    /// </summary>
+    public DbSet<StrategyDefinitionEntity> StrategyDefinition { get; set; }
+
     public override int SaveChanges()
     {
         UpdateTimestamps();
@@ -350,6 +355,13 @@ public class AIStockDbContext : DbContext
             entity.HasKey(e => e.Id);
             entity.HasIndex(e => new { e.Code, e.Date }).IsUnique();
             entity.HasIndex(e => e.Date);
+        });
+
+        // 用户自建策略定义（strategy_key 全局唯一）
+        modelBuilder.Entity<StrategyDefinitionEntity>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => e.Key).IsUnique();
         });
     }
 }

@@ -19,11 +19,12 @@ public static class SelectionMcpTools
 {
     private static readonly JsonSerializerOptions Json = new() { WriteIndented = false };
 
-    [McpServerTool(Name = "list_strategies"), Description("列出可用选股策略(key/名称/说明/适用市场环境)。优化前先了解有哪些策略。")]
-    public static string ListStrategies(IServiceScopeFactory scopeFactory)
+    [McpServerTool(Name = "list_strategies"), Description("列出可用选股策略(key/名称/说明/适用市场环境，含数据库自建策略)。优化前先了解有哪些策略。")]
+    public static async Task<string> ListStrategies(IServiceScopeFactory scopeFactory)
     {
         using var scope = scopeFactory.CreateScope();
-        var strategies = scope.ServiceProvider.GetServices<ISelectionStrategy>();
+        var provider = scope.ServiceProvider.GetRequiredService<ISelectionStrategyProvider>();
+        var strategies = await provider.GetAllAsync();
         return JsonSerializer.Serialize(
             strategies.Select(s => new { s.Key, s.Name, s.Description, s.PreferredRegime }), Json);
     }
