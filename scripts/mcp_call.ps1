@@ -2,14 +2,14 @@ param(
     [Parameter(Mandatory=$true)][string]$RequestsJson  # JSON array of {name, args} tool calls
 )
 
-# MySQL 连接串：从环境变量注入，勿在脚本里硬编码（避免泄露到版本库）。
-# 用法：$env:MCP_MYSQL = "Server=...;Database=aistock;User=...;Password=...;CharSet=utf8mb4;"
+# MySQL connection string: inject via env var, never hardcode (avoid leaking to VCS).
+# Usage: $env:MCP_MYSQL = "Server=...;Database=aistock;User=...;Password=...;CharSet=utf8mb4;"
 if ([string]::IsNullOrWhiteSpace($env:MCP_MYSQL)) {
-    Write-Error "请先设置 `$env:MCP_MYSQL（MySQL 连接串）"; exit 1
+    Write-Error "Set `$env:MCP_MYSQL (MySQL connection string) first"; exit 1
 }
 $env:ConnectionStrings__MySQL = $env:MCP_MYSQL
 
-# MCP 可执行路径：默认 Release，可用 $env:MCP_EXE 覆盖（如指向 Debug 构建）。
+# MCP executable path: default Release; override via $env:MCP_EXE (e.g. point to Debug build).
 $exe = if ([string]::IsNullOrWhiteSpace($env:MCP_EXE)) {
     Join-Path $PSScriptRoot "..\AIStock.Mcp\bin\Release\net9.0\AIStock.Mcp.exe"
 } else { $env:MCP_EXE }

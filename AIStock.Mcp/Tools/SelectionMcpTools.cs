@@ -52,7 +52,8 @@ public static class SelectionMcpTools
         [Description("SelectionCriteria 的 JSON；传空字符串则用该策略当前生效参数")] string criteriaJson,
         [Description("回测开始日 yyyy-MM-dd；空则结束日往前30天")] string from,
         [Description("回测结束日 yyyy-MM-dd；空则今天")] string to,
-        [Description("持有交易日数，默认5")] int holdDays = 5)
+        [Description("持有交易日数，默认5")] int holdDays = 5,
+        [Description("买入时点：NextOpen(默认,T+1开盘买入) | SignalClose(信号日尾盘/收盘价买入，尾盘策略用)")] string entry = "NextOpen")
     {
         using var scope = scopeFactory.CreateScope();
         var sp = scope.ServiceProvider;
@@ -66,8 +67,14 @@ public static class SelectionMcpTools
         var toD = DateTime.TryParse(to, out var t) ? t : DateTime.Today;
         var fromD = DateTime.TryParse(from, out var f) ? f : toD.AddDays(-30);
 
+        var config = new BacktestConfig
+        {
+            HoldDays = holdDays,
+            Entry = string.Equals(entry, "SignalClose", StringComparison.OrdinalIgnoreCase)
+                ? BacktestEntryTiming.SignalClose : BacktestEntryTiming.NextOpen,
+        };
         var replay = sp.GetRequiredService<ReplayBacktestService>();
-        var report = await replay.BacktestParamsAsync(strategy, criteria, fromD, toD, new BacktestConfig { HoldDays = holdDays });
+        var report = await replay.BacktestParamsAsync(strategy, criteria, fromD, toD, config);
         return JsonSerializer.Serialize(report, Json);
     }
 
