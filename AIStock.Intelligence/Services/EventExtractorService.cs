@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using AIStock.Core.Interfaces;
 using AIStock.Core.Models;
 using AIStock.Intelligence.Common;
@@ -26,7 +27,7 @@ public class EventExtractorService : IEventExtractor
         {
             var request = new LLMRequest
             {
-                SystemPrompt = @"你是一个专业的金融事件分析专家。请从文本中提取事件信息，包括：
+                SystemPrompt = @"你是一个专业的金融事件分析专家。请从研报链接中提取事件信息，包括：
 1. 关联公司（公司名称 -> 股票代码，如果知道的话）
 2. 关联产品/服务
 3. 利好方向（列表）
@@ -60,6 +61,9 @@ public class EventExtractorService : IEventExtractor
         }
     }
 
+    private static readonly Regex _infoCodeRegex =
+        new(@"/report/info/([^/.]+)\.html$", RegexOptions.Compiled);
+
     public async Task<EventData> ExtractFromReportAsync(ReportData report, CancellationToken cancellationToken = default)
     {
         var text = $"研报标题：{report.Title}\n来源：{report.Source}\n";
@@ -67,6 +71,10 @@ public class EventExtractorService : IEventExtractor
             text += $"摘要：{report.Summary}\n";
         if (!string.IsNullOrEmpty(report.Content))
             text += $"内容：{report.Content[..Math.Min(2000, report.Content.Length)]}\n";
+
+        var infoMatch = _infoCodeRegex.Match(report.Url ?? "");
+        if (infoMatch.Success)
+            text += $"研报PDF全文：https://pdf.dfcfw.com/pdf/H3_{infoMatch.Groups[1].Value}_1.pdf\n";
 
         var eventData = await ExtractEventAsync(text, "report", cancellationToken);
         eventData.Title = report.Title;
