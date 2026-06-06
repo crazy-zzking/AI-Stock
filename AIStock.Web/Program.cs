@@ -146,6 +146,11 @@ builder.Services.AddExecutionServices(builder.Configuration);
 // 注册编排服务
 builder.Services.AddOrchestratorServices();
 
+// 注册尾盘自动下单（选股→OrderManager 衔接 + 定时触发；默认关闭 / 仅 DryRun）
+builder.Services.Configure<AIStock.Web.TailBuyOptions>(builder.Configuration.GetSection(AIStock.Web.TailBuyOptions.SectionName));
+builder.Services.AddScoped<AIStock.Web.Services.TailMarketBuyService>();
+builder.Services.AddHostedService<AIStock.Web.Services.TailMarketBuyHostedService>();
+
 // 注册Prompt Registry服务
 builder.Services.AddPromptServices();
 

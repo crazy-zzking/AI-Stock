@@ -22,6 +22,9 @@ public class MarketSnapshotOptions
     /// <summary>盘中腾讯批量报价每批股票数</summary>
     public int IntradayQuoteBatch { get; set; } = 60;
 
+    /// <summary>尾盘决策时点(HH:mm)。盘中刷新会对齐到此时点跑最后一次，供尾盘选股/下单用最新快照。空则不对齐。</summary>
+    public string CloseDecisionTime { get; set; } = "14:55";
+
     /// <summary>龙虎榜数据接口地址（东财 datacenter，字段以实测为准）</summary>
     public string DragonTigerUrl { get; set; } =
         "https://datacenter-web.eastmoney.com/api/data/v1/get";

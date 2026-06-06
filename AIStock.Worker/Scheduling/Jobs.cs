@@ -172,7 +172,18 @@ public class MarketSnapshotSyncJob : IScheduledJob
         var now = DateTime.Now;
         var isTradingDay = await _calendar.IsTradingDayAsync(now.Date, ct);
         if (isTradingDay && InCollectWindow(now))
-            return TimeSpan.FromMinutes(Math.Max(1, _options.IntradayIntervalMinutes));
+        {
+            var interval = TimeSpan.FromMinutes(Math.Max(1, _options.IntradayIntervalMinutes));
+            // 尾盘决策点对齐：下一次常规刷新若会跨过 CloseDecisionTime，则提前对齐到该时点，
+            // 保证尾盘(如 14:55)选股/下单用到当时最新快照，而非上一次的旧快照。
+            if (TimeSpan.TryParse(_options.CloseDecisionTime, out var decisionT))
+            {
+                var nowT = now.TimeOfDay;
+                if (nowT < decisionT && nowT + interval > decisionT)
+                    return decisionT - nowT;
+            }
+            return interval;
+        }
         if (isTradingDay && now.TimeOfDay < new TimeSpan(9, 30, 0))
             return new TimeSpan(9, 30, 0) - now.TimeOfDay; // 睡到开盘
         return TimeSpan.FromMinutes(30); // 其它时段 30 分钟复评（ExecuteAsync 会快速跳过）
