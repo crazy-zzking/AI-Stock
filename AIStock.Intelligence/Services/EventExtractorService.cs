@@ -82,6 +82,7 @@ public class EventExtractorService : IEventExtractor
         eventData.Url = report.Url;
         eventData.EventTime = report.PublishTime;
 
+        // 接口给的权威个股并入，保证一定参与下游资金流/强度分析（行业研报亦不漏）
         foreach (var stock in report.RelatedStocks)
         {
             if (!eventData.RelatedCompanies.ContainsKey(stock))

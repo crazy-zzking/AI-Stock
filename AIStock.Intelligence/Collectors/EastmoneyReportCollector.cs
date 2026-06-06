@@ -89,17 +89,25 @@ public class EastmoneyReportCollector : IReportCollector
                                     Summary = item.TryGetProperty("title", out var title) ? title.GetString() : null
                                 };
 
-                                if (item.TryGetProperty("stockList", out var stockList))
+                                // list2 接口把关联个股平铺在 item 上（stockCode），无 stockList 数组
+                                if (item.TryGetProperty("stockCode", out var codeEl))
                                 {
-                                    foreach (var stock in stockList.EnumerateArray())
+                                    var code = codeEl.GetString();
+                                    if (!string.IsNullOrEmpty(code))
                                     {
-                                        var code = stock.TryGetProperty("stockCode", out var codeEl) ? codeEl.GetString() : null;
-                                        if (!string.IsNullOrEmpty(code))
-                                        {
-                                            report.RelatedStocks.Add(code);
-                                        }
+                                        report.RelatedStocks.Add(code);
                                     }
                                 }
+
+                                if (item.TryGetProperty("indvAimPriceT", out var aimEl) &&
+                                    decimal.TryParse(aimEl.GetString(), out var aimPrice) &&
+                                    aimPrice > 0)
+                                {
+                                    report.TargetPrice = aimPrice;
+                                }
+
+                                // 把接口里的结构化干货拼成摘要，供下游 LLM 抽取/总结
+                                report.Content = BuildDigest(item, report.TargetPrice);
 
                                 reports.Add(report);
                             }
@@ -122,6 +130,80 @@ public class EastmoneyReportCollector : IReportCollector
         }
 
         return reports;
+    }
+
+    /// <summary>
+    /// 从 list2 单条研报的结构化字段拼出中文摘要，作为正文供 LLM 总结/抽取。
+    /// </summary>
+    private static string BuildDigest(JsonElement item, decimal? targetPrice)
+    {
+        string? Str(string name) =>
+            item.TryGetProperty(name, out var el) && el.ValueKind == JsonValueKind.String
+                ? el.GetString() : null;
+
+        var lines = new List<string>();
+
+        var stockName = Str("stockName");
+        var stockCode = Str("stockCode");
+        if (!string.IsNullOrEmpty(stockName) || !string.IsNullOrEmpty(stockCode))
+            lines.Add($"关联个股：{stockName}（{stockCode}）");
+
+        var industry = Str("indvInduName");
+        if (!string.IsNullOrEmpty(industry))
+            lines.Add($"所属行业：{industry}");
+
+        var org = Str("orgName");
+        var researcher = Str("researcher");
+        if (!string.IsNullOrEmpty(org))
+            lines.Add($"评级机构：{org}" + (string.IsNullOrEmpty(researcher) ? "" : $"（研究员：{researcher}）"));
+
+        var rating = Str("emRatingName");
+        if (!string.IsNullOrEmpty(rating))
+        {
+            var lastRating = Str("lastEmRatingName");
+            var change = RatingChange(rating, Str("emRatingValue"), lastRating, Str("lastEmRatingValue"));
+            lines.Add($"投资评级：{rating}（{change}）");
+        }
+
+        // 盈利预测：今年 / 明年 / 后年 的 EPS 与 PE
+        var eps = new List<string>();
+        void AddEps(string label, string epsKey, string peKey)
+        {
+            var e = Str(epsKey);
+            var p = Str(peKey);
+            var hasE = decimal.TryParse(e, out var ev) && ev != 0;
+            var hasP = decimal.TryParse(p, out var pv) && pv != 0;
+            if (hasE || hasP)
+            {
+                var seg = label + "：";
+                if (hasE) seg += $"EPS {decimal.Parse(e):0.##}";
+                if (hasE && hasP) seg += "，";
+                if (hasP) seg += $"PE {decimal.Parse(p):0.##}";
+                eps.Add(seg);
+            }
+        }
+        AddEps("今年", "predictThisYearEps", "predictThisYearPe");
+        AddEps("明年", "predictNextYearEps", "predictNextYearPe");
+        AddEps("后年", "predictNextTwoYearEps", "predictNextTwoYearPe");
+        if (eps.Count > 0)
+            lines.Add("盈利预测：" + string.Join("；", eps));
+
+        if (targetPrice.HasValue)
+            lines.Add($"目标价：{targetPrice.Value:0.##}");
+
+        return string.Join("\n", lines);
+    }
+
+    /// <summary>
+    /// 用当前/前次评级判定评动方向（数值码不完整，故按评级名与评级值对比推导）。
+    /// </summary>
+    private static string RatingChange(string? rating, string? value, string? lastRating, string? lastValue)
+    {
+        if (string.IsNullOrEmpty(lastRating)) return "首次";
+        if (rating == lastRating) return "维持";
+        if (int.TryParse(value, out var v) && int.TryParse(lastValue, out var lv))
+            return v > lv ? "调高" : "调低";
+        return "评级变动";
     }
 
     public async Task<List<ReportData>> CollectReportsByStockAsync(string stockCode, int count = 20, CancellationToken cancellationToken = default)

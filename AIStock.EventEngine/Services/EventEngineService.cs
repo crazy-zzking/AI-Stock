@@ -1,5 +1,6 @@
 using System.Text.Encodings.Web;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using AIStock.Core.Interfaces;
 using AIStock.Core.Models;
 using AIStock.Infrastructure.Database.Context;
@@ -25,6 +26,9 @@ public class EventEngineService
     {
         Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
     };
+
+    /// <summary>A 股代码：6 位纯数字。非此格式的标识视为股票名，需反查代码。</summary>
+    private static readonly Regex _stockCodeRegex = new(@"^\d{6}$", RegexOptions.Compiled);
 
     public EventEngineService(
         AIStockDbContext dbContext,
@@ -83,7 +87,8 @@ public class EventEngineService
                 SentimentScore = sentiment.Score,
                 Importance = intensity.Importance,
                 Credibility = intensity.Credibility,
-                RelatedStocks = string.Join(",", eventData.RelatedCompanies.Select(x=>x.Value)),
+                RelatedStocks = string.Join(",", eventData.RelatedCompanies.Select(x=>x.Value).Concat(report.RelatedStocks)
+                    .Where(s => !string.IsNullOrWhiteSpace(s)).Distinct()),
                 RelatedConcepts = string.Join(",", eventData.RelatedConcepts),
                 LLMAnalysis = JsonSerializer.Serialize(new
                 {
@@ -312,9 +317,34 @@ public class EventEngineService
     private async Task SaveEventRelationsAsync(long eventId, IEnumerable<string> stocks, IEnumerable<string> concepts, CancellationToken cancellationToken = default)
     {
         var added = false;
-        foreach (var code in stocks.Where(s => !string.IsNullOrWhiteSpace(s)).Distinct())
+
+        var rawStocks = stocks.Where(s => !string.IsNullOrWhiteSpace(s)).Select(s => s.Trim()).Distinct().ToList();
+
+        // 名称 → 代码归一：非 6 位数字的当作股票名，批量查 stock_base 反查代码；查不到的丢弃，避免把名称写进 stock_code
+        var names = rawStocks.Where(s => !_stockCodeRegex.IsMatch(s)).ToList();
+        var nameToCode = names.Count == 0
+            ? new Dictionary<string, string>()
+            : (await _dbContext.StockBase
+                    .Where(s => names.Contains(s.Name))
+                    .Select(s => new { s.Name, s.Code })
+                    .ToListAsync(cancellationToken))
+                .GroupBy(x => x.Name)
+                .ToDictionary(g => g.Key, g => g.First().Code);
+
+        var codes = new HashSet<string>();
+        foreach (var s in rawStocks)
         {
-            _dbContext.EventStockRelation.Add(new EventStockRelationEntity { EventId = eventId, StockCode = code.Trim() });
+            if (_stockCodeRegex.IsMatch(s))
+                codes.Add(s);
+            else if (nameToCode.TryGetValue(s, out var code))
+                codes.Add(code);
+            else
+                _logger.LogDebug("event_stock_relation 跳过无法归一为代码的股票标识：{Identifier}", s);
+        }
+
+        foreach (var code in codes)
+        {
+            _dbContext.EventStockRelation.Add(new EventStockRelationEntity { EventId = eventId, StockCode = code });
             added = true;
         }
         foreach (var concept in concepts.Where(c => !string.IsNullOrWhiteSpace(c)).Distinct())
