@@ -4,8 +4,10 @@ using Microsoft.Extensions.Options;
 namespace AIStock.Web.Services;
 
 /// <summary>
-/// 尾盘自动下单后台服务：每 30 秒轮询，交易日到达 DecisionTime(默认14:55)窗口当天首次触发一次
-/// 选股+下单（DryRun）。Web 无现成调度器，故用 BackgroundService 承载定时。
+/// 尾盘自动下单后台服务：每 30 秒轮询，交易日到达 DecisionTime(默认14:55)窗口当天首次触发：
+/// 1. TailSellService.RunAsync() — 到期(hold-expired)平仓
+/// 2. TailMarketBuyService.RunAsync() — 新选股买入
+/// 注：止损由独立的 TailStopLossService 盘中实时监控，不在此处处理。
 /// </summary>
 public class TailMarketBuyHostedService : BackgroundService
 {

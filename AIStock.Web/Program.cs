@@ -147,9 +147,12 @@ builder.Services.AddExecutionServices(builder.Configuration);
 builder.Services.AddOrchestratorServices();
 
 // 注册尾盘自动下单（选股→OrderManager 衔接 + 定时触发；默认关闭 / 仅 DryRun）
+// TailStopLossService：盘中实时止损监控（每 60 秒，与尾盘定时解耦）
+// TailMarketBuyHostedService：14:55 到期卖出 + 新买入
 builder.Services.Configure<AIStock.Web.TailBuyOptions>(builder.Configuration.GetSection(AIStock.Web.TailBuyOptions.SectionName));
 builder.Services.AddScoped<AIStock.Web.Services.TailMarketBuyService>();
 builder.Services.AddScoped<AIStock.Web.Services.TailSellService>();
+builder.Services.AddHostedService<AIStock.Web.Services.TailStopLossService>();
 builder.Services.AddHostedService<AIStock.Web.Services.TailMarketBuyHostedService>();
 
 // 注册Prompt Registry服务
