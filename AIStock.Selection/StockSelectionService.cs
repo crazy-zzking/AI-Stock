@@ -107,7 +107,7 @@ public class StockSelectionService
             {
                 try
                 {
-                    var kl = await em.GetIndexDailyAsync(ix.Secid, 30, ct);
+                    var kl = await em.GetIndexDailyAsync(ix.Secid, 30, ct: ct);
                     var closes = kl.OrderBy(k => k.DateTime).Select(k => k.Close).ToList();
                     return RegimeEvaluator.QuoteFromCloses(ix.Name, closes);
                 }

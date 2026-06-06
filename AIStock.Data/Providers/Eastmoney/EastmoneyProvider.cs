@@ -226,11 +226,16 @@ public class EastmoneyProvider : BaseProvider
     /// 获取指数日K（按 secid 直传，如上证综指 "1.000001"、深证成指 "0.399001"、创业板指 "0.399006"）。
     /// 指数代码与个股代码前缀规则不同，不能走 GetMarketCode，需显式传 secid。
     /// </summary>
-    public async Task<List<KlineData>> GetIndexDailyAsync(string secid, int count = 30, CancellationToken ct = default)
+    public async Task<List<KlineData>> GetIndexDailyAsync(string secid, int count = 30, bool fullHistory = false, CancellationToken ct = default)
     {
         try
         {
-            var url = $"{KlineUrl}?fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59&end=20500101&ut={UserToken}&rtntype=6&secid={secid}&klt=101&fqt=1&lmt={count}";
+            // 全量须带 beg=0（纯 lmt 东财有上限拿不全）；增量按 end+lmt 取最近 count 根。
+            // 全量取大 lmt 即可拿全部历史日K；不能带 smplmt（会把数据下采样到约 460 点）
+            var range = fullHistory
+                ? "end=20500101&lmt=100000"
+                : $"end=20500101&lmt={count}";
+            var url = $"{KlineUrl}?fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59&ut={UserToken}&rtntype=6&secid={secid}&klt=101&fqt=1&{range}";
             var response = await SendEastmoneyRequestAsync(url, ct);
             if (response == null) return new List<KlineData>();
 
@@ -720,7 +725,8 @@ public class EastmoneyProvider : BaseProvider
         }
         catch (Exception ex)
         {
-            Logger.LogError(ex, "Failed to send Eastmoney request to {Url}", url);
+            // 精简日志：超时/取消等多为瞬时网络故障，只打一行原因，不展开整条嵌套异常堆栈
+            Logger.LogWarning("Eastmoney 请求失败: {Url} — {Error}", url, ex.Message);
             return null;
         }
     }

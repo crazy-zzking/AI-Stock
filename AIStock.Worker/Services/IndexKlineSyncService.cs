@@ -28,8 +28,11 @@ public class IndexKlineSyncService
         _logger = logger;
     }
 
-    /// <summary>同步全部主要指数最近 count 根日K（upsert）。返回写入/更新的K线条数。</summary>
-    public async Task<int> SyncAsync(int count = 300, CancellationToken ct = default)
+    /// <summary>
+    /// 同步全部主要指数日K（upsert）。库中尚无该指数数据时拉取全部历史，已有则只拉最近 count 根做增量。
+    /// 返回写入/更新的K线条数。
+    /// </summary>
+    public async Task<int> SyncAsync(int count = 10, CancellationToken ct = default)
     {
         var em = _resolver.GetProviders(DataCapability.Kline)
             .FirstOrDefault(p => p.ProviderName == "东方财富") as EastmoneyProvider;
@@ -46,15 +49,19 @@ public class IndexKlineSyncService
         {
             try
             {
-                var kl = await em.GetIndexDailyAsync(secid, count, ct);
+                using var scope = _scopeFactory.CreateScope();
+                var db = scope.ServiceProvider.GetRequiredService<AIStockDbContext>();
+
+                // 库中尚无该指数数据 → 首次全量回补；否则只拉最近 count 根增量
+                var hasData = await db.KlineData
+                    .AnyAsync(k => k.Code == secid && k.Interval == interval, ct);
+
+                var kl = await em.GetIndexDailyAsync(secid, count, fullHistory: !hasData, ct: ct);
                 if (kl.Count == 0)
                 {
                     _logger.LogWarning("指数 {Name}({Secid}) 无K线返回", name, secid);
                     continue;
                 }
-
-                using var scope = _scopeFactory.CreateScope();
-                var db = scope.ServiceProvider.GetRequiredService<AIStockDbContext>();
 
                 var minDate = kl.Min(k => k.DateTime).Date;
                 var existing = await db.KlineData
@@ -85,7 +92,8 @@ public class IndexKlineSyncService
                 }
 
                 await db.SaveChangesAsync(ct);
-                _logger.LogInformation("指数 {Name}({Secid}) 同步 {Cnt} 根日K", name, secid, kl.Count);
+                _logger.LogInformation("指数 {Name}({Secid}) {Mode} {Cnt} 根日K",
+                    name, secid, hasData ? "增量更新" : "全量回补", kl.Count);
             }
             catch (Exception ex)
             {
