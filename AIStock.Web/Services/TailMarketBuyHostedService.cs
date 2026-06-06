@@ -47,8 +47,10 @@ public class TailMarketBuyHostedService : BackgroundService
                         if (await _calendar.IsTradingDayAsync(today.ToDateTime(TimeOnly.MinValue), stoppingToken))
                         {
                             using var scope = _scopeFactory.CreateScope();
-                            var svc = scope.ServiceProvider.GetRequiredService<TailMarketBuyService>();
-                            await svc.RunAsync(stoppingToken);
+                            var sell = scope.ServiceProvider.GetRequiredService<TailSellService>();
+                            var buy = scope.ServiceProvider.GetRequiredService<TailMarketBuyService>();
+                            await sell.RunAsync(stoppingToken);  // 先处理到期/止损卖出
+                            await buy.RunAsync(stoppingToken);   // 再买入当日新选股
                         }
                         else
                         {

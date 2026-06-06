@@ -132,6 +132,11 @@ public class AIStockDbContext : DbContext
     /// </summary>
     public DbSet<StrategyDefinitionEntity> StrategyDefinition { get; set; }
 
+    /// <summary>
+    /// 尾盘策略持仓跟踪（买入→持有→卖出闭环，DryRun 也落库模拟）
+    /// </summary>
+    public DbSet<TailPositionEntity> TailPosition { get; set; }
+
     public override int SaveChanges()
     {
         UpdateTimestamps();
@@ -362,6 +367,14 @@ public class AIStockDbContext : DbContext
         {
             entity.HasKey(e => e.Id);
             entity.HasIndex(e => e.Key).IsUnique();
+        });
+
+        // 尾盘策略持仓（按 Status 扫描未平仓；按 Code 查）
+        modelBuilder.Entity<TailPositionEntity>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => e.Status);
+            entity.HasIndex(e => new { e.Code, e.Status });
         });
     }
 }

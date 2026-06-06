@@ -1,6 +1,8 @@
 using AIStock.Core.Enums;
 using AIStock.Core.Interfaces;
 using AIStock.Core.Models;
+using AIStock.Infrastructure.Database.Context;
+using AIStock.Infrastructure.Database.Entities;
 using AIStock.Selection;
 using Microsoft.Extensions.Options;
 
@@ -15,16 +17,18 @@ public class TailMarketBuyService
     private readonly StockSelectionService _selection;
     private readonly IOrderManager _orderManager;
     private readonly ITradingGate _tradingGate;
+    private readonly AIStockDbContext _db;
     private readonly TailBuyOptions _options;
     private readonly ILogger<TailMarketBuyService> _logger;
 
     public TailMarketBuyService(
         StockSelectionService selection, IOrderManager orderManager, ITradingGate tradingGate,
-        IOptions<TailBuyOptions> options, ILogger<TailMarketBuyService> logger)
+        AIStockDbContext db, IOptions<TailBuyOptions> options, ILogger<TailMarketBuyService> logger)
     {
         _selection = selection;
         _orderManager = orderManager;
         _tradingGate = tradingGate;
+        _db = db;
         _options = options.Value;
         _logger = logger;
     }
@@ -86,8 +90,28 @@ public class TailMarketBuyService
             results.Add(res);
             _logger.LogInformation("尾盘下单 {Code} {Name} 量={Vol}@{Price} → success={OK} status={Status} msg={Msg}",
                 p.Code, p.Name, volume, price, res.Success, res.Status, res.Message);
+
+            // 下单成功 → 落尾盘持仓记录（供卖出服务按持有期/止损平仓；DryRun 也落库模拟闭环）
+            if (res.Success)
+            {
+                _db.TailPosition.Add(new TailPositionEntity
+                {
+                    Code = p.Code,
+                    Name = p.Name,
+                    Strategy = _options.Strategy,
+                    BuyDate = DateTime.Today,
+                    BuyPrice = price,
+                    Volume = volume,
+                    StopLossPrice = Math.Round(price * (1 - _options.StopLossPercent / 100m), 2),
+                    HoldDays = _options.HoldDays,
+                    SignalId = req.SignalId,
+                    IsDryRun = _tradingGate.Mode == TradingMode.DryRun,
+                    Status = 0,
+                });
+            }
         }
 
+        await _db.SaveChangesAsync(ct);
         var ok = results.Count(r => r.Success);
         _logger.LogInformation("尾盘下单完成：{Ok}/{Total} 成功", ok, results.Count);
         return results;

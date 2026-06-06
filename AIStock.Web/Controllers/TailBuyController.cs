@@ -10,14 +10,20 @@ namespace AIStock.Web.Controllers;
 [Route("api/[controller]")]
 public class TailBuyController : ControllerBase
 {
-    private readonly TailMarketBuyService _svc;
-    public TailBuyController(TailMarketBuyService svc) => _svc = svc;
+    private readonly TailMarketBuyService _buy;
+    private readonly TailSellService _sell;
+    public TailBuyController(TailMarketBuyService buy, TailSellService sell)
+    {
+        _buy = buy;
+        _sell = sell;
+    }
 
-    /// <summary>手动触发一次尾盘选股 + 下单（默认 DryRun）。force=true 跳过 Enabled 开关，用于 DryRun 验证。</summary>
+    /// <summary>手动触发一次尾盘卖出(到期/止损) + 买入(选股)。force=true 跳过 Enabled 开关，用于 DryRun 验证。</summary>
     [HttpPost("run")]
     public async Task<ActionResult> Run([FromQuery] bool force = true, CancellationToken ct = default)
     {
-        var results = await _svc.RunAsync(ct, force);
-        return Ok(results.Select(r => new { r.OrderId, r.Success, r.Status, r.Message }));
+        var sold = await _sell.RunAsync(ct);
+        var orders = await _buy.RunAsync(ct, force);
+        return Ok(new { sold, orders = orders.Select(r => new { r.OrderId, r.Success, r.Status, r.Message }) });
     }
 }

@@ -27,4 +27,10 @@ public class TailBuyOptions
 
     /// <summary>额外保险：即便 TradingGate=Live 也只走计划不真下单（默认 true）</summary>
     public bool DryRunOnly { get; set; } = true;
+
+    /// <summary>持有交易日数，满则尾盘到期卖出</summary>
+    public int HoldDays { get; set; } = 5;
+
+    /// <summary>止损百分比(%)：现价跌破 买入价×(1-该值/100) 触发止损卖出</summary>
+    public decimal StopLossPercent { get; set; } = 8m;
 }
