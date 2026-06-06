@@ -131,6 +131,16 @@ public class LLMController : ControllerBase
     }
 
     /// <summary>
+    /// 查询 DeepSeek 账户余额（实时，不入库）
+    /// </summary>
+    [HttpGet("models/{modelId}/balance")]
+    public async Task<IActionResult> GetBalance(string modelId)
+    {
+        var balance = await _llmService.GetDeepSeekBalanceAsync(modelId);
+        return Ok(balance);
+    }
+
+    /// <summary>
     /// 发送LLM请求
     /// </summary>
     [HttpPost("chat")]

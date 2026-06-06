@@ -194,6 +194,20 @@ export interface LLMModel {
   thinkingBudgetTokens?: number;
 }
 
+export interface DeepSeekBalanceInfo {
+  currency: string;
+  totalBalance: string;
+  grantedBalance: string;
+  toppedUpBalance: string;
+}
+
+export interface DeepSeekBalance {
+  success: boolean;
+  isAvailable: boolean;
+  balanceInfos: DeepSeekBalanceInfo[];
+  errorMessage?: string;
+}
+
 // --- 知识图谱 ---
 export interface CompanyRelation {
   companyCode: string;

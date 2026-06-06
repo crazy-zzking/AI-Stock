@@ -33,11 +33,12 @@ public static class DependencyInjection
             var dbContext = sp.GetRequiredService<AIStock.Infrastructure.Database.Context.AIStockDbContext>();
             var llmProvider = sp.GetRequiredService<ILLMProvider>();
             var cache = sp.GetRequiredService<Microsoft.Extensions.Caching.Memory.IMemoryCache>();
+            var httpClientFactory = sp.GetRequiredService<System.Net.Http.IHttpClientFactory>();
             var logger = sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<LLMService>>();
 
             // 尝试获取IPromptRegistry（可选）
             var promptRegistry = sp.GetService<AIStock.Prompt.IPromptRegistry>();
-            return new LLMService(dbContext, llmProvider, cache, logger, promptRegistry);
+            return new LLMService(dbContext, llmProvider, cache, httpClientFactory, logger, promptRegistry);
         });
         return services;
     }

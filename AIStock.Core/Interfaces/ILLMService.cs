@@ -56,4 +56,9 @@ public interface ILLMService
     /// 删除模型配置
     /// </summary>
     Task<bool> DeleteModelConfigAsync(string modelId);
+
+    /// <summary>
+    /// 查询 DeepSeek 账户余额（实时，不入库；仅 api.deepseek.com 模型）
+    /// </summary>
+    Task<DeepSeekBalance> GetDeepSeekBalanceAsync(string modelId, CancellationToken cancellationToken = default);
 }

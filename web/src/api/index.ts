@@ -3,7 +3,7 @@ import type {
   AgentStatus, AgentResult, WorkflowDefinition, WorkflowResult,
   DecisionResult, DecisionRequest, StockInfo, QuoteData,
   PositionSummary, OrderRequest, OrderResult,
-  LLMModel, ProviderStatus, AgentMemoryRecord,
+  LLMModel, DeepSeekBalance, ProviderStatus, AgentMemoryRecord,
   PromptInfo, PromptTemplate,
 } from '../types/models';
 
@@ -134,6 +134,33 @@ export const activateSelectionConfig = (id: number) =>
 export const deleteSelectionConfig = (id: number) =>
   api.delete(`/selection/config/${id}`);
 
+// ============ 自建策略管理（strategy_definition 口径定义）============
+export interface StrategyFilters {
+  byRsi: boolean; byRise20d: boolean; byMinInflow: boolean;
+  requireAboveMa20: boolean; requireHotConcept: boolean;
+  excludeTraditionalBigCap: boolean; extremeRise20d: number | null;
+  weakRegimeTightenRise20d: boolean; weakRegimeRequireInflow: boolean;
+}
+export interface StrategyFactorKinds { technical: 'lowdip' | 'trend'; position: 'lowdip' | 'trend'; }
+export interface StrategyDefinition {
+  key: string; name: string; description: string; preferredRegime: string;
+  filters: StrategyFilters; factorKinds: StrategyFactorKinds;
+  penalty: 'none' | 'limitup'; coreLogicTemplate?: string | null;
+}
+export interface StrategyDefItem {
+  id: number; enabled: boolean; createdAt: string; updatedAt: string;
+  definition: StrategyDefinition;
+}
+export const listStrategyDefs = () => api.get<StrategyDefItem[]>('/strategy-def');
+export const getStrategyDefBuiltins = () =>
+  api.get<StrategyDefinition[]>('/strategy-def/builtins');
+export const createStrategyDef = (body: { enabled: boolean; definition: StrategyDefinition }) =>
+  api.post('/strategy-def', body);
+export const updateStrategyDef = (id: number, body: { enabled: boolean; definition: StrategyDefinition }) =>
+  api.put(`/strategy-def/${id}`, body);
+export const deleteStrategyDef = (id: number) =>
+  api.delete(`/strategy-def/${id}`);
+
 // ============ 每日复盘 ============
 export const getLatestReview = () => api.get('/review/latest');
 export const getReviewByDate = (date: string) => api.get(`/review/${date}`);
@@ -185,6 +212,8 @@ export const addLLMModel = (model: LLMModel) => api.post<LLMModel>('/llm/models'
 export const updateLLMModel = (modelId: string, model: LLMModel) => api.put<LLMModel>(`/llm/models/${modelId}`, model);
 export const deleteLLMModel = (modelId: string) => api.delete(`/llm/models/${modelId}`);
 export const refreshLLMModels = () => api.post('/llm/models/refresh');
+export const getDeepSeekBalance = (modelId: string) =>
+  api.get<DeepSeekBalance>(`/llm/models/${modelId}/balance`);
 export const sendChat = (userPrompt: string, systemPrompt?: string, modelId?: string) =>
   api.post('/llm/chat', { userPrompt, systemPrompt, modelId });
 export const compareLLM = (prompt: string, modelCount = 3, systemPrompt?: string) =>

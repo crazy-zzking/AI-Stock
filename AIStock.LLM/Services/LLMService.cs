@@ -21,6 +21,7 @@ public class LLMService : ILLMService
     private readonly IMemoryCache _cache;
     private readonly ILogger<LLMService> _logger;
     private readonly IPromptRegistry? _promptRegistry;
+    private readonly IHttpClientFactory _httpClientFactory;
 
     private const string CacheKey = "LLM_Model_Configs";
     private const string CacheKeyAll = "LLM_Model_Configs_All";
@@ -30,12 +31,14 @@ public class LLMService : ILLMService
         AIStockDbContext dbContext,
         ILLMProvider llmProvider,
         IMemoryCache cache,
+        IHttpClientFactory httpClientFactory,
         ILogger<LLMService> logger,
         IPromptRegistry? promptRegistry = null)
     {
         _dbContext = dbContext;
         _llmProvider = llmProvider;
         _cache = cache;
+        _httpClientFactory = httpClientFactory;
         _logger = logger;
         _promptRegistry = promptRegistry;
     }
@@ -201,6 +204,72 @@ public class LLMService : ILLMService
         _cache.Remove(CacheKeyAll);
         _logger.LogInformation("Deleted LLM model config: {ModelId}", modelId);
         return true;
+    }
+
+    public async Task<DeepSeekBalance> GetDeepSeekBalanceAsync(string modelId, CancellationToken cancellationToken = default)
+    {
+        // 含禁用模型一并取，禁用的 DeepSeek 也能查余额
+        var configs = await GetAllModelConfigsAsync();
+        if (!configs.TryGetValue(modelId, out var config))
+        {
+            return new DeepSeekBalance { Success = false, ErrorMessage = $"Model not found: {modelId}" };
+        }
+
+        if (!config.BaseUrl.Contains("api.deepseek.com", StringComparison.OrdinalIgnoreCase))
+        {
+            return new DeepSeekBalance { Success = false, ErrorMessage = "仅 api.deepseek.com 模型支持余额查询" };
+        }
+
+        try
+        {
+            var client = _httpClientFactory.CreateClient();
+            client.Timeout = TimeSpan.FromSeconds(config.TimeoutSeconds);
+            client.DefaultRequestHeaders.Clear();
+            client.DefaultRequestHeaders.Add("Authorization", $"Bearer {config.ApiKey}");
+
+            // DeepSeek 余额端点固定为 /user/balance（兼容 BaseUrl 带或不带 /v1）
+            var host = config.BaseUrl.TrimEnd('/');
+            if (host.EndsWith("/v1", StringComparison.OrdinalIgnoreCase))
+                host = host[..^3];
+            var url = $"{host.TrimEnd('/')}/user/balance";
+
+            var httpResponse = await client.GetAsync(url, cancellationToken);
+            var json = await httpResponse.Content.ReadAsStringAsync(cancellationToken);
+
+            if (!httpResponse.IsSuccessStatusCode)
+            {
+                _logger.LogWarning("DeepSeek balance query failed: {Status} - {Body}", httpResponse.StatusCode, json);
+                return new DeepSeekBalance { Success = false, ErrorMessage = $"{(int)httpResponse.StatusCode} {httpResponse.StatusCode}" };
+            }
+
+            var root = System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(json);
+            var result = new DeepSeekBalance
+            {
+                Success = true,
+                IsAvailable = root.TryGetProperty("is_available", out var avail) && avail.GetBoolean()
+            };
+
+            if (root.TryGetProperty("balance_infos", out var infos) && infos.ValueKind == System.Text.Json.JsonValueKind.Array)
+            {
+                foreach (var info in infos.EnumerateArray())
+                {
+                    result.BalanceInfos.Add(new DeepSeekBalanceInfo
+                    {
+                        Currency = info.TryGetProperty("currency", out var c) ? c.GetString() ?? "" : "",
+                        TotalBalance = info.TryGetProperty("total_balance", out var t) ? t.GetString() ?? "" : "",
+                        GrantedBalance = info.TryGetProperty("granted_balance", out var g) ? g.GetString() ?? "" : "",
+                        ToppedUpBalance = info.TryGetProperty("topped_up_balance", out var u) ? u.GetString() ?? "" : ""
+                    });
+                }
+            }
+
+            return result;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "DeepSeek balance query failed for model {ModelId}", modelId);
+            return new DeepSeekBalance { Success = false, ErrorMessage = ex.Message };
+        }
     }
 
     private async Task<Dictionary<string, LLMConfig>> GetModelConfigsAsync()

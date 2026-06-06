@@ -1,16 +1,18 @@
 import React, { useEffect, useState } from 'react';
 import {
   Card, Table, Tag, Row, Col, Statistic, message, Button, Modal, Form,
-  Input, InputNumber, Switch, Space, Popconfirm, Tooltip, Divider,
+  Input, InputNumber, Switch, Space, Popconfirm, Tooltip, Divider, Spin, Alert, Descriptions,
 } from 'antd';
 import {
   RobotOutlined, CheckCircleOutlined, CloseCircleOutlined,
-  PlusOutlined, EditOutlined, DeleteOutlined, ReloadOutlined, BulbOutlined,
+  PlusOutlined, EditOutlined, DeleteOutlined, ReloadOutlined, BulbOutlined, WalletOutlined,
 } from '@ant-design/icons';
 
-import { getLLMModels, addLLMModel, updateLLMModel, deleteLLMModel, refreshLLMModels } from '../api';
+import {
+  getLLMModels, addLLMModel, updateLLMModel, deleteLLMModel, refreshLLMModels, getDeepSeekBalance,
+} from '../api';
 import LoadingSkeleton from '../components/LoadingSkeleton';
-import type { LLMModel } from '../types/models';
+import type { LLMModel, DeepSeekBalance } from '../types/models';
 
 /** LLM 模型管理 — 完整 CRUD */
 const LLMManager: React.FC = () => {
@@ -98,16 +100,49 @@ const LLMManager: React.FC = () => {
     }
   };
 
+  // 列表直接切换启用/禁用，不用进编辑弹窗
+  const toggleEnabled = async (record: LLMModel, checked: boolean) => {
+    try {
+      await updateLLMModel(record.id, { ...record, isEnabled: checked });
+      setModels((prev) => prev.map((m) => (m.id === record.id ? { ...m, isEnabled: checked } : m)));
+      message.success(checked ? '已启用' : '已禁用');
+    } catch {
+      message.error('操作失败');
+    }
+  };
+
+  // DeepSeek 余额（实时查询，不入库）
+  const [balanceState, setBalanceState] = useState<{
+    open: boolean; loading: boolean; data: DeepSeekBalance | null; name: string;
+  }>({ open: false, loading: false, data: null, name: '' });
+
+  const handleQueryBalance = async (record: LLMModel) => {
+    setBalanceState({ open: true, loading: true, data: null, name: record.name });
+    try {
+      const res = await getDeepSeekBalance(record.id);
+      setBalanceState((s) => ({ ...s, loading: false, data: res.data }));
+    } catch {
+      setBalanceState((s) => ({
+        ...s, loading: false,
+        data: { success: false, isAvailable: false, balanceInfos: [], errorMessage: '请求失败' },
+      }));
+    }
+  };
+
   const columns = [
     { title: 'ID', dataIndex: 'id', key: 'id', width: 100 },
     { title: '名称', dataIndex: 'name', key: 'name', ellipsis: true },
     { title: '模型', dataIndex: 'model', key: 'model' },
     {
       title: '状态', dataIndex: 'isEnabled', key: 'isEnabled', width: 90,
-      render: (v: boolean) => (
-        <Tag icon={v ? <CheckCircleOutlined /> : <CloseCircleOutlined />} color={v ? 'green' : 'default'}>
-          {v ? '启用' : '禁用'}
-        </Tag>
+      render: (v: boolean, record: LLMModel) => (
+        <Switch
+          size="small"
+          checked={v}
+          checkedChildren="启用"
+          unCheckedChildren="禁用"
+          onChange={(checked) => toggleEnabled(record, checked)}
+        />
       ),
     },
     { title: '优先级', dataIndex: 'priority', key: 'priority', width: 70 },
@@ -127,9 +162,14 @@ const LLMManager: React.FC = () => {
         ) : null,
     },
     {
-      title: '操作', key: 'actions', width: 120,
+      title: '操作', key: 'actions', width: 160,
       render: (_: unknown, record: LLMModel) => (
         <Space size="small">
+          {record.baseUrl?.includes('api.deepseek.com') && (
+            <Tooltip title="查余额">
+              <Button size="small" icon={<WalletOutlined />} onClick={() => handleQueryBalance(record)} />
+            </Tooltip>
+          )}
           <Tooltip title="编辑">
             <Button size="small" icon={<EditOutlined />} onClick={() => openEditModal(record)} />
           </Tooltip>
@@ -309,6 +349,49 @@ const LLMManager: React.FC = () => {
             </>
           )}
         </Form>
+      </Modal>
+
+      {/* DeepSeek 余额（实时查询，不入库） */}
+      <Modal
+        title={<><WalletOutlined /> DeepSeek 余额 — {balanceState.name}</>}
+        open={balanceState.open}
+        onCancel={() => setBalanceState((s) => ({ ...s, open: false }))}
+        footer={null}
+        width={480}
+        destroyOnClose
+      >
+        {balanceState.loading ? (
+          <div style={{ textAlign: 'center', padding: 32 }}><Spin /></div>
+        ) : !balanceState.data?.success ? (
+          <Alert type="error" showIcon message="查询失败" description={balanceState.data?.errorMessage} />
+        ) : (
+          <>
+            <Alert
+              type={balanceState.data.isAvailable ? 'success' : 'warning'}
+              showIcon
+              message={balanceState.data.isAvailable ? '账户余额可用' : '账户余额不足，无法调用 API'}
+              style={{ marginBottom: 16 }}
+            />
+            {balanceState.data.balanceInfos.length === 0 ? (
+              <Alert type="info" message="无余额明细" />
+            ) : (
+              balanceState.data.balanceInfos.map((b) => (
+                <Descriptions
+                  key={b.currency}
+                  bordered
+                  size="small"
+                  column={1}
+                  title={`币种：${b.currency}`}
+                  style={{ marginBottom: 12 }}
+                >
+                  <Descriptions.Item label="总可用余额">{b.totalBalance}</Descriptions.Item>
+                  <Descriptions.Item label="赠金余额">{b.grantedBalance}</Descriptions.Item>
+                  <Descriptions.Item label="充值余额">{b.toppedUpBalance}</Descriptions.Item>
+                </Descriptions>
+              ))
+            )}
+          </>
+        )}
       </Modal>
     </div>
   );
