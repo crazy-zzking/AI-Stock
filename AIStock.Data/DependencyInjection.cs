@@ -59,7 +59,10 @@ public static class DependencyInjection
             .AddStandardResilienceHandler(options =>
             {
                 options.Retry.MaxRetryAttempts = 3;
-                options.AttemptTimeout.Timeout = TimeSpan.FromSeconds(30);
+                // 单次尝试 10s 超时，必须小于总超时，否则第一次就吃满预算、根本不会重试
+                options.AttemptTimeout.Timeout = TimeSpan.FromSeconds(10);
+                // 总超时 40s，给 3 次尝试留出空间；CircuitBreaker.SamplingDuration 须 ≥ AttemptTimeout×2
+                options.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(40);
                 options.CircuitBreaker.SamplingDuration = TimeSpan.FromMinutes(1);
             });
 
