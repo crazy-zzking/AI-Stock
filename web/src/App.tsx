@@ -22,6 +22,7 @@ import StockDetail from './pages/StockDetail';
 import AIChat from './pages/AIChat';
 import PromptManager from './pages/PromptManager';
 import SelectionConfig from './pages/SelectionConfig';
+import StrategyManager from './pages/StrategyManager';
 import Backtest from './pages/Backtest';
 
 function App() {
@@ -37,6 +38,7 @@ function App() {
               <Route path="selection" element={<Selection />} />
               <Route path="selection-history" element={<SelectionHistory />} />
               <Route path="selection-config" element={<SelectionConfig />} />
+              <Route path="strategy-manager" element={<StrategyManager />} />
               <Route path="selection-backtest" element={<Backtest />} />
               <Route path="sector" element={<Sector />} />
               <Route path="review" element={<Review />} />

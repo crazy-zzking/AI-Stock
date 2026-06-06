@@ -13,6 +13,7 @@ public static class DependencyInjection
         services.AddScoped<ILogicNarrator, RuleLogicNarrator>();
         services.AddScoped<StockSelectionEngine>();
         services.AddScoped<SelectionConfigService>();
+        services.AddScoped<StrategyDefinitionService>();
 
         // 选股策略池（市场状态决定启用哪个；默认低吸）
         services.AddScoped<ISelectionStrategy, LowDipStrategy>();
