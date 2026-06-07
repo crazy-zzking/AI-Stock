@@ -320,26 +320,40 @@ public class EventEngineService
 
         var rawStocks = stocks.Where(s => !string.IsNullOrWhiteSpace(s)).Select(s => s.Trim()).Distinct().ToList();
 
-        // 名称 → 代码归一：非 6 位数字的当作股票名，批量查 stock_base 反查代码；查不到的丢弃，避免把名称写进 stock_code
+        // 名称 → 代码归一：6 位代码直用 → 全名精确 → 模糊包含（命中≤上限才归一，过泛/残缺名跳过）。
+        // 精确匹配走定向查询（常见、廉价）；只有存在残缺名时才加载全市场做模糊，避免每次全表加载。
         var names = rawStocks.Where(s => !_stockCodeRegex.IsMatch(s)).ToList();
-        var nameToCode = names.Count == 0
-            ? new Dictionary<string, string>()
-            : (await _dbContext.StockBase
+        var codes = new HashSet<string>(rawStocks.Where(s => _stockCodeRegex.IsMatch(s)), StringComparer.Ordinal);
+
+        if (names.Count > 0)
+        {
+            var exact = (await _dbContext.StockBase
                     .Where(s => names.Contains(s.Name))
                     .Select(s => new { s.Name, s.Code })
                     .ToListAsync(cancellationToken))
                 .GroupBy(x => x.Name)
                 .ToDictionary(g => g.Key, g => g.First().Code);
 
-        var codes = new HashSet<string>();
-        foreach (var s in rawStocks)
-        {
-            if (_stockCodeRegex.IsMatch(s))
-                codes.Add(s);
-            else if (nameToCode.TryGetValue(s, out var code))
-                codes.Add(code);
-            else
-                _logger.LogDebug("event_stock_relation 跳过无法归一为代码的股票标识：{Identifier}", s);
+            var unresolved = new List<string>();
+            foreach (var n in names)
+            {
+                if (exact.TryGetValue(n, out var code)) codes.Add(code);
+                else unresolved.Add(n);
+            }
+
+            // 残缺名：加载全市场做模糊包含匹配
+            if (unresolved.Count > 0)
+            {
+                var universe = (await _dbContext.StockBase
+                        .Select(s => new { s.Name, s.Code })
+                        .ToListAsync(cancellationToken))
+                    .Select(x => (x.Name, x.Code))
+                    .ToList();
+                var resolved = StockNameResolver.ResolveCodes(unresolved, universe);
+                foreach (var c in resolved.Codes) codes.Add(c);
+                foreach (var miss in resolved.Unresolved)
+                    _logger.LogDebug("event_stock_relation 跳过无法归一为代码的股票标识：{Identifier}", miss);
+            }
         }
 
         foreach (var code in codes)
