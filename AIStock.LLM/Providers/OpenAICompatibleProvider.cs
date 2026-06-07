@@ -269,7 +269,25 @@ public class OpenAICompatibleProvider : ILLMProvider
         {
             messages.Add(new { role = "system", content = request.SystemPrompt });
         }
-        messages.Add(new { role = "user", content = request.UserPrompt });
+
+        // 有图片时按 OpenAI vision 格式发送（content 为数组：文本 + 多张图片）；否则保持纯字符串
+        var imageUrls = request.ImageUrls?.Where(u => !string.IsNullOrWhiteSpace(u)).ToList();
+        if (imageUrls is { Count: > 0 })
+        {
+            var parts = new List<object>
+            {
+                new { type = "text", text = request.UserPrompt }
+            };
+            foreach (var imgUrl in imageUrls)
+            {
+                parts.Add(new { type = "image_url", image_url = new { url = imgUrl } });
+            }
+            messages.Add(new { role = "user", content = parts });
+        }
+        else
+        {
+            messages.Add(new { role = "user", content = request.UserPrompt });
+        }
 
         var body = new Dictionary<string, object>
         {

@@ -13,9 +13,14 @@ public interface IEssayAnalyzer
     Task<EssayAnalysisResult> AnalyzeTextAsync(string text, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// 分析图片内容（OCR）
+    /// 分析图片内容（多模态识别）
     /// </summary>
     Task<EssayAnalysisResult> AnalyzeImageAsync(string imageUrl, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// 分析多张图片内容（多模态识别），可附带正文文字一并分析
+    /// </summary>
+    Task<EssayAnalysisResult> AnalyzeImagesAsync(IReadOnlyList<string> imageUrls, string? accompanyingText = null, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// 分析音频内容（ASR）

@@ -1,4 +1,5 @@
 using AIStock.Core.Interfaces;
+using AIStock.Core.Models;
 using AIStock.EventEngine.Services;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -124,17 +125,36 @@ public class IntelligenceSyncService
             _logger.LogInformation("知识星球无新内容（或未配置 token/groups）");
             return 0;
         }
-        items.RemoveAll(x => x.ContentType == "text" && x.Content == "");
+        // 既无正文也无图片的才丢弃；纯图片帖保留走多模态识别
+        items.RemoveAll(x => string.IsNullOrWhiteSpace(x.Content) && x.ImageUrls.Count == 0);
         var ok = 0;
         foreach (var item in items)
         {
             if (ct.IsCancellationRequested) break;
             try
             {
-                if (string.IsNullOrWhiteSpace(item.Content)) continue;
+                if (string.IsNullOrWhiteSpace(item.Content) && item.ImageUrls.Count == 0) continue;
                 if (await engine.ExistsByUrlAsync(item.Url, ct)) continue; // 去重前置，省 LLM
 
-                var result = await essay.AnalyzeTextAsync(item.Content, ct);
+                EssayAnalysisResult result;
+                if (item.ImageUrls.Count > 0)
+                {
+                    // 图片帖：一次性把全部图片 + 配文交给多模态模型识别
+                    result = await essay.AnalyzeImagesAsync(item.ImageUrls, item.Content, ct);
+
+                    // 纯图片帖把识别文本回填正文，避免入库记录为空、便于检索
+                    if (string.IsNullOrWhiteSpace(item.Content) && !string.IsNullOrWhiteSpace(result.ParsedContent))
+                    {
+                        item.Content = result.ParsedContent;
+                        if (string.IsNullOrWhiteSpace(item.Title))
+                            item.Title = result.ParsedContent.Length > 40 ? result.ParsedContent[..40] : result.ParsedContent;
+                    }
+                }
+                else
+                {
+                    result = await essay.AnalyzeTextAsync(item.Content, ct);
+                }
+
                 var saved = await engine.SaveKnowledgeStarEventAsync(item, result, ct);
                 if (saved != null) ok++;
             }

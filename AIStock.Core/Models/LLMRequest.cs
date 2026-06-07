@@ -34,4 +34,9 @@ public class LLMRequest
     /// 指定模型ID（可选，为空则使用默认模型）
     /// </summary>
     public string? ModelId { get; set; }
+
+    /// <summary>
+    /// 图片URL列表（多模态识别用，非空时以 OpenAI vision 格式随 user 消息一并发送）
+    /// </summary>
+    public List<string>? ImageUrls { get; set; }
 }

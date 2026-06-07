@@ -95,6 +95,12 @@ public class LLMModelConfigEntity
     public int? ThinkingBudgetTokens { get; set; }
 
     /// <summary>
+    /// 是否支持多模态（图片识别）
+    /// </summary>
+    [Column("supports_multimodal")]
+    public bool SupportsMultimodal { get; set; }
+
+    /// <summary>
     /// 创建时间
     /// </summary>
     [Column("created_at")]

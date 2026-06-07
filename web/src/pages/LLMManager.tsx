@@ -5,7 +5,7 @@ import {
 } from 'antd';
 import {
   RobotOutlined, CheckCircleOutlined, CloseCircleOutlined,
-  PlusOutlined, EditOutlined, DeleteOutlined, ReloadOutlined, BulbOutlined, WalletOutlined,
+  PlusOutlined, EditOutlined, DeleteOutlined, ReloadOutlined, BulbOutlined, WalletOutlined, PictureOutlined,
 } from '@ant-design/icons';
 
 import {
@@ -160,6 +160,14 @@ const LLMManager: React.FC = () => {
             {v ? '开启' : '关闭'}
           </Tag>
         ) : null,
+    },
+    {
+      title: '多模态', dataIndex: 'supportsMultimodal', key: 'supportsMultimodal', width: 90,
+      render: (v: boolean) => (
+        <Tag icon={<PictureOutlined />} color={v ? 'green' : 'default'}>
+          {v ? '支持' : '不支持'}
+        </Tag>
+      ),
     },
     {
       title: '操作', key: 'actions', width: 160,
@@ -324,6 +332,14 @@ const LLMManager: React.FC = () => {
           </Row>
           <Form.Item name="description" label="描述">
             <Input.TextArea rows={2} placeholder="模型用途说明（可选）" />
+          </Form.Item>
+          <Form.Item
+            name="supportsMultimodal"
+            label="支持多模态"
+            valuePropName="checked"
+            extra="开启后该模型可用于图片识别（如知识星球图片消息）"
+          >
+            <Switch checkedChildren="支持" unCheckedChildren="不支持" />
           </Form.Item>
           {isDeepSeek && (
             <>

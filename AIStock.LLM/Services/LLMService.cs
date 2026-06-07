@@ -182,6 +182,7 @@ public class LLMService : ILLMService
         entity.Description = config.Description;
         entity.EnableThinking = config.EnableThinking;
         entity.ThinkingBudgetTokens = config.ThinkingBudgetTokens;
+        entity.SupportsMultimodal = config.SupportsMultimodal;
         entity.UpdatedAt = DateTime.Now;
 
         await _dbContext.SaveChangesAsync();
@@ -358,7 +359,8 @@ public class LLMService : ILLMService
             Temperature = entity.Temperature,
             Description = entity.Description,
             EnableThinking = entity.EnableThinking,
-            ThinkingBudgetTokens = entity.ThinkingBudgetTokens
+            ThinkingBudgetTokens = entity.ThinkingBudgetTokens,
+            SupportsMultimodal = entity.SupportsMultimodal
         };
     }
 
@@ -378,7 +380,8 @@ public class LLMService : ILLMService
             Temperature = config.Temperature,
             Description = config.Description,
             EnableThinking = config.EnableThinking,
-            ThinkingBudgetTokens = config.ThinkingBudgetTokens
+            ThinkingBudgetTokens = config.ThinkingBudgetTokens,
+            SupportsMultimodal = config.SupportsMultimodal
         };
     }
 

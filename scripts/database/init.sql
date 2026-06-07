@@ -98,6 +98,9 @@ CREATE TABLE IF NOT EXISTS `llm_model_config` (
     `max_tokens` INT DEFAULT NULL COMMENT '最大Token数',
     `temperature` DECIMAL(3,2) DEFAULT NULL COMMENT '温度参数',
     `description` VARCHAR(500) DEFAULT NULL COMMENT '描述',
+    `enable_thinking` TINYINT(1) NOT NULL DEFAULT 0 COMMENT '是否启用思考模式（仅 api.deepseek.com 支持）',
+    `thinking_budget_tokens` INT DEFAULT NULL COMMENT '思考 Token 预算',
+    `supports_multimodal` TINYINT(1) NOT NULL DEFAULT 0 COMMENT '是否支持多模态（图片识别）',
     `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     PRIMARY KEY (`id`)

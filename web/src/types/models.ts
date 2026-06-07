@@ -192,6 +192,7 @@ export interface LLMModel {
   description: string;
   enableThinking?: boolean;
   thinkingBudgetTokens?: number;
+  supportsMultimodal?: boolean;
 }
 
 export interface DeepSeekBalanceInfo {

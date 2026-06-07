@@ -69,4 +69,9 @@ public class LLMConfig
     /// 思考 Token 预算（默认 8000，最小 1000）
     /// </summary>
     public int? ThinkingBudgetTokens { get; set; }
+
+    /// <summary>
+    /// 是否支持多模态（图片识别）
+    /// </summary>
+    public bool SupportsMultimodal { get; set; }
 }

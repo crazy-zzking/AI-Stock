@@ -96,21 +96,80 @@ public class EssayAnalyzerService : IEssayAnalyzer
         return result;
     }
 
-    public async Task<EssayAnalysisResult> AnalyzeImageAsync(string imageUrl, CancellationToken cancellationToken = default)
-    {
-        // OCR 功能需要接入第三方服务（如百度OCR、腾讯OCR等）
-        // 这里返回一个模拟结果
-        var result = new EssayAnalysisResult
-        {
-            OriginalContent = imageUrl,
-            ContentType = "image",
-            ParsedContent = "[OCR功能需要接入第三方服务]",
-            CredibilityScore = 50,
-            Conclusion = "图片分析功能需要接入OCR服务"
-        };
+    public Task<EssayAnalysisResult> AnalyzeImageAsync(string imageUrl, CancellationToken cancellationToken = default)
+        => AnalyzeImagesAsync(new[] { imageUrl }, null, cancellationToken);
 
+    public async Task<EssayAnalysisResult> AnalyzeImagesAsync(IReadOnlyList<string> imageUrls, string? accompanyingText = null, CancellationToken cancellationToken = default)
+    {
+        var urls = (imageUrls ?? Array.Empty<string>()).Where(u => !string.IsNullOrWhiteSpace(u)).ToList();
+        var originalContent = string.Join(",", urls);
+
+        if (urls.Count == 0)
+        {
+            // 无图片时退化为纯文本分析
+            return string.IsNullOrWhiteSpace(accompanyingText)
+                ? EmptyImageResult(originalContent, "无可分析的图片内容")
+                : await AnalyzeTextAsync(accompanyingText!, cancellationToken);
+        }
+
+        // 选一个支持多模态且优先级最高的可用模型
+        var models = await _llmService.GetAvailableModelsAsync();
+        var mmModel = models.Where(m => m.SupportsMultimodal).OrderBy(m => m.Priority).FirstOrDefault();
+        if (mmModel == null)
+        {
+            _logger.LogWarning("未配置支持多模态的 LLM 模型，跳过图片识别（{Count} 张）", urls.Count);
+            return EmptyImageResult(originalContent, "未配置支持多模态的 LLM 模型");
+        }
+
+        // 1. 多模态模型识别图片 → 文本（OCR + 描述）
+        string recognizedText;
+        try
+        {
+            var request = new LLMRequest
+            {
+                ModelId = mmModel.Id,
+                SystemPrompt = "你是一个图片信息识别助手。请准确识别图片中的所有文字，并简要描述与A股/股票相关的关键信息（如个股、概念、研报观点、走势图要点等）。只输出识别到的内容本身，不要添加解释或免责声明。",
+                UserPrompt = string.IsNullOrWhiteSpace(accompanyingText)
+                    ? "请识别以下图片中的全部文字与股票相关信息。"
+                    : $"配文：{accompanyingText}\n\n请结合配文，识别以下图片中的全部文字与股票相关信息。",
+                ImageUrls = urls
+            };
+
+            var response = await _llmService.SendAsync(request, cancellationToken);
+            if (!response.Success || string.IsNullOrWhiteSpace(response.Content))
+            {
+                _logger.LogWarning("多模态识别失败 model={Model}: {Error}", mmModel.Id, response.ErrorMessage);
+                return EmptyImageResult(originalContent, "图片识别失败：" + (response.ErrorMessage ?? "无返回内容"));
+            }
+            recognizedText = response.Content.Trim();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "多模态识别异常 model={Model}", mmModel.Id);
+            return EmptyImageResult(originalContent, "图片识别异常：" + ex.Message);
+        }
+
+        // 2. 把识别文本（含配文）复用文本分析管线，得到实体/情绪/可信度/摘要
+        var combinedText = string.IsNullOrWhiteSpace(accompanyingText)
+            ? recognizedText
+            : $"{accompanyingText}\n{recognizedText}";
+
+        var result = await AnalyzeTextAsync(combinedText, cancellationToken);
+        result.ContentType = "image";
+        result.OriginalContent = originalContent;
+        result.ParsedContent = recognizedText;
+        result.AddDataSource("llm", "多模态图片识别", $"识别 {urls.Count} 张图片（模型 {mmModel.Name}）", 1);
         return result;
     }
+
+    private static EssayAnalysisResult EmptyImageResult(string originalContent, string conclusion) => new()
+    {
+        OriginalContent = originalContent,
+        ContentType = "image",
+        ParsedContent = string.Empty,
+        CredibilityScore = 50,
+        Conclusion = conclusion
+    };
 
     public async Task<EssayAnalysisResult> AnalyzeAudioAsync(string audioUrl, CancellationToken cancellationToken = default)
     {
