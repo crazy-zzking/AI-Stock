@@ -17,6 +17,7 @@ public class LowDipStrategy : ISelectionStrategy
     public string Description => "规避追高，偏好低位、温和放量、回踩企稳的中小盘成长股（左侧/埋伏）";
     public string PreferredRegime => "弱市 / 震荡市";
     public bool ScanFullUniverse => false;
+    public bool UsesPatterns => false;
 
     public List<StockSelectionResult> Select(
         IReadOnlyList<ActivityScreener.ActivityHit> activePool,

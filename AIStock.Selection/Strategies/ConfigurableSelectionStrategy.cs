@@ -19,6 +19,7 @@ public class ConfigurableSelectionStrategy : WeightedSelectionStrategyBase
     public override string Description => _def.Description;
     public override string PreferredRegime => _def.PreferredRegime;
     public override bool ScanFullUniverse => _def.ScanFullUniverse;
+    public override bool UsesPatterns => _def.Filters.RequirePatterns is { Count: > 0 };
 
     protected override bool PassesHardFilter(
         DailyMarketSnapshotEntity s, SequenceFeatures seq, DragonTigerEntity? dt,

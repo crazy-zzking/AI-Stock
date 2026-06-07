@@ -35,7 +35,7 @@ public class SelectionController : ControllerBase
     public async Task<ActionResult> Strategies(CancellationToken ct)
     {
         var list = await _selection.ListStrategiesAsync(ct);
-        return Ok(list.Select(s => new { s.Key, s.Name, s.Description, s.PreferredRegime }));
+        return Ok(list.Select(s => new { s.Key, s.Name, s.Description, s.PreferredRegime, s.UsesPatterns }));
     }
 
     /// <summary>可选 K 线形态目录（key/name），供"K线形态"策略在选股时自选形态。</summary>

@@ -24,6 +24,12 @@ public interface ISelectionStrategy
     /// </summary>
     bool ScanFullUniverse { get; }
 
+    /// <summary>
+    /// 是否启用 K 线形态过滤（true=该策略用形态硬过滤，前端展示形态多选、可运行时自选形态）。
+    /// 供前端按能力判断，避免写死策略 key。
+    /// </summary>
+    bool UsesPatterns { get; }
+
     List<StockSelectionResult> Select(
         IReadOnlyList<ActivityScreener.ActivityHit> activePool,
         IReadOnlyDictionary<string, DragonTigerEntity> dragonTigerByCode,

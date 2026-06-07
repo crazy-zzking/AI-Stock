@@ -43,6 +43,7 @@ public class StrategyDefinitionService
         BuiltinStrategyDefinitions.LowDip(),
         BuiltinStrategyDefinitions.Trend(),
         BuiltinStrategyDefinitions.Theme(),
+        BuiltinStrategyDefinitions.KPattern(),
     };
 
     /// <summary>列出全部自建策略（按 key 排序）。</summary>
@@ -156,6 +157,12 @@ public class StrategyDefinitionService
             throw new StrategyDefValidationException("技术因子口径只能是 lowdip 或 trend");
         if (!FactorKindWhitelist.Contains(def.FactorKinds.Position))
             throw new StrategyDefValidationException("位置因子口径只能是 lowdip 或 trend");
+        if (def.Filters?.RequirePatterns is { Count: > 0 } pats)
+        {
+            var invalid = pats.Where(p => !CandlePatternAnalyzer.PatternKeys.Contains(p)).ToList();
+            if (invalid.Count > 0)
+                throw new StrategyDefValidationException($"未知的 K 线形态：{string.Join("、", invalid)}");
+        }
     }
 }
 

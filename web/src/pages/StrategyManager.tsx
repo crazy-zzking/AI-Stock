@@ -9,9 +9,9 @@ import {
 } from '@ant-design/icons';
 import {
   listStrategyDefs, getStrategyDefBuiltins, createStrategyDef,
-  updateStrategyDef, deleteStrategyDef,
+  updateStrategyDef, deleteStrategyDef, getSelectionPatterns,
 } from '../api';
-import type { StrategyDefItem, StrategyDefinition } from '../api';
+import type { StrategyDefItem, StrategyDefinition, PatternInfo } from '../api';
 
 const SEC_TITLE: React.CSSProperties = {
   fontWeight: 600, color: '#1677ff', margin: '4px 0 16px',
@@ -37,9 +37,10 @@ const emptyDefinition = (): StrategyDefinition => ({
     requireAboveMa20: false, requireHotConcept: false,
     excludeTraditionalBigCap: true, extremeRise20d: null,
     weakRegimeTightenRise20d: true, weakRegimeRequireInflow: true,
+    requirePatterns: [], requireAllPatterns: false,
   },
   factorKinds: { technical: 'lowdip', position: 'lowdip' },
-  penalty: 'limitup', coreLogicTemplate: null,
+  penalty: 'limitup', coreLogicTemplate: null, scanFullUniverse: false,
 });
 
 type FormShape = StrategyDefinition & { enabled: boolean };
@@ -53,10 +54,12 @@ const StrategyManager: React.FC = () => {
   const [modalOpen, setModalOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
+  const [patterns, setPatterns] = useState<PatternInfo[]>([]);
 
   useEffect(() => {
     loadList();
     getStrategyDefBuiltins().then((r) => setBuiltins(r.data || [])).catch(() => {});
+    getSelectionPatterns().then((r) => setPatterns(r.data || [])).catch(() => {});
   }, []);
 
   const loadList = async () => {
@@ -323,6 +326,42 @@ const StrategyManager: React.FC = () => {
                 label={<Tooltip title="20日涨幅极端硬顶(%)，留空不限；趋势用较大值如100只挡极端透支">极端追高硬顶(%)</Tooltip>}
               >
                 <InputNumber style={{ width: '100%' }} min={0} max={500} step={5} placeholder="留空=不限" />
+              </Form.Item>
+            </Col>
+          </Row>
+
+          <div style={SEC_TITLE}>K线形态过滤（可与上面的因子过滤组合）</div>
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item
+                name={['filters', 'requirePatterns']}
+                label={<Tooltip title="要求命中的 K 线形态；留空=不做形态过滤。选了即对该策略启用形态硬过滤">要求命中的形态（留空=不启用）</Tooltip>}
+              >
+                <Select
+                  mode="multiple"
+                  allowClear
+                  placeholder="选择要命中的形态"
+                  options={patterns.map((p) => ({ value: p.key, label: p.name }))}
+                  maxTagCount="responsive"
+                />
+              </Form.Item>
+            </Col>
+            <Col span={6}>
+              <Form.Item
+                name={['filters', 'requireAllPatterns']}
+                label={<Tooltip title="开=必须同时命中所选全部形态；关=命中任一即可">命中要求</Tooltip>}
+                valuePropName="checked"
+              >
+                <Switch checkedChildren="全部命中" unCheckedChildren="命中任一" />
+              </Form.Item>
+            </Col>
+            <Col span={6}>
+              <Form.Item
+                name="scanFullUniverse"
+                label={<Tooltip title="开=跳过活跃度粗筛、扫描全市场（形态策略建议开，形态可能出现在非活跃股）">全市场扫描</Tooltip>}
+                valuePropName="checked"
+              >
+                <Switch checkedChildren="全市场" unCheckedChildren="活跃池" />
               </Form.Item>
             </Col>
           </Row>

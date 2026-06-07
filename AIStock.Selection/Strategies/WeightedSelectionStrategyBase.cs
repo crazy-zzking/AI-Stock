@@ -14,6 +14,7 @@ public abstract class WeightedSelectionStrategyBase : ISelectionStrategy
     public abstract string Description { get; }
     public abstract string PreferredRegime { get; }
     public virtual bool ScanFullUniverse => false;
+    public virtual bool UsesPatterns => false;
 
     public List<StockSelectionResult> Select(
         IReadOnlyList<ActivityScreener.ActivityHit> activePool,

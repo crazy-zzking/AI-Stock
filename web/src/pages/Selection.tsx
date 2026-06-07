@@ -46,7 +46,7 @@ const Selection: React.FC = () => {
   const [selectedPatterns, setSelectedPatterns] = useState<string[]>([]);
 
   const currentStrategy = strategies.find((s) => s.key === strategy);
-  const isPatternStrategy = strategy === 'kpattern';
+  const isPatternStrategy = currentStrategy?.usesPatterns === true;
 
   const load = async (n: number) => {
     setLoading(true);

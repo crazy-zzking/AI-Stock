@@ -73,7 +73,7 @@ export const screenSelection = (criteria?: Record<string, unknown>, strategy?: s
 export const rerunSelection = (criteria?: Record<string, unknown>, strategy?: string) =>
   api.post('/selection/run', criteria || {}, { params: strategy ? { strategy } : {} });
 // 可用选股策略清单
-export interface StrategyInfo { key: string; name: string; description: string; preferredRegime: string; }
+export interface StrategyInfo { key: string; name: string; description: string; preferredRegime: string; usesPatterns?: boolean; }
 export const getStrategies = () => api.get<StrategyInfo[]>('/selection/strategies');
 // 可选 K 线形态目录（供「K线形态」策略自选形态）
 export interface PatternInfo { key: string; name: string; }
@@ -145,12 +145,14 @@ export interface StrategyFilters {
   requireAboveMa20: boolean; requireHotConcept: boolean;
   excludeTraditionalBigCap: boolean; extremeRise20d: number | null;
   weakRegimeTightenRise20d: boolean; weakRegimeRequireInflow: boolean;
+  requirePatterns?: string[]; requireAllPatterns?: boolean;
 }
 export interface StrategyFactorKinds { technical: 'lowdip' | 'trend'; position: 'lowdip' | 'trend'; }
 export interface StrategyDefinition {
   key: string; name: string; description: string; preferredRegime: string;
   filters: StrategyFilters; factorKinds: StrategyFactorKinds;
   penalty: 'none' | 'limitup'; coreLogicTemplate?: string | null;
+  scanFullUniverse?: boolean;
 }
 export interface StrategyDefItem {
   id: number; enabled: boolean; createdAt: string; updatedAt: string;
