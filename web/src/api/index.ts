@@ -40,6 +40,8 @@ export const getProviderStatus = () =>
   api.get<ProviderStatus[]>('/stock/providers/status');
 
 // ============ 交易执行 ============
+export const getTradingStatus = () =>
+  api.get<{ mode: string; halted: boolean; todayOrderCount: number }>('/execution/trading/status');
 export const getPositions = () => api.get<PositionSummary>('/execution/positions');
 export const refreshPositions = () => api.post<PositionSummary>('/execution/positions/refresh');
 export const getPosition = (code: string) =>

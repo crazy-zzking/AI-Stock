@@ -1,14 +1,16 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Layout, Menu, Tabs } from 'antd';
+import { Layout, Menu, Tabs, Dropdown, Tag, Button, Tooltip, theme } from 'antd';
 import {
   DashboardOutlined, StockOutlined, RobotOutlined, SettingOutlined, ThunderboltOutlined,
   ApartmentOutlined, HistoryOutlined, ControlOutlined, NodeIndexOutlined, SearchOutlined,
   FundOutlined, FireOutlined, FileSearchOutlined, MessageOutlined, FileTextOutlined,
   LineChartOutlined, DeploymentUnitOutlined, ToolOutlined, SlidersOutlined, ExperimentOutlined,
-  PartitionOutlined,
+  PartitionOutlined, MenuFoldOutlined, MenuUnfoldOutlined, BulbOutlined, BulbFilled,
 } from '@ant-design/icons';
 import { useNavigate, useLocation, useOutlet } from 'react-router-dom';
 import { KeepAlive, useKeepAliveRef } from 'keepalive-for-react';
+import { useThemeMode } from '../contexts/ThemeContext';
+import { getTradingStatus } from '../api';
 
 const { Header, Sider, Content } = Layout;
 
@@ -55,18 +57,35 @@ const menuItems = [
 /** 路径 → 所属一级分组 key（用于自动展开） */
 const groupOfPath = (path: string) => GROUPS.find((g) => g.children.includes(path))?.key;
 
+const TABS_STORAGE_KEY = 'aistock.openTabs';
+
+/** 读取已持久化的标签页（过滤掉已失效的路由） */
+const loadTabs = (): string[] => {
+  try {
+    const raw = JSON.parse(localStorage.getItem(TABS_STORAGE_KEY) || '[]') as string[];
+    const valid = raw.filter((p) => p === '/' || p in ROUTE_META);
+    return valid.includes('/') ? valid : ['/', ...valid];
+  } catch {
+    return ['/'];
+  }
+};
+
 const MainLayout: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const outlet = useOutlet();
   const aliveRef = useKeepAliveRef();
   const path = location.pathname;
+  const { token } = theme.useToken();
+  const { dark, toggle } = useThemeMode();
 
-  const [openTabs, setOpenTabs] = useState<string[]>(['/']);
+  const [collapsed, setCollapsed] = useState(false);
+  const [openTabs, setOpenTabs] = useState<string[]>(loadTabs);
   const [openKeys, setOpenKeys] = useState<string[]>(() => {
     const g = groupOfPath(path);
     return g ? [g] : [];
   });
+  const [tradeStatus, setTradeStatus] = useState<{ mode: string; halted: boolean } | null>(null);
 
   // 路由变化：补开标签页 + 自动展开所属分组
   useEffect(() => {
@@ -75,10 +94,22 @@ const MainLayout: React.FC = () => {
     if (g) setOpenKeys((keys) => (keys.includes(g) ? keys : [...keys, g]));
   }, [path]);
 
-  const tabItems = useMemo(
-    () => openTabs.map((p) => ({ key: p, label: ROUTE_META[p]?.label ?? p, closable: p !== '/' })),
-    [openTabs],
-  );
+  // 标签页持久化
+  useEffect(() => {
+    localStorage.setItem(TABS_STORAGE_KEY, JSON.stringify(openTabs));
+  }, [openTabs]);
+
+  // 交易闸门状态（模式/熔断），每 30s 刷新
+  useEffect(() => {
+    let alive = true;
+    const fetchStatus = () =>
+      getTradingStatus()
+        .then((r) => { if (alive) setTradeStatus(r.data); })
+        .catch(() => { if (alive) setTradeStatus(null); });
+    fetchStatus();
+    const timer = setInterval(fetchStatus, 30000);
+    return () => { alive = false; clearInterval(timer); };
+  }, []);
 
   const removeTab = (target: string) => {
     setOpenTabs((tabs) => {
@@ -90,15 +121,77 @@ const MainLayout: React.FC = () => {
       }
       return next;
     });
-    // 释放该标签页的 keep-alive 缓存
     aliveRef.current?.destroy(target);
   };
 
+  // 关闭其它标签（保留首页与目标标签）
+  const closeOthers = (keep: string) => {
+    setOpenTabs((tabs) => {
+      const next = tabs.filter((t) => t === '/' || t === keep);
+      tabs.forEach((t) => { if (!next.includes(t)) aliveRef.current?.destroy(t); });
+      return next;
+    });
+    if (path !== '/' && path !== keep) navigate(keep);
+  };
+
+  // 关闭全部（仅保留首页）
+  const closeAll = () => {
+    setOpenTabs((tabs) => {
+      tabs.forEach((t) => { if (t !== '/') aliveRef.current?.destroy(t); });
+      return ['/'];
+    });
+    navigate('/');
+  };
+
+  const tabItems = useMemo(
+    () =>
+      openTabs.map((p) => ({
+        key: p,
+        closable: p !== '/',
+        label: (
+          <Dropdown
+            trigger={['contextMenu']}
+            menu={{
+              items: [
+                { key: 'close', label: '关闭', disabled: p === '/' },
+                { key: 'others', label: '关闭其它' },
+                { key: 'all', label: '关闭全部' },
+              ],
+              onClick: ({ key }) => {
+                if (key === 'close') removeTab(p);
+                else if (key === 'others') closeOthers(p);
+                else if (key === 'all') closeAll();
+              },
+            }}
+          >
+            <span>{ROUTE_META[p]?.label ?? p}</span>
+          </Dropdown>
+        ),
+      })),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [openTabs],
+  );
+
+  const modeTag = tradeStatus && (
+    tradeStatus.mode === 'Live'
+      ? <Tag color="red">实盘</Tag>
+      : <Tag color="blue">模拟</Tag>
+  );
+
   return (
-    <Layout style={{ minHeight: '100vh' }}>
-      <Sider theme="dark" width={200} breakpoint="lg" collapsedWidth={0}>
-        <div style={{ height: 48, margin: 12, color: '#fff', fontSize: 18, fontWeight: 'bold', textAlign: 'center', lineHeight: '48px' }}>
-          AI-Stock
+    <Layout style={{ height: '100vh' }}>
+      <Sider
+        theme="dark"
+        width={200}
+        collapsible
+        collapsed={collapsed}
+        trigger={null}
+        breakpoint="lg"
+        onBreakpoint={(broken) => setCollapsed(broken)}
+        style={{ overflow: 'auto' }}
+      >
+        <div style={{ height: 48, margin: 12, color: '#fff', fontSize: collapsed ? 14 : 18, fontWeight: 'bold', textAlign: 'center', lineHeight: '48px', whiteSpace: 'nowrap', overflow: 'hidden' }}>
+          {collapsed ? 'AI' : 'AI-Stock'}
         </div>
         <Menu
           theme="dark"
@@ -111,8 +204,21 @@ const MainLayout: React.FC = () => {
         />
       </Sider>
       <Layout>
-        <Header style={{ background: '#fff', padding: '0 24px', fontSize: 16, fontWeight: 600 }}>
-          AI 自主交易系统
+        <Header style={{ display: 'flex', alignItems: 'center', background: token.colorBgContainer, padding: '0 16px', borderBottom: `1px solid ${token.colorBorderSecondary}` }}>
+          <Button
+            type="text"
+            icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
+            onClick={() => setCollapsed((c) => !c)}
+            style={{ fontSize: 16 }}
+          />
+          <span style={{ fontSize: 16, fontWeight: 600, marginLeft: 8 }}>AI 自主交易系统</span>
+          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
+            {modeTag}
+            {tradeStatus?.halted && <Tag color="red">熔断</Tag>}
+            <Tooltip title={dark ? '切换浅色' : '切换深色'}>
+              <Button type="text" icon={dark ? <BulbFilled /> : <BulbOutlined />} onClick={toggle} />
+            </Tooltip>
+          </div>
         </Header>
         <Tabs
           type="editable-card"
@@ -121,10 +227,10 @@ const MainLayout: React.FC = () => {
           items={tabItems}
           onChange={(key) => navigate(key)}
           onEdit={(targetKey, action) => { if (action === 'remove') removeTab(targetKey as string); }}
-          style={{ padding: '6px 12px 0', background: '#fff', borderBottom: '1px solid #f0f0f0' }}
+          style={{ flex: 'none', padding: '6px 12px 0', background: token.colorBgContainer, borderBottom: `1px solid ${token.colorBorderSecondary}` }}
           tabBarStyle={{ marginBottom: 0 }}
         />
-        <Content style={{ margin: 16, padding: 20, background: '#fff', minHeight: 280, borderRadius: 8 }}>
+        <Content style={{ flex: 1, overflow: 'auto', margin: 16, padding: 20, background: token.colorBgContainer, borderRadius: 8 }}>
           <KeepAlive activeCacheKey={path} aliveRef={aliveRef} max={20}>
             {outlet}
           </KeepAlive>

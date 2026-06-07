@@ -1,7 +1,8 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
-import { ConfigProvider } from 'antd';
+import { ConfigProvider, theme } from 'antd';
 import zhCN from 'antd/locale/zh_CN';
+import { ThemeProvider, useThemeMode } from './contexts/ThemeContext';
 import ErrorBoundary from './components/ErrorBoundary';
 import MainLayout from './layouts/MainLayout';
 import Dashboard from './pages/Dashboard';
@@ -25,9 +26,13 @@ import SelectionConfig from './pages/SelectionConfig';
 import StrategyManager from './pages/StrategyManager';
 import Backtest from './pages/Backtest';
 
-function App() {
+function AppShell() {
+  const { dark } = useThemeMode();
   return (
-    <ConfigProvider locale={zhCN}>
+    <ConfigProvider
+      locale={zhCN}
+      theme={{ algorithm: dark ? theme.darkAlgorithm : theme.defaultAlgorithm }}
+    >
       <ErrorBoundary>
         <BrowserRouter>
           <Routes>
@@ -57,6 +62,14 @@ function App() {
         </BrowserRouter>
       </ErrorBoundary>
     </ConfigProvider>
+  );
+}
+
+function App() {
+  return (
+    <ThemeProvider>
+      <AppShell />
+    </ThemeProvider>
   );
 }
 
