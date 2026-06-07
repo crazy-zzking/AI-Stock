@@ -1,3 +1,6 @@
+using System.Diagnostics;
+using System.Runtime.InteropServices;
+using System.Text;
 using System.Text.Json;
 using AIStock.Core.Interfaces;
 using AIStock.Core.Models;
@@ -7,8 +10,10 @@ using Microsoft.Extensions.Options;
 namespace AIStock.Intelligence.Collectors;
 
 /// <summary>
-/// 知识星球采集器 — 经 zsxq API + access_token 抓取。
-/// 防封：每次请求前随机抖动延迟、真实 UA、保守频率（调度层控制低频）。
+/// 知识星球采集器。两种方式：
+/// 1) UseCli=true（推荐）：调官方 zsxq-cli（OAuth 密钥）取 JSON，绕开签名/401；
+/// 2) UseCli=false：旧的 HTTP + access_token cookie 抓取（已易被 401，作回退）。
+/// 防封：请求前随机抖动、保守频率（调度层控制低频）。
 /// </summary>
 public class KnowledgeStarCollectorService : IKnowledgeStarCollector
 {
@@ -45,7 +50,63 @@ public class KnowledgeStarCollectorService : IKnowledgeStarCollector
         return all;
     }
 
-    public async Task<List<KnowledgeStarContent>> GetGroupContentAsync(string groupId, int count = 20, CancellationToken cancellationToken = default)
+    public Task<List<KnowledgeStarContent>> GetGroupContentAsync(string groupId, int count = 20, CancellationToken cancellationToken = default)
+        => _options.UseCli
+            ? GetGroupContentViaCliAsync(groupId, count, cancellationToken)
+            : GetGroupContentViaHttpAsync(groupId, count, cancellationToken);
+
+    /// <summary>
+    /// 经官方 zsxq-cli 取最新主题（OAuth 密钥，需宿主已 auth login）。
+    /// </summary>
+    private async Task<List<KnowledgeStarContent>> GetGroupContentViaCliAsync(string groupId, int count, CancellationToken cancellationToken)
+    {
+        var result = new List<KnowledgeStarContent>();
+        try
+        {
+            await RandomDelayAsync(cancellationToken);
+
+            // zsxq-cli group +topics --group-id <id> --limit <1..30> --json
+            var limit = Math.Clamp(count, 1, 30);
+            var args = $"group +topics --group-id {groupId} --limit {limit} --json";
+            var stdout = await RunCliAsync(args, cancellationToken);
+            if (string.IsNullOrWhiteSpace(stdout))
+            {
+                _logger.LogWarning("知识星球 CLI 无输出 group={Group}（可能未安装 zsxq-cli 或未 auth login）", groupId);
+                return result;
+            }
+
+            using var doc = JsonDocument.Parse(stdout);
+            var root = doc.RootElement;
+            if (root.TryGetProperty("success", out var ok) && ok.ValueKind == JsonValueKind.False)
+            {
+                _logger.LogWarning("知识星球 CLI 返回 success=false group={Group}", groupId);
+                return result;
+            }
+            if (!root.TryGetProperty("topics_brief", out var topics) || topics.ValueKind != JsonValueKind.Array)
+                return result;
+
+            foreach (var topic in topics.EnumerateArray())
+            {
+                try
+                {
+                    result.Add(ParseCliTopic(topic));
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogDebug(ex, "解析星球主题失败(CLI)");
+                }
+            }
+
+            _logger.LogInformation("知识星球(CLI) group={Group} 采集 {Count} 条", groupId, result.Count);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "知识星球 CLI 采集异常 group={Group}", groupId);
+        }
+        return result;
+    }
+
+    private async Task<List<KnowledgeStarContent>> GetGroupContentViaHttpAsync(string groupId, int count, CancellationToken cancellationToken)
     {
         var result = new List<KnowledgeStarContent>();
         if (string.IsNullOrWhiteSpace(_options.AccessToken))
@@ -136,8 +197,12 @@ public class KnowledgeStarCollectorService : IKnowledgeStarCollector
             if (talk.TryGetProperty("images", out var imgs) && imgs.ValueKind == JsonValueKind.Array)
             {
                 foreach (var img in imgs.EnumerateArray())
-                    if (img.TryGetProperty("large", out var large) && large.TryGetProperty("url", out var u))
-                        imageUrls.Add(u.GetString() ?? "");
+                {
+                    // 优先取原图（OCR 准确率更高）；缺失时回退 large / thumbnail，避免漏图
+                    var url = PickImageUrl(img, "original") ?? PickImageUrl(img, "large") ?? PickImageUrl(img, "thumbnail");
+                    if (!string.IsNullOrEmpty(url))
+                        imageUrls.Add(url);
+                }
             }
         }
         else if (topic.TryGetProperty("question", out var q) && q.TryGetProperty("text", out var qt))
@@ -161,6 +226,131 @@ public class KnowledgeStarCollectorService : IKnowledgeStarCollector
             ContentType = imageUrls.Count > 0 ? "image" : "text",
             ImageUrls = imageUrls
         };
+    }
+
+    /// <summary>
+    /// 解析 zsxq-cli 的 topics_brief 项（结构较扁：content / owner.name / images[] 同级）。
+    /// </summary>
+    private static KnowledgeStarContent ParseCliTopic(JsonElement topic)
+    {
+        var topicId = topic.TryGetProperty("topic_id", out var idEl)
+            ? (idEl.ValueKind == JsonValueKind.Number ? idEl.GetInt64().ToString() : idEl.GetString() ?? "")
+            : "";
+
+        var text = topic.TryGetProperty("content", out var c) ? c.GetString() ?? "" : "";
+
+        var author = "";
+        if (topic.TryGetProperty("owner", out var owner) && owner.TryGetProperty("name", out var n))
+            author = n.GetString() ?? "";
+
+        var imageUrls = new List<string>();
+        if (topic.TryGetProperty("images", out var imgs) && imgs.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var img in imgs.EnumerateArray())
+            {
+                // 优先取原图（OCR 准确率更高）；缺失时回退 large / thumbnail，避免漏图
+                var url = PickImageUrl(img, "original") ?? PickImageUrl(img, "large") ?? PickImageUrl(img, "thumbnail");
+                if (!string.IsNullOrEmpty(url))
+                    imageUrls.Add(url);
+            }
+        }
+
+        var createTime = topic.TryGetProperty("create_time", out var ct2) && DateTime.TryParse(ct2.GetString(), out var dt)
+            ? dt
+            : DateTime.Now;
+
+        var title = text.Length > 40 ? text[..40] : text;
+
+        return new KnowledgeStarContent
+        {
+            Title = title,
+            Content = text,
+            Author = author,
+            PublishTime = createTime,
+            Url = $"https://wx.zsxq.com/dweb2/index/topic_detail/{topicId}",
+            ContentType = imageUrls.Count > 0 ? "image" : "text",
+            ImageUrls = imageUrls
+        };
+    }
+
+    /// <summary>
+    /// 从单个 image 对象按指定尺寸字段取 url（original/large/thumbnail）
+    /// </summary>
+    private static string? PickImageUrl(JsonElement img, string size)
+    {
+        if (img.TryGetProperty(size, out var node) &&
+            node.TryGetProperty("url", out var u) &&
+            u.ValueKind == JsonValueKind.String)
+        {
+            var url = u.GetString();
+            return string.IsNullOrEmpty(url) ? null : url;
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// 调用 zsxq-cli 并返回 stdout。Windows 经 cmd /c（解析 .cmd 包装），其它平台直接执行。
+    /// </summary>
+    private async Task<string?> RunCliAsync(string arguments, CancellationToken ct)
+    {
+        var isWin = RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
+        var psi = new ProcessStartInfo
+        {
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            StandardOutputEncoding = Encoding.UTF8,
+            StandardErrorEncoding = Encoding.UTF8,
+        };
+        if (isWin)
+        {
+            psi.FileName = "cmd.exe";
+            psi.Arguments = $"/c {_options.CliPath} {arguments}";
+        }
+        else
+        {
+            psi.FileName = _options.CliPath;
+            psi.Arguments = arguments;
+        }
+
+        using var proc = new Process { StartInfo = psi };
+        try
+        {
+            if (!proc.Start())
+                return null;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "启动 zsxq-cli 失败（CliPath={Path}）", _options.CliPath);
+            return null;
+        }
+
+        var stdoutTask = proc.StandardOutput.ReadToEndAsync(ct);
+        var stderrTask = proc.StandardError.ReadToEndAsync(ct);
+
+        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        timeoutCts.CancelAfter(TimeSpan.FromSeconds(Math.Max(5, _options.CliTimeoutSeconds)));
+        try
+        {
+            await proc.WaitForExitAsync(timeoutCts.Token);
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            _logger.LogWarning("zsxq-cli 超时（{Sec}s），已终止", _options.CliTimeoutSeconds);
+            try { proc.Kill(true); } catch { /* ignore */ }
+            return null;
+        }
+
+        var stdout = await stdoutTask;
+        if (proc.ExitCode != 0)
+        {
+            var stderr = await stderrTask;
+            _logger.LogWarning("zsxq-cli 非零退出 code={Code}: {Err}", proc.ExitCode,
+                string.IsNullOrWhiteSpace(stderr) ? stdout : stderr);
+            return null;
+        }
+        return stdout;
     }
 
     private async Task RandomDelayAsync(CancellationToken ct)

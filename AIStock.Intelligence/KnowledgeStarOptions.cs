@@ -7,10 +7,22 @@ public class KnowledgeStarOptions
 {
     public const string SectionName = "KnowledgeStar";
 
-    /// <summary>zsxq access_token（浏览器登录后从 cookie 复制）</summary>
+    /// <summary>
+    /// 采集方式：true = 走官方 zsxq-cli（OAuth 密钥，推荐，绕开签名/401）；
+    /// false = 旧的 HTTP + access_token cookie 抓取（已易被 401，仅作回退）。
+    /// </summary>
+    public bool UseCli { get; set; }
+
+    /// <summary>zsxq-cli 可执行名/路径（默认全局命令 zsxq-cli）。需在宿主完成一次 auth login。</summary>
+    public string CliPath { get; set; } = "zsxq-cli";
+
+    /// <summary>CLI 单次调用超时（秒）</summary>
+    public int CliTimeoutSeconds { get; set; } = 30;
+
+    /// <summary>zsxq access_token（浏览器登录后从 cookie 复制）。仅 UseCli=false 时使用。</summary>
     public string AccessToken { get; set; } = string.Empty;
 
-    /// <summary>API 基址</summary>
+    /// <summary>API 基址。仅 UseCli=false 时使用。</summary>
     public string BaseUrl { get; set; } = "https://api.zsxq.com/v2";
 
     /// <summary>要采集的星球 group_id 列表</summary>
