@@ -80,9 +80,22 @@ public class StockSelectionService
                 ? Math.Round(regime.Indices.Average(i => i.Rise20d), 2) : null,
         };
 
-        var activePool = ActivityScreener.Screen(latest, criteria);
+        // 全市场扫描策略（如形态类）跳过活跃度粗筛，对全量快照打分；其余策略仍走活跃池
+        var scanAll = strategy.ScanFullUniverse;
+        var activePool = scanAll
+            ? ActivityScreener.ScreenAll(latest, criteria)
+            : ActivityScreener.Screen(latest, criteria);
+
+        // K 线形态：全扫时对全市场算（不按代码过滤，避免巨型 IN）；否则只对活跃池算（控成本）
+        var latestDate = latest.Max(s => s.Date);
+        var patternCodes = scanAll
+            ? null
+            : activePool.Select(h => h.Snapshot.Code).Distinct().ToList();
+        context.PatternsByCode = await LoadPatternsAsync(patternCodes, latestDate, ct);
+
         var results = strategy.Select(activePool, dragonByCode, sequenceByCode, criteria, context);
         EnrichIndustryConcepts(results, context);
+        EnrichPatterns(results, context);
         _logger.LogInformation("选股完成：策略[{Strategy}]，大盘[{Regime}]，活跃池 {Pool} 只，入选 TOP {Top}，当日热门题材 {Hot} 个",
             strategy.Name, regime.Level, activePool.Count, results.Count, hotConcepts.Count);
         return results;
@@ -225,6 +238,55 @@ public class StockSelectionService
         return (industryByCode, strength);
     }
 
+    /// <summary>
+    /// 取最近约 120 自然日（覆盖 ~80 交易日，满足二次金叉等需 ≥25 根 K 线的形态）的日 K，
+    /// 逐只识别当日命中的 K 线形态。无 K 线数据的股票不入字典（视为未命中）。
+    /// codes 为 null=全市场扫描（不按代码过滤）；否则只取指定代码。
+    /// </summary>
+    private async Task<Dictionary<string, CandlePatternFeatures>> LoadPatternsAsync(
+        List<string>? codes, DateTime latestDate, CancellationToken ct)
+    {
+        if (codes != null && codes.Count == 0) return new();
+        const string interval = nameof(KlineInterval.Daily);
+        var since = latestDate.AddDays(-120);
+
+        var query = _db.KlineData
+            .Where(k => k.Interval == interval && k.DateTime >= since && k.DateTime <= latestDate);
+        if (codes != null)
+            query = query.Where(k => codes.Contains(k.Code));
+
+        var bars = (await query
+                .Select(k => new { k.Code, k.DateTime, k.Open, k.High, k.Low, k.Close, k.Volume })
+                .ToListAsync(ct))
+            .GroupBy(k => k.Code)
+            .ToDictionary(g => g.Key, g => g.OrderBy(x => x.DateTime).ToList());
+
+        var result = new Dictionary<string, CandlePatternFeatures>(bars.Count);
+        foreach (var (code, list) in bars)
+        {
+            var candles = list
+                .Select(b => new CandleBar(b.Open, b.High, b.Low, b.Close, b.Volume))
+                .ToList();
+            var pf = CandlePatternAnalyzer.Analyze(candles);
+            if (pf.Any) result[code] = pf;
+        }
+        return result;
+    }
+
+    /// <summary>把命中的 K 线形态作为标签补到结果上（展示用），复用已算好的上下文。</summary>
+    private static void EnrichPatterns(List<StockSelectionResult> results, SelectionContext ctx)
+    {
+        foreach (var r in results)
+        {
+            if (!ctx.PatternsByCode.TryGetValue(r.Code, out var pf) || !pf.Any) continue;
+            foreach (var key in pf.Hits)
+            {
+                var tag = $"形态·{CandlePatternAnalyzer.DisplayName(key)}";
+                if (!r.Tags.Contains(tag)) r.Tags.Add(tag);
+            }
+        }
+    }
+
     /// <summary>补充展示用的行业、概念/题材（命中热门题材的概念优先排序并标记），复用已算好的上下文。</summary>
     private static void EnrichIndustryConcepts(List<StockSelectionResult> results, SelectionContext ctx)
     {
@@ -358,6 +420,10 @@ public class StockSelectionService
                 Name = p.Name,
                 SelectClose = p.Close,
                 SelectChangePercent = p.ChangePercent,
+                CoreLogic = p.CoreLogic,
+                Tags = p.Tags ?? new List<string>(),
+                RatingStars = p.RatingStars,
+                TotalScore = p.TotalScore,
             };
 
             if (bars.TryGetValue(p.Code, out var list) && list.Count > 0)

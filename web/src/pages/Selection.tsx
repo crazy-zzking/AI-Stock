@@ -5,8 +5,8 @@ import {
 } from 'antd';
 import { ReloadOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
-import { getLatestSelection, rerunSelection, getStrategies } from '../api';
-import type { StrategyInfo } from '../api';
+import { getLatestSelection, rerunSelection, getStrategies, getSelectionPatterns } from '../api';
+import type { StrategyInfo, PatternInfo } from '../api';
 import { pct, upDownColor as upDown } from '../utils/format';
 
 interface FactorScores {
@@ -42,8 +42,11 @@ const Selection: React.FC = () => {
   const [list, setList] = useState<SelectionResult[]>([]);
   const [strategies, setStrategies] = useState<StrategyInfo[]>([]);
   const [strategy, setStrategy] = useState<string>('lowdip');
+  const [patterns, setPatterns] = useState<PatternInfo[]>([]);
+  const [selectedPatterns, setSelectedPatterns] = useState<string[]>([]);
 
   const currentStrategy = strategies.find((s) => s.key === strategy);
+  const isPatternStrategy = strategy === 'kpattern';
 
   const load = async (n: number) => {
     setLoading(true);
@@ -61,7 +64,9 @@ const Selection: React.FC = () => {
   const rerun = async (n: number) => {
     setRerunning(true);
     try {
-      const res = await rerunSelection({ topN: n }, strategy);
+      const criteria: Record<string, unknown> = { topN: n };
+      if (isPatternStrategy && selectedPatterns.length > 0) criteria.patterns = selectedPatterns;
+      const res = await rerunSelection(criteria, strategy);
       setList(res.data || []);
       message.success(`已用「${currentStrategy?.name ?? strategy}」策略重新选股`);
     } catch {
@@ -74,6 +79,7 @@ const Selection: React.FC = () => {
   useEffect(() => {
     load(topN);
     getStrategies().then((res) => setStrategies(res.data || [])).catch(() => {});
+    getSelectionPatterns().then((res) => setPatterns(res.data || [])).catch(() => {});
     /* eslint-disable-next-line */
   }, []);
 
@@ -92,7 +98,22 @@ const Selection: React.FC = () => {
               placeholder="策略"
             />
           </Tooltip>
-          <InputNumber min={1} max={20} value={topN} onChange={(v) => setTopN(v || 5)} size="small" style={{ width: 70 }} />
+          <InputNumber min={1} value={topN} onChange={(v) => setTopN(v || 5)} size="small" style={{ width: 70 }} />
+          {isPatternStrategy && (
+            <Tooltip title="选择要命中的 K 线形态（命中任一即入选；留空=全部形态）">
+              <Select
+                mode="multiple"
+                allowClear
+                size="small"
+                style={{ minWidth: 220, maxWidth: 420 }}
+                value={selectedPatterns}
+                onChange={setSelectedPatterns}
+                options={patterns.map((p) => ({ value: p.key, label: p.name }))}
+                placeholder="形态（留空=全部）"
+                maxTagCount="responsive"
+              />
+            </Tooltip>
+          )}
           <Button icon={<ReloadOutlined />} size="small" onClick={() => load(topN)}>刷新</Button>
           <Tooltip title="按所选策略重新选股并新增一条记录（不覆盖历史；刷新只读最近一次记录，盘中不跳动）">
             <Button size="small" type="primary" loading={rerunning} onClick={() => rerun(topN)}>重新选股</Button>

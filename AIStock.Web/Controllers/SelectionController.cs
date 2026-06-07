@@ -38,6 +38,11 @@ public class SelectionController : ControllerBase
         return Ok(list.Select(s => new { s.Key, s.Name, s.Description, s.PreferredRegime }));
     }
 
+    /// <summary>可选 K 线形态目录（key/name），供"K线形态"策略在选股时自选形态。</summary>
+    [HttpGet("patterns")]
+    public ActionResult Patterns()
+        => Ok(CandlePatternAnalyzer.PatternKeys.Select(k => new { key = k, name = CandlePatternAnalyzer.DisplayName(k) }));
+
     /// <summary>按自定义条件实时选股（不落库，调试/试参用）。strategy 选策略(默认 lowdip)；body 为空则用该策略生效配置。</summary>
     [HttpPost("screen")]
     public async Task<ActionResult<List<StockSelectionResult>>> Screen(

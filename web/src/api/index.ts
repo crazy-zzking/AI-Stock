@@ -73,6 +73,9 @@ export const rerunSelection = (criteria?: Record<string, unknown>, strategy?: st
 // 可用选股策略清单
 export interface StrategyInfo { key: string; name: string; description: string; preferredRegime: string; }
 export const getStrategies = () => api.get<StrategyInfo[]>('/selection/strategies');
+// 可选 K 线形态目录（供「K线形态」策略自选形态）
+export interface PatternInfo { key: string; name: string; }
+export const getSelectionPatterns = () => api.get<PatternInfo[]>('/selection/patterns');
 
 // ============ 选股回测 ============
 export interface BacktestTradeDto {

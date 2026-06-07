@@ -39,6 +39,15 @@ public class SelectionCriteria
     /// <summary>是否启用 LLM 生成核心逻辑（默认规则模板）</summary>
     public bool UseLlmNarrative { get; set; } = false;
 
+    /// <summary>
+    /// 运行时选择的 K 线形态键（取值见 CandlePatternAnalyzer.PatternKeys）。
+    /// 仅对启用形态过滤的策略（如 kpattern）生效：非空时覆盖策略定义里的形态列表；空=用策略默认（全部形态）。
+    /// </summary>
+    public List<string> Patterns { get; set; } = new();
+
+    /// <summary>形态过滤是否要求全部命中（默认 false=命中任一即可）。</summary>
+    public bool RequireAllPatterns { get; set; } = false;
+
     /// <summary>多因子打分权重 + 大盘环境系数（默认值即引擎历史硬写值，配置中心可覆盖）</summary>
     public SelectionWeights Weights { get; set; } = new();
 }
@@ -208,6 +217,16 @@ public class SelectionPerformanceItem
     public decimal? MaxDropPercent { get; set; }
     /// <summary>已观察的前进交易日数</summary>
     public int ForwardDays { get; set; }
+
+    // —— 选中原因（选股当时记录，供历史回看）——
+    /// <summary>选股引擎当时生成的核心逻辑（一句话原因）</summary>
+    public string CoreLogic { get; set; } = string.Empty;
+    /// <summary>选中时的标签（形态/主力/题材等）</summary>
+    public List<string> Tags { get; set; } = new();
+    /// <summary>选中时的评级（1-5 星）</summary>
+    public int RatingStars { get; set; }
+    /// <summary>选中时的综合评分</summary>
+    public decimal TotalScore { get; set; }
 }
 
 /// <summary>

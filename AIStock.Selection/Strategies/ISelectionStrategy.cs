@@ -18,6 +18,12 @@ public interface ISelectionStrategy
     /// <summary>该策略偏好的大盘环境（前端提示用）。</summary>
     string PreferredRegime { get; }
 
+    /// <summary>
+    /// 是否扫描全市场所有股票（true=跳过第一级活跃度粗筛，对全量快照打分；false=只在活跃池里选）。
+    /// 形态类策略需要全扫，因为形态可能出现在非活跃股上。
+    /// </summary>
+    bool ScanFullUniverse { get; }
+
     List<StockSelectionResult> Select(
         IReadOnlyList<ActivityScreener.ActivityHit> activePool,
         IReadOnlyDictionary<string, DragonTigerEntity> dragonTigerByCode,
@@ -32,4 +38,5 @@ public static class StrategyKeys
     public const string LowDip = "lowdip";
     public const string Trend = "trend";
     public const string Theme = "theme";
+    public const string KPattern = "kpattern";
 }

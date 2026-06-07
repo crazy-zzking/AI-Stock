@@ -41,6 +41,28 @@ public static class BuiltinStrategyDefinitions
         Penalty = "none",
     };
 
+    public static StrategyDefinition KPattern() => new()
+    {
+        Key = StrategyKeys.KPattern,
+        Name = "K线形态",
+        Description = "全市场扫描，命中经典蜡烛/趋势位置/量价形态才入选（纯形态硬过滤，暂不叠加资金/RSI/追高门槛）",
+        PreferredRegime = "通用 / 任意环境",
+        ScanFullUniverse = true,   // 形态可能出现在非活跃股上，扫全市场
+        Filters = new StrategyFilters
+        {
+            // 纯形态过滤：关闭其余硬过滤
+            ByRsi = false, ByRise20d = false, ByMinInflow = false,
+            RequireAboveMa20 = false, RequireHotConcept = false,
+            ExcludeTraditionalBigCap = false, ExtremeRise20d = null,
+            WeakRegimeTightenRise20d = false, WeakRegimeRequireInflow = false,
+            // 命中任一形态即入选（OR），默认启用全部形态
+            RequirePatterns = CandlePatternAnalyzer.PatternKeys.ToList(),
+            RequireAllPatterns = false,
+        },
+        FactorKinds = new StrategyFactorKinds { Technical = "lowdip", Position = "lowdip" },
+        Penalty = "none",
+    };
+
     public static StrategyDefinition Theme() => new()
     {
         Key = StrategyKeys.Theme,

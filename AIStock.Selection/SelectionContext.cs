@@ -24,4 +24,8 @@ public class SelectionContext
 
     /// <summary>大盘基准近 20 日涨幅（%）：参与指数 Rise20d 均值，供个股相对强度。null=指数不可用（相对强度退化为中性）。</summary>
     public decimal? BenchmarkRise20d { get; set; }
+
+    /// <summary>个股 K 线形态：股票代码 → 当日命中的形态（仅对活跃池股票计算，按需填充）。</summary>
+    public IReadOnlyDictionary<string, CandlePatternFeatures> PatternsByCode { get; set; }
+        = new Dictionary<string, CandlePatternFeatures>();
 }

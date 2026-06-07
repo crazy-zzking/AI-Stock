@@ -18,6 +18,7 @@ public class ConfigurableSelectionStrategy : WeightedSelectionStrategyBase
     public override string Name => _def.Name;
     public override string Description => _def.Description;
     public override string PreferredRegime => _def.PreferredRegime;
+    public override bool ScanFullUniverse => _def.ScanFullUniverse;
 
     protected override bool PassesHardFilter(
         DailyMarketSnapshotEntity s, SequenceFeatures seq, DragonTigerEntity? dt,
@@ -52,6 +53,18 @@ public class ConfigurableSelectionStrategy : WeightedSelectionStrategyBase
         if (f.ExcludeTraditionalBigCap && SelectionScorers.IsExcludedTraditionalBigCap(s, criteria, ctx)) return false;
 
         if (criteria.RequireDragonTiger && dt == null) return false;
+
+        // K 线形态硬过滤：要求命中指定形态（OR / 可选 AND）。
+        // 运行时 criteria.Patterns 非空则覆盖策略定义的形态列表，实现"选股时自选形态"。
+        if (f.RequirePatterns is { Count: > 0 })
+        {
+            var required = criteria.Patterns is { Count: > 0 } ? criteria.Patterns : f.RequirePatterns;
+            if (ctx == null || !ctx.PatternsByCode.TryGetValue(s.Code, out var pf) || !pf.Any) return false;
+            var match = (criteria.RequireAllPatterns || f.RequireAllPatterns)
+                ? required.All(pf.Hits.Contains)
+                : required.Any(pf.Hits.Contains);
+            if (!match) return false;
+        }
 
         return true;
     }

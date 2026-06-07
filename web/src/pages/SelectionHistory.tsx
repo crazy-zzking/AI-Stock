@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Card, Table, Tag, Row, Col, Spin, message, List, Statistic } from 'antd';
+import { Card, Table, Tag, Row, Col, Spin, message, List, Statistic, Rate } from 'antd';
 import { getSelectionHistory, getSelectionPerformance } from '../api';
 import Delta from '../components/Delta';
 import { pct, upDownColor } from '../utils/format';
@@ -12,6 +12,7 @@ interface PerfItem {
   code: string; name: string; selectClose: number; selectChangePercent: number;
   nextDayChangePercent?: number | null; currentChangePercent?: number | null;
   maxRisePercent?: number | null; maxDropPercent?: number | null; forwardDays: number;
+  coreLogic?: string; tags?: string[]; ratingStars?: number; totalScore?: number;
 }
 interface Perf {
   id: number; selectionTradingDate: string; runAt: string; count: number;
@@ -111,6 +112,25 @@ const SelectionHistory: React.FC = () => {
                   size="small" rowKey="code" pagination={false}
                   dataSource={perf?.items || []}
                   columns={columns}
+                  expandable={{
+                    expandedRowRender: (r: PerfItem) => (
+                      <div style={{ padding: '4px 8px' }}>
+                        <div style={{ marginBottom: 6 }}>
+                          <Rate disabled value={r.ratingStars ?? 0} style={{ fontSize: 13 }} />
+                          {typeof r.totalScore === 'number' && <Tag style={{ marginLeft: 8 }}>评分 {r.totalScore}</Tag>}
+                        </div>
+                        {(r.tags?.length ?? 0) > 0 && (
+                          <div style={{ marginBottom: 6 }}>
+                            {r.tags!.map((t) => <Tag color="blue" key={t}>{t}</Tag>)}
+                          </div>
+                        )}
+                        <div style={{ background: '#fafafa', padding: '6px 10px', borderRadius: 4, fontSize: 13, color: '#555' }}>
+                          <b>核心逻辑：</b>{r.coreLogic || '—'}
+                        </div>
+                      </div>
+                    ),
+                    rowExpandable: (r: PerfItem) => !!(r.coreLogic || (r.tags?.length ?? 0) > 0),
+                  }}
                   locale={{ emptyText: '该批暂无前进数据（选股当日之后还没有K线，或K线未同步）' }}
                 />
                 <div style={{ marginTop: 8, color: '#999', fontSize: 12 }}>

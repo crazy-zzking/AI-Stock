@@ -23,6 +23,9 @@ public class StrategyDefinition
 
     /// <summary>核心逻辑文案模板（留空则用通用模板）</summary>
     public string? CoreLogicTemplate { get; set; }
+
+    /// <summary>是否扫描全市场（跳过活跃度粗筛）。形态类策略=true。</summary>
+    public bool ScanFullUniverse { get; set; }
 }
 
 /// <summary>硬过滤开关。复用 SelectionCriteria 的阈值（MaxRsi/MaxRise20d/MinMainNetInflow…），这里只控制"启不启用某条过滤"。</summary>
@@ -46,6 +49,15 @@ public class StrategyFilters
     public bool WeakRegimeTightenRise20d { get; set; } = true;
     /// <summary>弱市要求主力净流入 &gt;0（低吸）</summary>
     public bool WeakRegimeRequireInflow { get; set; } = true;
+
+    /// <summary>
+    /// 要求命中的 K 线形态键（取值见 <see cref="AIStock.Selection.CandlePatternAnalyzer.PatternKeys"/>）。
+    /// 非空时启用形态硬过滤：默认 OR（命中任一即过），<see cref="RequireAllPatterns"/>=true 则要求全部命中。空=不启用。
+    /// </summary>
+    public List<string> RequirePatterns { get; set; } = new();
+
+    /// <summary>形态过滤是否要求全部命中（默认 false=命中任一即可）。</summary>
+    public bool RequireAllPatterns { get; set; }
 }
 
 /// <summary>因子口径选择：lowdip（低吸口径）| trend（趋势口径）。其余因子两口径一致。</summary>
