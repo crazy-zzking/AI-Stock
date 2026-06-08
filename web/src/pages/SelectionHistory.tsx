@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Card, Table, Tag, Row, Col, Spin, message, List, Statistic, Rate, Button } from 'antd';
-import { getSelectionHistory, getSelectionPerformance, getQuotes, reviewSelectionBatch } from '../api';
+import { getSelectionHistory, getSelectionPerformance, getQuote, reviewSelectionBatch } from '../api';
 import Delta from '../components/Delta';
 import ReviewPanel from '../components/ReviewPanel';
 import { pct, upDownColor } from '../utils/format';
@@ -50,8 +50,9 @@ const SelectionHistory: React.FC = () => {
     if (!code || quotes[code] || quoteLoading[code]) return;
     setQuoteLoading((m) => ({ ...m, [code]: true }));
     try {
-      const res = await getQuotes([code]);
-      const q = (res.data || [])[0];
+      // 用腾讯接口取实时报价（比东财快）
+      const res = await getQuote(code, 'tencent');
+      const q = res.data;
       if (q) setQuotes((m) => ({ ...m, [code]: q }));
     } catch {
       /* 静默：展开区会显示"实时报价获取失败" */
