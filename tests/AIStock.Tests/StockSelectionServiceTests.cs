@@ -5,6 +5,7 @@ using AIStock.Infrastructure.Database.Context;
 using AIStock.Infrastructure.Database.Entities;
 using AIStock.Selection;
 using AIStock.Selection.Narration;
+using AIStock.Selection.Review;
 using AIStock.Selection.Strategies;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -37,6 +38,7 @@ public class StockSelectionServiceTests
         var provider = new SelectionStrategyProvider(strategies, db, NullLogger<SelectionStrategyProvider>.Instance);
         return new(db, provider, new EmptyResolver(),
             new SelectionConfigService(db, NullLogger<SelectionConfigService>.Instance),
+            new NullSelectionReviewQueue(NullLogger<NullSelectionReviewQueue>.Instance),
             NullLogger<StockSelectionService>.Instance);
     }
 
