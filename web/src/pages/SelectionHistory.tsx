@@ -1,23 +1,38 @@
-import React, { useEffect, useState } from 'react';
-import { Card, Table, Tag, Row, Col, Spin, message, List, Statistic, Rate } from 'antd';
-import { getSelectionHistory, getSelectionPerformance } from '../api';
+import React, { useEffect, useRef, useState } from 'react';
+import { Card, Table, Tag, Row, Col, Spin, message, List, Statistic, Rate, Button } from 'antd';
+import { getSelectionHistory, getSelectionPerformance, getQuotes, reviewSelectionBatch } from '../api';
 import Delta from '../components/Delta';
+import ReviewPanel from '../components/ReviewPanel';
 import { pct, upDownColor } from '../utils/format';
+import type { QuoteData, LlmReview } from '../types/models';
 
 const redNum = (v?: number | null) => <span style={{ color: '#cf1322', fontVariantNumeric: 'tabular-nums' }}>{pct(v)}</span>;
 const greenNum = (v?: number | null) => <span style={{ color: '#3f8600', fontVariantNumeric: 'tabular-nums' }}>{pct(v)}</span>;
 
-interface HistoryItem { id: number; tradingDate: string; runAt: string; topN: number; }
+interface HistoryItem { id: number; tradingDate: string; runAt: string; topN: number; strategy?: string; strategyName?: string; reviewStatus?: string; }
 interface PerfItem {
   code: string; name: string; selectClose: number; selectChangePercent: number;
   nextDayChangePercent?: number | null; currentChangePercent?: number | null;
   maxRisePercent?: number | null; maxDropPercent?: number | null; forwardDays: number;
   coreLogic?: string; tags?: string[]; ratingStars?: number; totalScore?: number;
+  review?: LlmReview | null;
 }
 interface Perf {
   id: number; selectionTradingDate: string; runAt: string; count: number;
   latestDate?: string | null; hitCount: number; avgCurrentChange: number; items: PerfItem[];
+  strategy?: string; strategyName?: string; reviewStatus?: string;
 }
+
+const fmtTime = (s?: string) => s?.slice(0, 16).replace('T', ' ') || '—';
+
+// 复评状态 → 文案/颜色
+const REVIEW_STATUS: Record<string, { text: string; color: string }> = {
+  pending: { text: '待复评', color: 'default' },
+  running: { text: 'LLM 复评中…', color: 'processing' },
+  done: { text: '已复评', color: 'success' },
+  failed: { text: '复评失败', color: 'error' },
+  skipped: { text: '未复评', color: 'default' },
+};
 
 const SelectionHistory: React.FC = () => {
   const [loading, setLoading] = useState(true);
@@ -25,6 +40,25 @@ const SelectionHistory: React.FC = () => {
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [perf, setPerf] = useState<Perf | null>(null);
   const [perfLoading, setPerfLoading] = useState(false);
+  const [quotes, setQuotes] = useState<Record<string, QuoteData>>({});
+  const [quoteLoading, setQuoteLoading] = useState<Record<string, boolean>>({});
+  const [reviewing, setReviewing] = useState(false);
+  const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // 展开行时懒加载实时报价（已缓存则跳过）
+  const loadQuote = async (code: string) => {
+    if (!code || quotes[code] || quoteLoading[code]) return;
+    setQuoteLoading((m) => ({ ...m, [code]: true }));
+    try {
+      const res = await getQuotes([code]);
+      const q = (res.data || [])[0];
+      if (q) setQuotes((m) => ({ ...m, [code]: q }));
+    } catch {
+      /* 静默：展开区会显示"实时报价获取失败" */
+    } finally {
+      setQuoteLoading((m) => ({ ...m, [code]: false }));
+    }
+  };
 
   const loadList = async () => {
     setLoading(true);
@@ -40,21 +74,41 @@ const SelectionHistory: React.FC = () => {
     }
   };
 
-  const selectBatch = async (id: number) => {
+  const selectBatch = async (id: number, silent = false) => {
     setSelectedId(id);
-    setPerfLoading(true);
+    if (!silent) setPerfLoading(true);
     try {
       const res = await getSelectionPerformance(id);
-      setPerf(res.data || null);
+      const data: Perf | null = res.data || null;
+      setPerf(data);
+      // 复评进行中时轮询刷新，直到 done/failed/skipped
+      if (pollRef.current) { clearTimeout(pollRef.current); pollRef.current = null; }
+      if (data && (data.reviewStatus === 'running' || data.reviewStatus === 'pending')) {
+        pollRef.current = setTimeout(() => selectBatch(id, true), 5000);
+      }
     } catch {
-      setPerf(null);
-      message.error('加载选后表现失败');
+      if (!silent) { setPerf(null); message.error('加载选后表现失败'); }
     } finally {
-      setPerfLoading(false);
+      if (!silent) setPerfLoading(false);
     }
   };
 
-  useEffect(() => { loadList(); /* eslint-disable-next-line */ }, []);
+  // 手动（重新）触发当前批次 LLM 复评
+  const triggerReview = async () => {
+    if (selectedId == null) return;
+    setReviewing(true);
+    try {
+      await reviewSelectionBatch(selectedId);
+      message.success('已触发 LLM 复评，完成后自动刷新');
+      selectBatch(selectedId, true);
+    } catch {
+      message.error('触发复评失败');
+    } finally {
+      setReviewing(false);
+    }
+  };
+
+  useEffect(() => { loadList(); return () => { if (pollRef.current) clearTimeout(pollRef.current); }; /* eslint-disable-next-line */ }, []);
 
   if (loading) return <Spin size="large" style={{ display: 'block', margin: '100px auto' }} />;
 
@@ -84,8 +138,12 @@ const SelectionHistory: React.FC = () => {
                   style={{ cursor: 'pointer', background: selectedId === it.id ? '#e6f4ff' : undefined, padding: '8px 12px' }}
                 >
                   <div>
-                    <div>{it.tradingDate?.slice(0, 10)} <Tag>TOP{it.topN}</Tag></div>
-                    <div style={{ fontSize: 12, color: '#999' }}>选于 {it.runAt?.slice(0, 16).replace('T', ' ')}</div>
+                    <div>
+                      {it.tradingDate?.slice(0, 10)}
+                      {it.strategyName && <Tag color="purple" style={{ marginLeft: 6 }}>{it.strategyName}</Tag>}
+                      <Tag style={{ marginLeft: 2 }}>TOP{it.topN}</Tag>
+                    </div>
+                    <div style={{ fontSize: 12, color: '#999' }}>发起于 {fmtTime(it.runAt)}</div>
                   </div>
                 </List.Item>
               )}
@@ -95,9 +153,29 @@ const SelectionHistory: React.FC = () => {
         <Col xs={24} lg={18}>
           <Card
             size="small"
-            title={perf
-              ? `${perf.selectionTradingDate?.slice(0, 10)} 选的 ${perf.count} 只 · 至今 ${perf.hitCount} 红 · 均 ${pct(perf.avgCurrentChange)}（截至 ${perf.latestDate?.slice(0, 10) || '—'}）`
-              : '选后表现'}
+            title={perf ? (
+              <span>
+                {perf.strategyName && <Tag color="purple">{perf.strategyName}</Tag>}
+                {`${perf.selectionTradingDate?.slice(0, 10)} 选的 ${perf.count} 只 · 至今 ${perf.hitCount} 红 · 均 ${pct(perf.avgCurrentChange)}`}
+                <span style={{ fontWeight: 400, color: '#999', fontSize: 12, marginLeft: 8 }}>
+                  发起于 {fmtTime(perf.runAt)}
+                </span>
+              </span>
+            ) : '选后表现'}
+            extra={perf && (
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                <Tag color={REVIEW_STATUS[perf.reviewStatus || 'pending']?.color}>
+                  {REVIEW_STATUS[perf.reviewStatus || 'pending']?.text || perf.reviewStatus}
+                </Tag>
+                <Button
+                  size="small"
+                  loading={reviewing || perf.reviewStatus === 'running'}
+                  onClick={triggerReview}
+                >
+                  {perf.reviewStatus === 'done' ? '重新复评' : 'LLM 复评'}
+                </Button>
+              </span>
+            )}
           >
             {perfLoading ? (
               <Spin style={{ display: 'block', margin: '40px auto' }} />
@@ -113,23 +191,45 @@ const SelectionHistory: React.FC = () => {
                   dataSource={perf?.items || []}
                   columns={columns}
                   expandable={{
-                    expandedRowRender: (r: PerfItem) => (
-                      <div style={{ padding: '4px 8px' }}>
-                        <div style={{ marginBottom: 6 }}>
-                          <Rate disabled value={r.ratingStars ?? 0} style={{ fontSize: 13 }} />
-                          {typeof r.totalScore === 'number' && <Tag style={{ marginLeft: 8 }}>评分 {r.totalScore}</Tag>}
-                        </div>
-                        {(r.tags?.length ?? 0) > 0 && (
-                          <div style={{ marginBottom: 6 }}>
-                            {r.tags!.map((t) => <Tag color="blue" key={t}>{t}</Tag>)}
+                    onExpand: (expanded, r: PerfItem) => { if (expanded) loadQuote(r.code); },
+                    expandedRowRender: (r: PerfItem) => {
+                      const q = quotes[r.code];
+                      return (
+                        <div style={{ padding: '4px 8px' }}>
+                          <div style={{ marginBottom: 8, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                            <b>实时报价：</b>
+                            {quoteLoading[r.code] ? (
+                              <Spin size="small" />
+                            ) : q ? (
+                              <>
+                                <span>现价 <Delta value={q.price} mode="raw" colored={false} /></span>
+                                <span>涨幅 <Delta value={q.changePercent} bold /></span>
+                                <span>涨跌 <Delta value={q.changeAmount} mode="raw" /></span>
+                                <span style={{ color: '#999', fontSize: 12 }}>
+                                  {q.source} · {q.timestamp?.slice(11, 16) || q.timestamp}
+                                </span>
+                              </>
+                            ) : (
+                              <span style={{ color: '#999' }}>实时报价获取失败（非交易时段或数据源异常）</span>
+                            )}
                           </div>
-                        )}
-                        <div style={{ background: '#fafafa', padding: '6px 10px', borderRadius: 4, fontSize: 13, color: '#555' }}>
-                          <b>核心逻辑：</b>{r.coreLogic || '—'}
+                          <div style={{ marginBottom: 6 }}>
+                            <Rate disabled value={r.ratingStars ?? 0} style={{ fontSize: 13 }} />
+                            {typeof r.totalScore === 'number' && <Tag style={{ marginLeft: 8 }}>评分 {r.totalScore}</Tag>}
+                          </div>
+                          {(r.tags?.length ?? 0) > 0 && (
+                            <div style={{ marginBottom: 6 }}>
+                              {r.tags!.map((t) => <Tag color="blue" key={t}>{t}</Tag>)}
+                            </div>
+                          )}
+                          <div style={{ background: '#fafafa', padding: '6px 10px', borderRadius: 4, fontSize: 13, color: '#555', marginBottom: 8 }}>
+                            <b>核心逻辑：</b>{r.coreLogic || '—'}
+                          </div>
+                          <ReviewPanel review={r.review} />
                         </div>
-                      </div>
-                    ),
-                    rowExpandable: (r: PerfItem) => !!(r.coreLogic || (r.tags?.length ?? 0) > 0),
+                      );
+                    },
+                    rowExpandable: (r: PerfItem) => !!r.code,
                   }}
                   locale={{ emptyText: '该批暂无前进数据（选股当日之后还没有K线，或K线未同步）' }}
                 />

@@ -106,6 +106,11 @@ public class SelectionController : ControllerBase
         return perf == null ? NotFound() : Ok(perf);
     }
 
+    /// <summary>手动（重新）触发某批选股的 LLM 复评（异步执行，返回后台轮询 performance 看 reviewStatus）。</summary>
+    [HttpPost("history/{id:long}/review")]
+    public async Task<ActionResult> ReviewBatch(long id, CancellationToken ct)
+        => await _selection.RequestReviewAsync(id, ct) ? Ok(new { queued = true }) : NotFound();
+
     // ============ 配置中心（版本化的选股条件 + 权重）============
 
     /// <summary>当前生效的选股条件（含权重）。无配置时返回代码默认值。</summary>

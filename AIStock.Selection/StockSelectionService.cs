@@ -5,6 +5,7 @@ using AIStock.Core.Models;
 using AIStock.Data.Providers.Eastmoney;
 using AIStock.Infrastructure.Database.Context;
 using AIStock.Infrastructure.Database.Entities;
+using AIStock.Selection.Review;
 using AIStock.Selection.Strategies;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -21,6 +22,7 @@ public class StockSelectionService
     private readonly ISelectionStrategyProvider _strategyProvider;
     private readonly IDataProviderResolver _resolver;
     private readonly SelectionConfigService _config;
+    private readonly ISelectionReviewQueue _reviewQueue;
     private readonly ILogger<StockSelectionService> _logger;
 
     public StockSelectionService(
@@ -28,12 +30,14 @@ public class StockSelectionService
         ISelectionStrategyProvider strategyProvider,
         IDataProviderResolver resolver,
         SelectionConfigService config,
+        ISelectionReviewQueue reviewQueue,
         ILogger<StockSelectionService> logger)
     {
         _db = db;
         _strategyProvider = strategyProvider;
         _resolver = resolver;
         _config = config;
+        _reviewQueue = reviewQueue;
         _logger = logger;
     }
 
@@ -333,15 +337,22 @@ public class StockSelectionService
         var tradingDate = await _db.DailyMarketSnapshot.MaxAsync(s => (DateTime?)s.Date, ct);
         if (tradingDate == null) return results;
 
-        _db.SelectionResult.Add(new SelectionResultEntity
+        var entity = new SelectionResultEntity
         {
             TradingDate = tradingDate.Value,
             RunAt = DateTime.Now,
             TopN = criteria.TopN,
+            Strategy = strategy.Key,
+            StrategyName = strategy.Name,
             ResultsJson = JsonSerializer.Serialize(results),
-        });
+            ReviewStatus = "pending",
+        };
+        _db.SelectionResult.Add(entity);
         await _db.SaveChangesAsync(ct);
         _logger.LogInformation("选股结果已记录：{Date} TOP{Top}（追加历史）", tradingDate.Value.ToString("yyyy-MM-dd"), results.Count);
+
+        // 选股完成后异步触发 LLM 复评（不阻塞本次返回；未启用则后台置 skipped）
+        _reviewQueue.Enqueue(entity.Id);
         return results;
     }
 
@@ -357,11 +368,27 @@ public class StockSelectionService
             TradingDate = tradingDate.Date,
             RunAt = tradingDate.Date.AddHours(17),
             TopN = picks.Count,
+            Strategy = "import",
+            StrategyName = "导入",
             ResultsJson = JsonSerializer.Serialize(picks),
         });
         await _db.SaveChangesAsync(ct);
         _logger.LogInformation("导入选股结果：{Date}，{Count} 只", tradingDate.ToString("yyyy-MM-dd"), picks.Count);
         return picks.Count;
+    }
+
+    /// <summary>
+    /// 手动（重新）触发某批选股的 LLM 复评：重置状态为 pending 并入队。返回是否成功（批次存在）。
+    /// </summary>
+    public async Task<bool> RequestReviewAsync(long id, CancellationToken ct = default)
+    {
+        var row = await _db.SelectionResult.FirstOrDefaultAsync(r => r.Id == id, ct);
+        if (row == null) return false;
+        row.ReviewStatus = "pending";
+        row.ReviewedAt = null;
+        await _db.SaveChangesAsync(ct);
+        _reviewQueue.Enqueue(id);
+        return true;
     }
 
     /// <summary>选股历史记录元信息（不含明细），按选股时间倒序。</summary>
@@ -370,7 +397,7 @@ public class StockSelectionService
         var rows = await _db.SelectionResult
             .OrderByDescending(r => r.RunAt)
             .Take(take <= 0 ? 30 : take)
-            .Select(r => new { r.Id, r.TradingDate, r.RunAt, r.TopN })
+            .Select(r => new { r.Id, r.TradingDate, r.RunAt, r.TopN, r.Strategy, r.StrategyName, r.ReviewStatus })
             .ToListAsync(ct);
         return rows.Select(r => new SelectionHistoryItem
         {
@@ -378,6 +405,9 @@ public class StockSelectionService
             TradingDate = r.TradingDate,
             RunAt = r.RunAt,
             TopN = r.TopN,
+            Strategy = r.Strategy,
+            StrategyName = r.StrategyName,
+            ReviewStatus = r.ReviewStatus,
         }).ToList();
     }
 
@@ -424,6 +454,7 @@ public class StockSelectionService
                 Tags = p.Tags ?? new List<string>(),
                 RatingStars = p.RatingStars,
                 TotalScore = p.TotalScore,
+                Review = p.Review,
             };
 
             if (bars.TryGetValue(p.Code, out var list) && list.Count > 0)
@@ -451,6 +482,9 @@ public class StockSelectionService
             SelectionTradingDate = selDate,
             RunAt = row.RunAt,
             Count = items.Count,
+            Strategy = row.Strategy,
+            StrategyName = row.StrategyName,
+            ReviewStatus = row.ReviewStatus,
             LatestDate = latestDate,
             HitCount = withData.Count(i => i.CurrentChangePercent > 0),
             AvgCurrentChange = withData.Count > 0 ? Math.Round(withData.Average(i => i.CurrentChangePercent!.Value), 2) : 0,

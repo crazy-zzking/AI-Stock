@@ -7,6 +7,8 @@ import { ReloadOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { getLatestSelection, rerunSelection, getStrategies, getSelectionPatterns } from '../api';
 import type { StrategyInfo, PatternInfo } from '../api';
+import type { LlmReview } from '../types/models';
+import ReviewPanel from '../components/ReviewPanel';
 import { pct, upDownColor as upDown } from '../utils/format';
 
 interface FactorScores {
@@ -20,6 +22,7 @@ interface SelectionResult {
   rise20d: number; peTtm: number; mainNetInflow: number;
   totalScore: number; factors: FactorScores; coreLogic: string;
   marketRegime?: string; recommendedStrategy?: string;
+  review?: LlmReview | null;
 }
 
 // 市值用「X.X亿」，无值显示 —（与全局 yi 略不同：单档亿、1 位小数）
@@ -212,6 +215,12 @@ const Selection: React.FC = () => {
             <div style={{ background: '#fafafa', padding: '8px 12px', borderRadius: 4, fontSize: 13, color: '#555' }}>
               <b>核心逻辑：</b>{r.coreLogic}
             </div>
+
+            {r.review && (
+              <div style={{ marginTop: 12 }}>
+                <ReviewPanel review={r.review} />
+              </div>
+            )}
           </Card>
         ))
       )}

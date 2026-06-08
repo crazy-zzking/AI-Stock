@@ -1,7 +1,9 @@
 using AIStock.Selection.Backtest;
 using AIStock.Selection.Narration;
+using AIStock.Selection.Review;
 using AIStock.Selection.Strategies;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace AIStock.Selection;
 
@@ -26,6 +28,10 @@ public static class DependencyInjection
         services.AddScoped<StockSelectionService>();
         services.AddScoped<BacktestService>();
         services.AddScoped<ReplayBacktestService>();
+
+        // LLM 复评（异步附加步骤）。队列默认空实现；Web 层用 Channel 版 + 后台消费替换。
+        services.AddScoped<SelectionReviewService>();
+        services.TryAddSingleton<ISelectionReviewQueue, NullSelectionReviewQueue>();
         return services;
     }
 }

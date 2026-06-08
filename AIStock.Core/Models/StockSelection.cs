@@ -179,6 +179,12 @@ public class SelectionHistoryItem
     public DateTime RunAt { get; set; }
     /// <summary>该次返回的 TOP-N</summary>
     public int TopN { get; set; }
+    /// <summary>选股所用策略键</summary>
+    public string Strategy { get; set; } = string.Empty;
+    /// <summary>策略显示名</summary>
+    public string StrategyName { get; set; } = string.Empty;
+    /// <summary>LLM 复评状态（pending/running/done/failed/skipped）</summary>
+    public string ReviewStatus { get; set; } = "pending";
 }
 
 /// <summary>某批选股的"选后表现"汇总</summary>
@@ -189,6 +195,12 @@ public class SelectionPerformance
     public DateTime SelectionTradingDate { get; set; }
     public DateTime RunAt { get; set; }
     public int Count { get; set; }
+    /// <summary>选股所用策略键</summary>
+    public string Strategy { get; set; } = string.Empty;
+    /// <summary>策略显示名</summary>
+    public string StrategyName { get; set; } = string.Empty;
+    /// <summary>LLM 复评状态（pending/running/done/failed/skipped）</summary>
+    public string ReviewStatus { get; set; } = "pending";
     /// <summary>前进数据截至的最新交易日（无则 null）</summary>
     public DateTime? LatestDate { get; set; }
     /// <summary>至今上涨命中数（自选股日累计涨幅 &gt; 0）</summary>
@@ -227,6 +239,9 @@ public class SelectionPerformanceItem
     public int RatingStars { get; set; }
     /// <summary>选中时的综合评分</summary>
     public decimal TotalScore { get; set; }
+
+    /// <summary>LLM 复评结果（异步补写，可能为 null）</summary>
+    public LlmReview? Review { get; set; }
 }
 
 /// <summary>
@@ -281,4 +296,67 @@ public class StockSelectionResult
 
     /// <summary>当前市场状态推荐的策略键（lowdip/trend/theme，前端据此提示切换）</summary>
     public string RecommendedStrategy { get; set; } = string.Empty;
+
+    /// <summary>
+    /// LLM 复评结果（异步补写，仅对每批前 N 只生成）。null = 未复评 / 不在复评范围内。
+    /// 复评不改动选股结果本身（排序/入选），只附加标记。
+    /// </summary>
+    public LlmReview? Review { get; set; }
+}
+
+/// <summary>LLM 复评建议等级</summary>
+public enum ReviewRecommendation
+{
+    /// <summary>回避（明显风险/逻辑证伪）</summary>
+    Avoid,
+    /// <summary>观望（一般，等更明确信号）</summary>
+    Watch,
+    /// <summary>建议买入</summary>
+    Buy,
+}
+
+/// <summary>
+/// 选股 LLM 复评结果（附加在 <see cref="StockSelectionResult"/> 上）。
+/// 价位由规则计算（<c>Plan</c>），LLM 仅负责标记与解释，不改动数字。
+/// </summary>
+public class LlmReview
+{
+    /// <summary>建议等级</summary>
+    public ReviewRecommendation Recommendation { get; set; } = ReviewRecommendation.Watch;
+
+    /// <summary>置信度（0-100）</summary>
+    public int Confidence { get; set; }
+
+    /// <summary>风险/排雷标签（高位追涨、解禁、问询函、题材证伪…）</summary>
+    public List<string> RiskFlags { get; set; } = new();
+
+    /// <summary>情报印证（结合 event_record：消息面是支持还是证伪，一句话）</summary>
+    public string IntelligenceNote { get; set; } = string.Empty;
+
+    /// <summary>LLM 核心逻辑叙述（替代/补充规则模板）</summary>
+    public string Narrative { get; set; } = string.Empty;
+
+    /// <summary>买入计划（仅"建议买入"时给出；价位规则算，含 LLM 文字解释）</summary>
+    public TradePlan? Plan { get; set; }
+
+    /// <summary>使用的模型名</summary>
+    public string Model { get; set; } = string.Empty;
+
+    /// <summary>复评时间</summary>
+    public DateTime ReviewedAt { get; set; }
+}
+
+/// <summary>买入计划：价位由规则计算，盈亏比≈2:1。</summary>
+public class TradePlan
+{
+    /// <summary>买入价区间下沿（元）</summary>
+    public decimal BuyLow { get; set; }
+    /// <summary>买入价区间上沿（元）</summary>
+    public decimal BuyHigh { get; set; }
+    /// <summary>止损价（元）</summary>
+    public decimal StopLoss { get; set; }
+    /// <summary>止盈价（元）</summary>
+    public decimal TakeProfit { get; set; }
+    /// <summary>价位计算依据（基准/支撑/ATR/盈亏比）+ LLM 解释</summary>
+    public string Basis { get; set; } = string.Empty;
 }

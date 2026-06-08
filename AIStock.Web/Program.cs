@@ -140,6 +140,14 @@ builder.Services.AddRiskServices(builder.Configuration);
 // 注册选股服务
 builder.Services.AddSelectionServices();
 
+// 选股 LLM 复评：Channel 队列（替换默认空实现）+ 后台消费服务 + 配置
+builder.Services.Configure<AIStock.Selection.Review.SelectionReviewOptions>(
+    builder.Configuration.GetSection(AIStock.Selection.Review.SelectionReviewOptions.SectionName));
+builder.Services.AddSingleton<AIStock.Web.Services.SelectionReviewQueue>();
+builder.Services.AddSingleton<AIStock.Selection.Review.ISelectionReviewQueue>(
+    sp => sp.GetRequiredService<AIStock.Web.Services.SelectionReviewQueue>());
+builder.Services.AddHostedService<AIStock.Web.Services.SelectionReviewBackgroundService>();
+
 // 注册执行服务
 builder.Services.AddExecutionServices(builder.Configuration);
 

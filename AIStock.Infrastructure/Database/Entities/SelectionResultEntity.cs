@@ -27,7 +27,26 @@ public class SelectionResultEntity
     [Column("top_n")]
     public int TopN { get; set; }
 
+    /// <summary>选股所用策略键（lowdip/trend/theme/...；导入的记 import）</summary>
+    [Column("strategy")]
+    [StringLength(50)]
+    public string Strategy { get; set; } = string.Empty;
+
+    /// <summary>策略显示名（写入时固化，避免日后改名导致历史错乱）</summary>
+    [Column("strategy_name")]
+    [StringLength(100)]
+    public string StrategyName { get; set; } = string.Empty;
+
     /// <summary>选股结果列表 JSON（List&lt;StockSelectionResult&gt;）</summary>
     [Column("results_json", TypeName = "longtext")]
     public string ResultsJson { get; set; } = "[]";
+
+    /// <summary>LLM 复评状态：pending（待复评）/ running（复评中）/ done（已完成）/ failed（失败）/ skipped（未启用）</summary>
+    [Column("review_status")]
+    [StringLength(20)]
+    public string ReviewStatus { get; set; } = "pending";
+
+    /// <summary>复评完成时间（null = 未完成）</summary>
+    [Column("reviewed_at")]
+    public DateTime? ReviewedAt { get; set; }
 }

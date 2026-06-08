@@ -4,6 +4,7 @@ using AIStock.Infrastructure.Database.Context;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace AIStock.Infrastructure.Migrations
 {
     [DbContext(typeof(AIStockDbContext))]
-    partial class AIStockDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260608073236_AddSelectionReview")]
+    partial class AddSelectionReview
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1200,18 +1203,6 @@ namespace AIStock.Infrastructure.Migrations
                     b.Property<DateTime>("RunAt")
                         .HasColumnType("datetime(6)")
                         .HasColumnName("run_at");
-
-                    b.Property<string>("Strategy")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("varchar(50)")
-                        .HasColumnName("strategy");
-
-                    b.Property<string>("StrategyName")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("varchar(100)")
-                        .HasColumnName("strategy_name");
 
                     b.Property<int>("TopN")
                         .HasColumnType("int")

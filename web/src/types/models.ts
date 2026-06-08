@@ -153,6 +153,29 @@ export interface QuoteData {
   source: string;
 }
 
+// --- 选股 LLM 复评 ---
+/** 后端枚举序列化为数字：0=回避 1=观望 2=建议买入 */
+export type ReviewRecommendation = 0 | 1 | 2;
+
+export interface TradePlan {
+  buyLow: number;
+  buyHigh: number;
+  stopLoss: number;
+  takeProfit: number;
+  basis: string;
+}
+
+export interface LlmReview {
+  recommendation: ReviewRecommendation;
+  confidence: number;
+  riskFlags: string[];
+  intelligenceNote: string;
+  narrative: string;
+  plan?: TradePlan | null;
+  model: string;
+  reviewedAt: string;
+}
+
 // --- 持仓 ---
 export interface PositionItem {
   code: string;

@@ -102,6 +102,8 @@ export const getSelectionHistory = (take = 30) =>
 export const getSelectionById = (id: number) => api.get(`/selection/history/${id}`);
 // 某批选股的选后表现（次日/至今涨跌、最高涨幅、最低跌幅）
 export const getSelectionPerformance = (id: number) => api.get(`/selection/history/${id}/performance`);
+// 手动（重新）触发某批选股的 LLM 复评（异步）
+export const reviewSelectionBatch = (id: number) => api.post(`/selection/history/${id}/review`);
 export const getActivityPool = () => api.get('/selection/activity');
 
 // ============ 选股配置中心（版本化阈值 + 权重）============
