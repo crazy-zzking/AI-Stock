@@ -31,6 +31,12 @@ public class KnowledgeStarOptions
     /// <summary>每个星球每次取的主题条数</summary>
     public int Count { get; set; } = 20;
 
+    /// <summary>
+    /// 增量采集回看窗口（小时）：首次运行 / 库中无知识星球事件时，只处理最近这么多小时内的主题；
+    /// 有水位线后按"上次最新发布时间"增量过滤。
+    /// </summary>
+    public int LookbackHours { get; set; } = 24;
+
     /// <summary>请求 User-Agent（建议用真实浏览器 UA）</summary>
     public string UserAgent { get; set; } =
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36";

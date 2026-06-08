@@ -433,6 +433,16 @@ public class EventEngineService
     }
 
     /// <summary>
+    /// 取已入库知识星球事件的最新发布时间（增量采集水位线）。无记录返回 null。
+    /// </summary>
+    public async Task<DateTime?> GetLatestKnowledgeStarTimeAsync(CancellationToken cancellationToken = default)
+    {
+        return await _dbContext.EventRecord
+            .Where(e => e.EventType == "knowledge-star" && e.EventTime != null)
+            .MaxAsync(e => (DateTime?)e.EventTime, cancellationToken);
+    }
+
+    /// <summary>
     /// 保存知识星球内容事件（已由小作文分析器分析过的结果）。
     /// </summary>
     public async Task<EventRecordEntity?> SaveKnowledgeStarEventAsync(

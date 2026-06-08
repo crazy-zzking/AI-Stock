@@ -1,6 +1,7 @@
 using AIStock.Core.Interfaces;
 using AIStock.Core.Models;
 using AIStock.EventEngine.Services;
+using AIStock.Intelligence;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -118,6 +119,7 @@ public class IntelligenceSyncService
         var collector = scope.ServiceProvider.GetRequiredService<IKnowledgeStarCollector>();
         var essay = scope.ServiceProvider.GetRequiredService<IEssayAnalyzer>();
         var engine = scope.ServiceProvider.GetRequiredService<EventEngineService>();
+        var ksOptions = scope.ServiceProvider.GetRequiredService<IOptions<KnowledgeStarOptions>>().Value;
 
         var items = await collector.GetLatestContentAsync(20, ct);
         if (items.Count == 0)
@@ -125,6 +127,22 @@ public class IntelligenceSyncService
             _logger.LogInformation("知识星球无新内容（或未配置 token/groups）");
             return 0;
         }
+
+        // 增量过滤：只处理比上次水位线更新的主题；无水位线（首跑）按回看窗口兜底。
+        // 高频调度下靠此过滤避免重复 LLM 花费（URL 去重保留作双保险）。
+        var watermark = await engine.GetLatestKnowledgeStarTimeAsync(ct);
+        var lookbackHours = Math.Max(1, ksOptions.LookbackHours);
+        var cutoff = watermark ?? DateTime.Now.AddHours(-lookbackHours);
+        var before = items.Count;
+        items.RemoveAll(x => x.PublishTime <= cutoff);
+        _logger.LogInformation("知识星球增量过滤：水位线={Watermark} 截断={Cutoff} 保留 {Kept}/{Before} 条",
+            watermark?.ToString("yyyy-MM-dd HH:mm:ss") ?? "(无)", cutoff.ToString("yyyy-MM-dd HH:mm:ss"), items.Count, before);
+        if (items.Count == 0)
+        {
+            _logger.LogInformation("知识星球本轮无增量主题");
+            return 0;
+        }
+
         // 既无正文也无图片的才丢弃；纯图片帖保留走多模态识别
         items.RemoveAll(x => string.IsNullOrWhiteSpace(x.Content) && x.ImageUrls.Count == 0);
         var ok = 0;
