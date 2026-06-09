@@ -345,14 +345,12 @@ public class StockSelectionService
             Strategy = strategy.Key,
             StrategyName = strategy.Name,
             ResultsJson = JsonSerializer.Serialize(results),
-            ReviewStatus = "pending",
+            // LLM 复评改为手动触发：新批次默认未复评，等用户在历史页点「LLM 复评」
+            ReviewStatus = "skipped",
         };
         _db.SelectionResult.Add(entity);
         await _db.SaveChangesAsync(ct);
         _logger.LogInformation("选股结果已记录：{Date} TOP{Top}（追加历史）", tradingDate.Value.ToString("yyyy-MM-dd"), results.Count);
-
-        // 选股完成后异步触发 LLM 复评（不阻塞本次返回；未启用则后台置 skipped）
-        _reviewQueue.Enqueue(entity.Id);
         return results;
     }
 
