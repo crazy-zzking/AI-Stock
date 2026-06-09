@@ -78,6 +78,7 @@ builder.Services.AddSingleton<MarketSnapshotSyncService>();
 builder.Services.AddSingleton<DragonTigerSyncService>();
 builder.Services.AddSingleton<IndexKlineSyncService>();
 builder.Services.AddSingleton<CapitalFlowSyncService>();
+builder.Services.AddSingleton<ConceptDigestService>();
 
 // 调度：每个后台任务独立注册，调度参数由 Jobs:<Name> 配置
 builder.Services.Configure<JobSchedulerOptions>(o =>
@@ -95,6 +96,7 @@ builder.Services.AddSingleton<IScheduledJob, MarketSnapshotSyncJob>();
 builder.Services.AddSingleton<IScheduledJob, DragonTigerCollectJob>();
 builder.Services.AddSingleton<IScheduledJob, IndexKlineSyncJob>();
 builder.Services.AddSingleton<IScheduledJob, CapitalFlowSyncJob>();
+builder.Services.AddSingleton<IScheduledJob, ConceptDigestJob>();
 builder.Services.Configure<GraphPromotionOptions>(
     builder.Configuration.GetSection(GraphPromotionOptions.SectionName));
 builder.Services.AddHostedService<JobScheduler>();

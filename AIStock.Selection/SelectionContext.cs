@@ -16,6 +16,9 @@ public class SelectionContext
     /// <summary>个股概念：股票代码 → 概念名列表</summary>
     public IReadOnlyDictionary<string, List<string>> ConceptsByCode { get; set; } = new Dictionary<string, List<string>>();
 
+    /// <summary>个股概念炒作点：股票代码 → (概念名 → LLM蒸馏短语)。仅展示用，缺省为空。</summary>
+    public IReadOnlyDictionary<string, Dictionary<string, string>> ConceptDigestByCode { get; set; } = new Dictionary<string, Dictionary<string, string>>();
+
     /// <summary>个股行业：股票代码 → 行业名</summary>
     public IReadOnlyDictionary<string, string> IndustryByCode { get; set; } = new Dictionary<string, string>();
 

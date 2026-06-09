@@ -69,7 +69,7 @@ public class StockSelectionService
         var regime = await ComputeMarketRegimeAsync(latest, ct);
 
         // 题材（个股概念 + 当日热门题材）与板块强度，一次性算好供打分与展示复用
-        var conceptsByCode = await LoadConceptsByCodeAsync(latest, ct);
+        var (conceptsByCode, conceptDigests) = await LoadConceptsByCodeAsync(latest, ct);
         var hotConcepts = ComputeHotConcepts(latest, conceptsByCode);
         var (industryByCode, industryStrength) = await ComputeSectorStrengthAsync(latest, ct);
 
@@ -78,6 +78,7 @@ public class StockSelectionService
             Regime = regime,
             HotConcepts = hotConcepts,
             ConceptsByCode = conceptsByCode,
+            ConceptDigestByCode = conceptDigests,
             IndustryByCode = industryByCode,
             IndustryStrength = industryStrength,
             BenchmarkRise20d = regime.Indices.Count > 0
@@ -187,18 +188,26 @@ public class StockSelectionService
         List<DailyMarketSnapshotEntity> latest, IReadOnlyDictionary<string, List<string>> conceptsByCode)
         => Backtest.SelectionContextBuilder.ComputeHotConcepts(latest, conceptsByCode);
 
-    /// <summary>取今日全部股票的概念关联：股票代码 → 概念列表。</summary>
-    private async Task<Dictionary<string, List<string>>> LoadConceptsByCodeAsync(
-        List<DailyMarketSnapshotEntity> latest, CancellationToken ct)
+    /// <summary>取今日全部股票的概念关联：代码→概念列表，以及 代码→(概念→炒作点digest)。</summary>
+    private async Task<(Dictionary<string, List<string>> Concepts, Dictionary<string, Dictionary<string, string>> Digests)>
+        LoadConceptsByCodeAsync(List<DailyMarketSnapshotEntity> latest, CancellationToken ct)
     {
         var codes = latest.Select(s => s.Code).ToList();
-        if (codes.Count == 0) return new();
-        return (await _db.StockConceptRelation
-                .Where(c => codes.Contains(c.StockCode))
-                .Select(c => new { c.StockCode, c.ConceptName })
-                .ToListAsync(ct))
-            .GroupBy(c => c.StockCode)
+        if (codes.Count == 0) return (new(), new());
+        var rows = await _db.StockConceptRelation
+            .Where(c => codes.Contains(c.StockCode))
+            .Select(c => new { c.StockCode, c.ConceptName, c.ConceptDigest })
+            .ToListAsync(ct);
+        var concepts = rows.GroupBy(c => c.StockCode)
             .ToDictionary(g => g.Key, g => g.Select(x => x.ConceptName).Distinct().ToList());
+        var digests = new Dictionary<string, Dictionary<string, string>>();
+        foreach (var r in rows)
+        {
+            if (string.IsNullOrWhiteSpace(r.ConceptDigest)) continue;
+            if (!digests.TryGetValue(r.StockCode, out var d)) digests[r.StockCode] = d = new();
+            d[r.ConceptName] = r.ConceptDigest!;
+        }
+        return (concepts, digests);
     }
 
     /// <summary>
@@ -370,6 +379,15 @@ public class StockSelectionService
                     .ThenBy(c => c)
                     .ToList();
                 r.HotConcepts = cs.Where(ctx.HotConcepts.ContainsKey).ToList();
+
+                // 命中题材的"炒作点"：概念·LLM蒸馏短语（如"半导体·类ABF膜国产替代"），按热度取前 3
+                ctx.ConceptDigestByCode.TryGetValue(r.Code, out var digs);
+                if (digs is { Count: > 0 })
+                    r.ThemeReasons = r.HotConcepts
+                        .Where(c => digs.ContainsKey(c) && !string.IsNullOrWhiteSpace(digs[c]))
+                        .Take(3)
+                        .Select(c => $"{c}·{digs[c]}")
+                        .ToList();
             }
         }
     }

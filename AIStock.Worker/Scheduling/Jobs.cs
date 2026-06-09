@@ -224,3 +224,12 @@ public class CapitalFlowSyncJob : IScheduledJob
     public string Name => "capital-flow";
     public Task ExecuteAsync(CancellationToken ct) => _svc.SyncAsync(ct: ct);
 }
+
+/// <summary>概念炒作点蒸馏任务：LLM 把 selected_reason 提炼成短语写入 concept_digest（幂等，只补空行）</summary>
+public class ConceptDigestJob : IScheduledJob
+{
+    private readonly ConceptDigestService _svc;
+    public ConceptDigestJob(ConceptDigestService svc) => _svc = svc;
+    public string Name => "concept-digest";
+    public Task ExecuteAsync(CancellationToken ct) => _svc.SyncAsync(ct: ct);
+}

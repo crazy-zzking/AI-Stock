@@ -4,6 +4,7 @@ using AIStock.Infrastructure.Database.Context;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace AIStock.Infrastructure.Migrations
 {
     [DbContext(typeof(AIStockDbContext))]
-    partial class AIStockDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260608150000_AddConceptDigest")]
+    partial class AddConceptDigest
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -969,11 +972,6 @@ namespace AIStock.Infrastructure.Migrations
                         .HasColumnType("int")
                         .HasColumnName("priority");
 
-                    b.Property<string>("ReasoningEffort")
-                        .HasMaxLength(20)
-                        .HasColumnType("varchar(20)")
-                        .HasColumnName("reasoning_effort");
-
                     b.Property<bool>("SupportsMultimodal")
                         .HasColumnType("tinyint(1)")
                         .HasColumnName("supports_multimodal");
@@ -985,11 +983,6 @@ namespace AIStock.Infrastructure.Migrations
                     b.Property<int?>("ThinkingBudgetTokens")
                         .HasColumnType("int")
                         .HasColumnName("thinking_budget_tokens");
-
-                    b.Property<string>("ThinkingFormat")
-                        .HasMaxLength(30)
-                        .HasColumnType("varchar(30)")
-                        .HasColumnName("thinking_format");
 
                     b.Property<int>("TimeoutSeconds")
                         .HasColumnType("int")

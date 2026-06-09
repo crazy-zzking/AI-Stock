@@ -40,6 +40,11 @@ public class StockConceptRelationEntity
     [Column("selected_reason", TypeName = "text")]
     public string? SelectedReason { get; set; }
 
+    /// <summary>LLM 蒸馏的"炒作点"短语（≤12字，从 selected_reason 提炼，供选股展示）。null=未蒸馏。</summary>
+    [Column("concept_digest")]
+    [StringLength(60)]
+    public string? ConceptDigest { get; set; }
+
     [Column("created_at")]
     public DateTime CreatedAt { get; set; } = DateTime.Now;
 

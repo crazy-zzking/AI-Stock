@@ -272,6 +272,9 @@ public class StockSelectionResult
     /// <summary>命中当日热门题材的概念（活跃股集中的风口题材）</summary>
     public List<string> HotConcepts { get; set; } = new();
 
+    /// <summary>命中题材的"炒作点"（概念·LLM蒸馏短语，如"半导体·类ABF膜国产替代"）。供展示，让题材一眼看懂。</summary>
+    public List<string> ThemeReasons { get; set; } = new();
+
     /// <summary>评级（1-5 星）</summary>
     public int RatingStars { get; set; }
 
