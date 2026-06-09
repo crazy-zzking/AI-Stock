@@ -83,16 +83,30 @@ public class LLMModelConfigEntity
     public string? Description { get; set; }
 
     /// <summary>
-    /// 是否启用思考模式（仅 api.deepseek.com 支持）
+    /// 是否启用思考模式
     /// </summary>
     [Column("enable_thinking")]
     public bool EnableThinking { get; set; }
 
     /// <summary>
-    /// 思考 Token 预算
+    /// 思考参数格式：deepseek / qwen / reasoning_effort
+    /// </summary>
+    [Column("thinking_format")]
+    [StringLength(30)]
+    public string? ThinkingFormat { get; set; }
+
+    /// <summary>
+    /// 思考 Token 预算（deepseek/qwen 格式使用）
     /// </summary>
     [Column("thinking_budget_tokens")]
     public int? ThinkingBudgetTokens { get; set; }
+
+    /// <summary>
+    /// 推理强度（reasoning_effort 格式使用：low / medium / high）
+    /// </summary>
+    [Column("reasoning_effort")]
+    [StringLength(20)]
+    public string? ReasoningEffort { get; set; }
 
     /// <summary>
     /// 是否支持多模态（图片识别）

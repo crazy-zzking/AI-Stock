@@ -141,6 +141,37 @@ public class LLMController : ControllerBase
     }
 
     /// <summary>
+    /// 测试指定模型连通性（含禁用模型，真实调用外部 API）
+    /// </summary>
+    [HttpPost("models/{modelId}/test")]
+    public async Task<IActionResult> TestModel(string modelId, [FromBody] LLMTestRequest? request)
+    {
+        var prompt = request?.UserPrompt;
+        if (string.IsNullOrWhiteSpace(prompt))
+            prompt = "你好，请用一句话简单自我介绍。";
+
+        var response = await _llmService.TestModelAsync(modelId, prompt, request?.SystemPrompt);
+        return Ok(response);
+    }
+
+    /// <summary>
+    /// 测试给定配置连通性（不读库，用表单当前值；含未保存修改）
+    /// </summary>
+    [HttpPost("models/test")]
+    public async Task<IActionResult> TestConfig([FromBody] LLMTestConfigRequest request)
+    {
+        if (request?.Config == null)
+            return BadRequest(new { error = "Config is required" });
+
+        var prompt = request.UserPrompt;
+        if (string.IsNullOrWhiteSpace(prompt))
+            prompt = "你好，请用一句话简单自我介绍。";
+
+        var response = await _llmService.TestConfigAsync(request.Config, prompt, request.SystemPrompt);
+        return Ok(response);
+    }
+
+    /// <summary>
     /// 发送LLM请求
     /// </summary>
     [HttpPost("chat")]
@@ -171,6 +202,43 @@ public class LLMController : ControllerBase
         var result = await _llmService.CompareAsync(llmRequest, request.ModelCount);
         return Ok(result);
     }
+}
+
+/// <summary>
+/// LLM 模型测试请求
+/// </summary>
+public class LLMTestRequest
+{
+    /// <summary>
+    /// 用户提示词（为空则用默认自我介绍提示词）
+    /// </summary>
+    public string? UserPrompt { get; set; }
+
+    /// <summary>
+    /// 系统提示词（可选）
+    /// </summary>
+    public string? SystemPrompt { get; set; }
+}
+
+/// <summary>
+/// LLM 配置测试请求（用表单当前值，不读库）
+/// </summary>
+public class LLMTestConfigRequest
+{
+    /// <summary>
+    /// 待测试的模型配置
+    /// </summary>
+    public LLMConfig? Config { get; set; }
+
+    /// <summary>
+    /// 用户提示词（为空则用默认自我介绍提示词）
+    /// </summary>
+    public string? UserPrompt { get; set; }
+
+    /// <summary>
+    /// 系统提示词（可选）
+    /// </summary>
+    public string? SystemPrompt { get; set; }
 }
 
 /// <summary>

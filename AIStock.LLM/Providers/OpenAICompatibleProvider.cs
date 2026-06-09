@@ -308,15 +308,36 @@ public class OpenAICompatibleProvider : ILLMProvider
             body["temperature"] = (double)temperature.Value;
         }
 
-        // DeepSeek 思考模式：仅 api.deepseek.com 且配置开启时注入
-        if (config.EnableThinking && config.BaseUrl.Contains("api.deepseek.com", StringComparison.OrdinalIgnoreCase))
+        // 思考模式：按每模型配置的格式注入（任意模型可用）
+        if (config.EnableThinking)
         {
+            var format = string.IsNullOrWhiteSpace(config.ThinkingFormat)
+                ? "deepseek"
+                : config.ThinkingFormat.Trim().ToLowerInvariant();
             var budgetTokens = config.ThinkingBudgetTokens ?? 8000;
-            body["thinking"] = new Dictionary<string, object>
+
+            switch (format)
             {
-                ["type"] = "enabled",
-                ["budget_tokens"] = budgetTokens
-            };
+                case "qwen":
+                    // 通义千问 / Qwen 系：enable_thinking + thinking_budget
+                    body["enable_thinking"] = true;
+                    body["thinking_budget"] = budgetTokens;
+                    break;
+                case "reasoning_effort":
+                    // OpenAI o 系等：reasoning_effort = low / medium / high
+                    body["reasoning_effort"] = string.IsNullOrWhiteSpace(config.ReasoningEffort)
+                        ? "medium"
+                        : config.ReasoningEffort.Trim().ToLowerInvariant();
+                    break;
+                default:
+                    // deepseek：thinking { type, budget_tokens }
+                    body["thinking"] = new Dictionary<string, object>
+                    {
+                        ["type"] = "enabled",
+                        ["budget_tokens"] = budgetTokens
+                    };
+                    break;
+            }
         }
 
         return JsonSerializer.Serialize(body, new JsonSerializerOptions

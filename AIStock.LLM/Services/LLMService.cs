@@ -181,7 +181,9 @@ public class LLMService : ILLMService
         entity.Temperature = config.Temperature;
         entity.Description = config.Description;
         entity.EnableThinking = config.EnableThinking;
+        entity.ThinkingFormat = config.ThinkingFormat;
         entity.ThinkingBudgetTokens = config.ThinkingBudgetTokens;
+        entity.ReasoningEffort = config.ReasoningEffort;
         entity.SupportsMultimodal = config.SupportsMultimodal;
         entity.UpdatedAt = DateTime.Now;
 
@@ -273,6 +275,36 @@ public class LLMService : ILLMService
         }
     }
 
+    public async Task<LLMResponse> TestModelAsync(string modelId, string userPrompt, string? systemPrompt = null, CancellationToken cancellationToken = default)
+    {
+        // 含禁用模型一并取，启用前也能测连通性
+        var configs = await GetAllModelConfigsAsync();
+        if (!configs.TryGetValue(modelId, out var config))
+        {
+            return new LLMResponse { Success = false, ErrorMessage = $"Model not found: {modelId}" };
+        }
+
+        return await TestConfigAsync(config, userPrompt, systemPrompt, cancellationToken);
+    }
+
+    public async Task<LLMResponse> TestConfigAsync(LLMConfig config, string userPrompt, string? systemPrompt = null, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(config.BaseUrl) || string.IsNullOrWhiteSpace(config.Model) || string.IsNullOrWhiteSpace(config.ApiKey))
+        {
+            return new LLMResponse { Success = false, ErrorMessage = "API 地址、模型标识、API Key 不能为空" };
+        }
+
+        var request = new LLMRequest
+        {
+            UserPrompt = string.IsNullOrWhiteSpace(userPrompt) ? "你好，请用一句话简单自我介绍。" : userPrompt,
+            SystemPrompt = systemPrompt,
+            ModelId = config.Id
+        };
+
+        // 直连 Provider，绕过 IsEnabled 校验，不读库
+        return await _llmProvider.SendAsync(config, request, cancellationToken);
+    }
+
     private async Task<Dictionary<string, LLMConfig>> GetModelConfigsAsync()
     {
         if (_cache.TryGetValue(CacheKey, out Dictionary<string, LLMConfig>? cachedConfigs) && cachedConfigs != null)
@@ -359,7 +391,9 @@ public class LLMService : ILLMService
             Temperature = entity.Temperature,
             Description = entity.Description,
             EnableThinking = entity.EnableThinking,
+            ThinkingFormat = entity.ThinkingFormat,
             ThinkingBudgetTokens = entity.ThinkingBudgetTokens,
+            ReasoningEffort = entity.ReasoningEffort,
             SupportsMultimodal = entity.SupportsMultimodal
         };
     }
@@ -380,7 +414,9 @@ public class LLMService : ILLMService
             Temperature = config.Temperature,
             Description = config.Description,
             EnableThinking = config.EnableThinking,
+            ThinkingFormat = config.ThinkingFormat,
             ThinkingBudgetTokens = config.ThinkingBudgetTokens,
+            ReasoningEffort = config.ReasoningEffort,
             SupportsMultimodal = config.SupportsMultimodal
         };
     }

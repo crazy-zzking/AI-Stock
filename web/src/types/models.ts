@@ -214,7 +214,9 @@ export interface LLMModel {
   temperature: number;
   description: string;
   enableThinking?: boolean;
+  thinkingFormat?: string;
   thinkingBudgetTokens?: number;
+  reasoningEffort?: string;
   supportsMultimodal?: boolean;
 }
 
@@ -230,6 +232,23 @@ export interface DeepSeekBalance {
   isAvailable: boolean;
   balanceInfos: DeepSeekBalanceInfo[];
   errorMessage?: string;
+}
+
+export interface LLMTokenUsage {
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+}
+
+export interface LLMTestResponse {
+  success: boolean;
+  content: string;
+  modelId: string;
+  modelName: string;
+  usage?: LLMTokenUsage;
+  errorMessage?: string;
+  responseTimeMs: number;
+  thinkingContent?: string;
 }
 
 // --- 知识图谱 ---

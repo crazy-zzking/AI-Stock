@@ -61,4 +61,14 @@ public interface ILLMService
     /// 查询 DeepSeek 账户余额（实时，不入库；仅 api.deepseek.com 模型）
     /// </summary>
     Task<DeepSeekBalance> GetDeepSeekBalanceAsync(string modelId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// 测试指定模型连通性（含禁用模型，直连 Provider，绕过启用校验）
+    /// </summary>
+    Task<LLMResponse> TestModelAsync(string modelId, string userPrompt, string? systemPrompt = null, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// 测试给定配置连通性（直连 Provider，不读库；用于编辑页保存前验证）
+    /// </summary>
+    Task<LLMResponse> TestConfigAsync(LLMConfig config, string userPrompt, string? systemPrompt = null, CancellationToken cancellationToken = default);
 }

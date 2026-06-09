@@ -3,7 +3,7 @@ import type {
   AgentStatus, AgentResult, WorkflowDefinition, WorkflowResult,
   DecisionResult, DecisionRequest, StockInfo, QuoteData,
   PositionSummary, OrderRequest, OrderResult,
-  LLMModel, DeepSeekBalance, ProviderStatus, AgentMemoryRecord,
+  LLMModel, DeepSeekBalance, LLMTestResponse, ProviderStatus, AgentMemoryRecord,
   PromptInfo, PromptTemplate,
 } from '../types/models';
 
@@ -223,6 +223,10 @@ export const deleteLLMModel = (modelId: string) => api.delete(`/llm/models/${mod
 export const refreshLLMModels = () => api.post('/llm/models/refresh');
 export const getDeepSeekBalance = (modelId: string) =>
   api.get<DeepSeekBalance>(`/llm/models/${modelId}/balance`);
+export const testLLMModel = (modelId: string, userPrompt?: string, systemPrompt?: string) =>
+  api.post<LLMTestResponse>(`/llm/models/${modelId}/test`, { userPrompt, systemPrompt });
+export const testLLMConfig = (config: LLMModel, userPrompt?: string, systemPrompt?: string) =>
+  api.post<LLMTestResponse>('/llm/models/test', { config, userPrompt, systemPrompt });
 export const sendChat = (userPrompt: string, systemPrompt?: string, modelId?: string) =>
   api.post('/llm/chat', { userPrompt, systemPrompt, modelId });
 export const compareLLM = (prompt: string, modelCount = 3, systemPrompt?: string) =>

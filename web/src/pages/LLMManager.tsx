@@ -1,18 +1,31 @@
 import React, { useEffect, useState } from 'react';
 import {
   Card, Table, Tag, Row, Col, Statistic, message, Button, Modal, Form,
-  Input, InputNumber, Switch, Space, Popconfirm, Tooltip, Divider, Spin, Alert, Descriptions,
+  Input, InputNumber, Switch, Space, Popconfirm, Tooltip, Divider, Spin, Alert, Descriptions, Select,
 } from 'antd';
 import {
   RobotOutlined, CheckCircleOutlined, CloseCircleOutlined,
   PlusOutlined, EditOutlined, DeleteOutlined, ReloadOutlined, BulbOutlined, WalletOutlined, PictureOutlined,
+  ThunderboltOutlined,
 } from '@ant-design/icons';
 
 import {
-  getLLMModels, addLLMModel, updateLLMModel, deleteLLMModel, refreshLLMModels, getDeepSeekBalance,
+  getLLMModels, addLLMModel, updateLLMModel, deleteLLMModel, refreshLLMModels, getDeepSeekBalance, testLLMModel, testLLMConfig,
 } from '../api';
 import LoadingSkeleton from '../components/LoadingSkeleton';
-import type { LLMModel, DeepSeekBalance } from '../types/models';
+import type { LLMModel, DeepSeekBalance, LLMTestResponse } from '../types/models';
+
+/** 思考参数格式选项 */
+const THINKING_FORMAT_OPTIONS = [
+  { value: 'deepseek', label: 'DeepSeek（thinking）' },
+  { value: 'qwen', label: 'Qwen（enable_thinking）' },
+  { value: 'reasoning_effort', label: 'reasoning_effort（OpenAI o 系等）' },
+];
+const THINKING_FORMAT_LABELS: Record<string, string> = {
+  deepseek: 'DeepSeek',
+  qwen: 'Qwen',
+  reasoning_effort: 'effort',
+};
 
 /** LLM 模型管理 — 完整 CRUD */
 const LLMManager: React.FC = () => {
@@ -22,8 +35,8 @@ const LLMManager: React.FC = () => {
   const [editingModel, setEditingModel] = useState<LLMModel | null>(null);
   const [saving, setSaving] = useState(false);
   const [form] = Form.useForm();
-  const watchedBaseUrl: string = Form.useWatch('baseUrl', form) ?? '';
-  const isDeepSeek = watchedBaseUrl.includes('api.deepseek.com');
+  const watchedEnableThinking: boolean = Form.useWatch('enableThinking', form) ?? false;
+  const watchedThinkingFormat: string = Form.useWatch('thinkingFormat', form) ?? 'deepseek';
 
   useEffect(() => { loadModels(); }, []);
 
@@ -57,13 +70,16 @@ const LLMManager: React.FC = () => {
       priority: 0,
       timeoutSeconds: 30,
       temperature: 0.7,
+      thinkingFormat: 'deepseek',
     });
+    setEditTest({ running: false, result: null });
     setModalOpen(true);
   };
 
   const openEditModal = (model: LLMModel) => {
     setEditingModel(model);
-    form.setFieldsValue(model);
+    form.setFieldsValue({ ...model, thinkingFormat: model.thinkingFormat || 'deepseek' });
+    setEditTest({ running: false, result: null });
     setModalOpen(true);
   };
 
@@ -129,6 +145,101 @@ const LLMManager: React.FC = () => {
     }
   };
 
+  // 模型连通性测试（真实调用外部 API，含未启用模型）
+  const DEFAULT_TEST_PROMPT = '你好，请用一句话简单自我介绍。';
+  const [testState, setTestState] = useState<{
+    open: boolean; running: boolean; modelId: string; name: string;
+    prompt: string; result: LLMTestResponse | null;
+  }>({ open: false, running: false, modelId: '', name: '', prompt: DEFAULT_TEST_PROMPT, result: null });
+
+  const openTestModal = (record: LLMModel) => {
+    setTestState({
+      open: true, running: false, modelId: record.id, name: record.name,
+      prompt: DEFAULT_TEST_PROMPT, result: null,
+    });
+  };
+
+  const handleRunTest = async () => {
+    if (!testState.prompt.trim()) {
+      message.warning('请输入测试提示词');
+      return;
+    }
+    setTestState((s) => ({ ...s, running: true, result: null }));
+    try {
+      const res = await testLLMModel(testState.modelId, testState.prompt);
+      setTestState((s) => ({ ...s, running: false, result: res.data }));
+    } catch (err: any) {
+      setTestState((s) => ({
+        ...s, running: false,
+        result: {
+          success: false, content: '', modelId: s.modelId, modelName: s.name,
+          responseTimeMs: 0, errorMessage: err?.response?.data?.error || '请求失败',
+        },
+      }));
+    }
+  };
+
+  // 编辑/新建弹窗内联测试：用表单当前值（含未保存修改），不读库
+  const [editTest, setEditTest] = useState<{ running: boolean; result: LLMTestResponse | null }>(
+    { running: false, result: null },
+  );
+
+  const handleEditTest = async () => {
+    let values: LLMModel;
+    try {
+      values = await form.validateFields();
+    } catch {
+      return; // 表单校验未过
+    }
+    setEditTest({ running: true, result: null });
+    try {
+      const res = await testLLMConfig(values);
+      setEditTest({ running: false, result: res.data });
+    } catch (err: any) {
+      setEditTest({
+        running: false,
+        result: {
+          success: false, content: '', modelId: values.id, modelName: values.name,
+          responseTimeMs: 0, errorMessage: err?.response?.data?.error || '请求失败',
+        },
+      });
+    }
+  };
+
+  // 测试结果展示（编辑弹窗与独立测试弹窗共用）
+  const renderTestResult = (result: LLMTestResponse) => (
+    result.success ? (
+      <>
+        <Alert
+          type="success"
+          showIcon
+          message={`调用成功 · 耗时 ${result.responseTimeMs} ms`}
+          style={{ marginBottom: 12 }}
+        />
+        {result.thinkingContent && (
+          <Descriptions bordered size="small" column={1} style={{ marginBottom: 12 }}>
+            <Descriptions.Item label="思考过程">
+              <div style={{ whiteSpace: 'pre-wrap', color: '#999' }}>{result.thinkingContent}</div>
+            </Descriptions.Item>
+          </Descriptions>
+        )}
+        <Descriptions bordered size="small" column={1}>
+          <Descriptions.Item label="响应内容">
+            <div style={{ whiteSpace: 'pre-wrap' }}>{result.content}</div>
+          </Descriptions.Item>
+          <Descriptions.Item label="实际模型">{result.modelName || result.modelId}</Descriptions.Item>
+          {result.usage && (
+            <Descriptions.Item label="Token 用量">
+              输入 {result.usage.promptTokens} · 输出 {result.usage.completionTokens} · 合计 {result.usage.totalTokens}
+            </Descriptions.Item>
+          )}
+        </Descriptions>
+      </>
+    ) : (
+      <Alert type="error" showIcon message="调用失败" description={result.errorMessage} />
+    )
+  );
+
   const columns = [
     { title: 'ID', dataIndex: 'id', key: 'id', width: 100 },
     { title: '名称', dataIndex: 'name', key: 'name', ellipsis: true },
@@ -153,13 +264,15 @@ const LLMManager: React.FC = () => {
     },
     { title: '描述', dataIndex: 'description', key: 'description', ellipsis: true },
     {
-      title: '思考模式', dataIndex: 'enableThinking', key: 'enableThinking', width: 90,
+      title: '思考模式', dataIndex: 'enableThinking', key: 'enableThinking', width: 130,
       render: (v: boolean, record: LLMModel) =>
-        record.baseUrl?.includes('api.deepseek.com') ? (
-          <Tag icon={<BulbOutlined />} color={v ? 'gold' : 'default'}>
-            {v ? '开启' : '关闭'}
+        v ? (
+          <Tag icon={<BulbOutlined />} color="gold">
+            {THINKING_FORMAT_LABELS[record.thinkingFormat || 'deepseek'] || record.thinkingFormat}
           </Tag>
-        ) : null,
+        ) : (
+          <Tag color="default">关闭</Tag>
+        ),
     },
     {
       title: '多模态', dataIndex: 'supportsMultimodal', key: 'supportsMultimodal', width: 90,
@@ -170,9 +283,12 @@ const LLMManager: React.FC = () => {
       ),
     },
     {
-      title: '操作', key: 'actions', width: 160,
+      title: '操作', key: 'actions', width: 200,
       render: (_: unknown, record: LLMModel) => (
         <Space size="small">
+          <Tooltip title="测试连通性">
+            <Button size="small" icon={<ThunderboltOutlined />} onClick={() => openTestModal(record)} />
+          </Tooltip>
           {record.baseUrl?.includes('api.deepseek.com') && (
             <Tooltip title="查余额">
               <Button size="small" icon={<WalletOutlined />} onClick={() => handleQueryBalance(record)} />
@@ -264,13 +380,22 @@ const LLMManager: React.FC = () => {
       <Modal
         title={editingModel ? '编辑模型' : '新建模型'}
         open={modalOpen}
-        onOk={handleSave}
         onCancel={() => setModalOpen(false)}
-        confirmLoading={saving}
-        okText="保存"
-        cancelText="取消"
         width={600}
         destroyOnClose
+        footer={[
+          <Button
+            key="test"
+            icon={<ThunderboltOutlined />}
+            loading={editTest.running}
+            onClick={handleEditTest}
+            style={{ float: 'left' }}
+          >
+            测试
+          </Button>,
+          <Button key="cancel" onClick={() => setModalOpen(false)}>取消</Button>,
+          <Button key="save" type="primary" loading={saving} onClick={handleSave}>保存</Button>,
+        ]}
       >
         <Form form={form} layout="vertical" style={{ marginTop: 16 }}>
           <Form.Item
@@ -341,30 +466,64 @@ const LLMManager: React.FC = () => {
           >
             <Switch checkedChildren="支持" unCheckedChildren="不支持" />
           </Form.Item>
-          {isDeepSeek && (
-            <>
-              <Divider style={{ fontSize: 13 }}>
-                <BulbOutlined /> DeepSeek 思考模式
-              </Divider>
-              <Row gutter={16}>
-                <Col span={8}>
-                  <Form.Item name="enableThinking" label="开启思考" valuePropName="checked">
-                    <Switch checkedChildren="开" unCheckedChildren="关" />
-                  </Form.Item>
-                </Col>
-                <Col span={16}>
-                  <Form.Item
-                    name="thinkingBudgetTokens"
-                    label="思考 Token 预算"
-                    extra="最小 1000，不填默认 8000"
-                  >
-                    <InputNumber min={1000} max={32000} step={1000} style={{ width: '100%' }} placeholder="8000" />
-                  </Form.Item>
-                </Col>
-              </Row>
-            </>
+          <Divider style={{ fontSize: 13 }}>
+            <BulbOutlined /> 思考模式
+          </Divider>
+          <Row gutter={16}>
+            <Col span={8}>
+              <Form.Item name="enableThinking" label="开启思考" valuePropName="checked">
+                <Switch checkedChildren="开" unCheckedChildren="关" />
+              </Form.Item>
+            </Col>
+            <Col span={16}>
+              <Form.Item
+                name="thinkingFormat"
+                label="参数格式"
+                extra="按模型厂商选择思考参数的注入格式"
+              >
+                <Select options={THINKING_FORMAT_OPTIONS} disabled={!watchedEnableThinking} />
+              </Form.Item>
+            </Col>
+          </Row>
+          {watchedEnableThinking && watchedThinkingFormat !== 'reasoning_effort' && (
+            <Form.Item
+              name="thinkingBudgetTokens"
+              label="思考 Token 预算"
+              extra="最小 1000，不填默认 8000"
+            >
+              <InputNumber min={1000} max={32000} step={1000} style={{ width: '100%' }} placeholder="8000" />
+            </Form.Item>
+          )}
+          {watchedEnableThinking && watchedThinkingFormat === 'reasoning_effort' && (
+            <Form.Item
+              name="reasoningEffort"
+              label="推理强度"
+              extra="reasoning_effort 取值，不填默认 medium"
+            >
+              <Select
+                placeholder="medium"
+                allowClear
+                options={[
+                  { value: 'low', label: 'low' },
+                  { value: 'medium', label: 'medium' },
+                  { value: 'high', label: 'high' },
+                ]}
+              />
+            </Form.Item>
           )}
         </Form>
+
+        {/* 内联测试结果 */}
+        {(editTest.running || editTest.result) && (
+          <>
+            <Divider style={{ fontSize: 13 }}><ThunderboltOutlined /> 测试结果</Divider>
+            {editTest.running ? (
+              <div style={{ textAlign: 'center', padding: 16 }}><Spin tip="模型响应中…" /></div>
+            ) : (
+              editTest.result && renderTestResult(editTest.result)
+            )}
+          </>
+        )}
       </Modal>
 
       {/* DeepSeek 余额（实时查询，不入库） */}
@@ -408,6 +567,42 @@ const LLMManager: React.FC = () => {
             )}
           </>
         )}
+      </Modal>
+
+      {/* 模型连通性测试（真实调用外部 API） */}
+      <Modal
+        title={<><ThunderboltOutlined /> 测试模型 — {testState.name}</>}
+        open={testState.open}
+        onOk={handleRunTest}
+        onCancel={() => setTestState((s) => ({ ...s, open: false }))}
+        confirmLoading={testState.running}
+        okText="发送测试"
+        cancelText="关闭"
+        width={560}
+        destroyOnClose
+      >
+        <Alert
+          type="warning"
+          showIcon
+          message="测试会真实调用外部 API 并消耗 Token"
+          style={{ marginBottom: 12 }}
+        />
+        <Form layout="vertical">
+          <Form.Item label="测试提示词">
+            <Input.TextArea
+              rows={3}
+              value={testState.prompt}
+              onChange={(e) => setTestState((s) => ({ ...s, prompt: e.target.value }))}
+              placeholder="输入要发送给模型的提示词"
+            />
+          </Form.Item>
+        </Form>
+
+        {testState.running && (
+          <div style={{ textAlign: 'center', padding: 24 }}><Spin tip="模型响应中…" /></div>
+        )}
+
+        {!testState.running && testState.result && renderTestResult(testState.result)}
       </Modal>
     </div>
   );
