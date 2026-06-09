@@ -545,41 +545,71 @@ public class EastmoneyProvider : BaseProvider
     {
         var result = new Dictionary<string, decimal>();
         const string fs = "m:0+t:6,m:0+t:80,m:1+t:2,m:1+t:23,m:0+t:81+s:2048"; // 沪深京 A 股
-        for (int pn = 1; pn <= 60; pn++)
+        // 关键：东财该接口每页固定只返回 100 条（即便请求 pz=200 也只回 100）。
+        // 故必须按 pn 一直翻到"空页 / 取满 total"为止；绝不能用"count < 请求页大小"判末页——
+        // 那正是旧 bug：每页 100 < 200 直接停在第 1 页，只拿到净流入榜前 100（清一色为正），
+        // 导致全市场 98% 个股资金面落 0、选股硬过滤被架空。
+        // IP 限频由东财专用 HttpClient（隧道代理 + Polly 重试，见 DependencyInjection）兜底，此处不再手动退避。
+        const int pageSize = 100;
+        const int maxRetryPerPage = 5; // 东财限频常返回 HTTP200 空 body（Polly 不会重试这类），需自行退避重试
+        var total = int.MaxValue;       // 接口返回的全市场只数，作为翻页终止与覆盖率校验依据
+
+        for (int pn = 1; pn <= 100; pn++) // 100 页 × 100 ≈ 1 万，远超全市场 ~5900
         {
             if (ct.IsCancellationRequested) break;
             var url = SectorRankingUrl + "?" +
-                      $"fid=f62&po=1&pz=200&pn={pn}&np=1&fltt=2&invt=2&fs={fs}&fields=f12,f62&" +
+                      $"fid=f62&po=1&pz={pageSize}&pn={pn}&np=1&fltt=2&invt=2&fs={fs}&fields=f12,f62&" +
                       "ut=8dec03ba335b81bf4ebdf7b29ec27d15";
-            var resp = await SendEastmoneyRequestAsync(url, ct);
-            if (resp == null) break;
 
-            int count = 0;
-            try
+            // 区分三态：成功（diff 数组，可能为空=真末页）/ 瞬时空响应（限频，需退避重试）/ 解析异常。
+            // pageGot=false 表示多次重试仍未拿到有效 diff。
+            var pageGot = false;
+            var count = 0;
+            for (int attempt = 0; attempt <= maxRetryPerPage; attempt++)
             {
-                using var doc = JsonDocument.Parse(resp);
-                if (!doc.RootElement.TryGetProperty("data", out var data) ||
-                    data.ValueKind == JsonValueKind.Null ||
-                    !data.TryGetProperty("diff", out var diff) ||
-                    diff.ValueKind != JsonValueKind.Array)
-                    break;
+                if (attempt > 0) await Task.Delay(400 * attempt, ct); // 退避 0.4s/0.8s/...
 
-                foreach (var item in diff.EnumerateArray())
+                var resp = await SendEastmoneyRequestAsync(url, ct);
+                if (resp == null) continue; // 网络失败/限频 → 重试
+
+                try
                 {
-                    var code = item.TryGetProperty("f12", out var c) && c.ValueKind == JsonValueKind.String ? c.GetString() : null;
-                    if (string.IsNullOrEmpty(code)) continue;
-                    var flow = item.TryGetProperty("f62", out var f) && f.ValueKind == JsonValueKind.Number ? f.GetDecimal() : 0;
-                    result[code] = flow;
-                    count++;
+                    using var doc = JsonDocument.Parse(resp);
+                    if (!doc.RootElement.TryGetProperty("data", out var data) || data.ValueKind == JsonValueKind.Null ||
+                        !data.TryGetProperty("diff", out var diff) || diff.ValueKind != JsonValueKind.Array)
+                        continue; // 限频空响应（非 diff 数组）→ 重试，不能当末页
+                    if (total == int.MaxValue && data.TryGetProperty("total", out var t) && t.ValueKind == JsonValueKind.Number)
+                        total = t.GetInt32();
+
+                    foreach (var item in diff.EnumerateArray())
+                    {
+                        var code = item.TryGetProperty("f12", out var c) && c.ValueKind == JsonValueKind.String ? c.GetString() : null;
+                        if (string.IsNullOrEmpty(code)) continue;
+                        var flow = item.TryGetProperty("f62", out var f) && f.ValueKind == JsonValueKind.Number ? f.GetDecimal() : 0;
+                        result[code] = flow;
+                        count++;
+                    }
+                    pageGot = true;
+                    break; // 本页成功（diff 为数组，count 可能为 0 = 真末页）
+                }
+                catch (Exception ex)
+                {
+                    Logger.LogWarning(ex, "解析市场资金流分页失败 pn={Pn} attempt={Attempt}", pn, attempt);
                 }
             }
-            catch (Exception ex)
+
+            if (!pageGot)
             {
-                Logger.LogWarning(ex, "解析市场资金流分页失败 pn={Pn}", pn);
+                Logger.LogWarning("市场资金流分页 pn={Pn} 重试 {N} 次仍失败，已采集 {Got} 只后中止", pn, maxRetryPerPage, result.Count);
                 break;
             }
-            if (count < 200) break; // 不足一页 = 最后一页
+            if (count == 0) break;            // 有效空页 = 已翻到底
+            if (result.Count >= total) break; // 已取满全市场
         }
+
+        if (total != int.MaxValue && result.Count < total / 2)
+            Logger.LogWarning("市场资金流覆盖偏低：{Got}/{Total}，资金面数据可能不完整", result.Count, total);
+
         return result;
     }
 
