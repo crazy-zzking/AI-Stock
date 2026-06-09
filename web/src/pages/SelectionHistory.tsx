@@ -43,6 +43,7 @@ const SelectionHistory: React.FC = () => {
   const [quotes, setQuotes] = useState<Record<string, QuoteData>>({});
   const [quoteLoading, setQuoteLoading] = useState<Record<string, boolean>>({});
   const [reviewing, setReviewing] = useState(false);
+  const [expandedKeys, setExpandedKeys] = useState<React.Key[]>([]);
   const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // 展开行时懒加载实时报价（已缓存则跳过）
@@ -77,7 +78,7 @@ const SelectionHistory: React.FC = () => {
 
   const selectBatch = async (id: number, silent = false) => {
     setSelectedId(id);
-    if (!silent) setPerfLoading(true);
+    if (!silent) { setPerfLoading(true); setExpandedKeys([]); }
     try {
       const res = await getSelectionPerformance(id);
       const data: Perf | null = res.data || null;
@@ -106,6 +107,18 @@ const SelectionHistory: React.FC = () => {
       message.error('触发复评失败');
     } finally {
       setReviewing(false);
+    }
+  };
+
+  // 全部展开 / 全部收起
+  const toggleExpandAll = () => {
+    const items = perf?.items || [];
+    if (expandedKeys.length >= items.length && items.length > 0) {
+      setExpandedKeys([]);
+    } else {
+      const codes = items.filter((i) => !!i.code).map((i) => i.code);
+      setExpandedKeys(codes);
+      codes.forEach((c) => loadQuote(c));
     }
   };
 
@@ -165,6 +178,13 @@ const SelectionHistory: React.FC = () => {
             ) : '选后表现'}
             extra={perf && (
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                <Button
+                  size="small"
+                  onClick={toggleExpandAll}
+                  disabled={(perf.items?.length ?? 0) === 0}
+                >
+                  {expandedKeys.length >= (perf.items?.length ?? 0) && (perf.items?.length ?? 0) > 0 ? '全部收起' : '全部展开'}
+                </Button>
                 <Tag color={REVIEW_STATUS[perf.reviewStatus || 'pending']?.color}>
                   {REVIEW_STATUS[perf.reviewStatus || 'pending']?.text || perf.reviewStatus}
                 </Tag>
@@ -192,6 +212,8 @@ const SelectionHistory: React.FC = () => {
                   dataSource={perf?.items || []}
                   columns={columns}
                   expandable={{
+                    expandedRowKeys: expandedKeys,
+                    onExpandedRowsChange: (keys) => setExpandedKeys([...keys]),
                     onExpand: (expanded, r: PerfItem) => { if (expanded) loadQuote(r.code); },
                     expandedRowRender: (r: PerfItem) => {
                       const q = quotes[r.code];
