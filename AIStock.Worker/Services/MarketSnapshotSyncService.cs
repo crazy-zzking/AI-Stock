@@ -180,6 +180,7 @@ public class MarketSnapshotSyncService
             var ma = featureCalculator.CalculateMA(ordered);
             var macd = featureCalculator.CalculateMACD(ordered);
             var rsi = featureCalculator.CalculateRSI(ordered);
+            var bbi = featureCalculator.CalculateBBI(ordered);
 
             var prevClose = q.PreClose > 0 ? q.PreClose : hist[^1].Close;
             var close20Ago = ordered[^21].Close;
@@ -201,7 +202,7 @@ public class MarketSnapshotSyncService
                 Rise20d = rise20d,
                 Ma5 = ma.MA5 ?? 0, Ma10 = ma.MA10 ?? 0, Ma20 = ma.MA20 ?? 0,
                 MacdDif = macd.DIF, MacdDea = macd.DEA, MacdGoldenCross = goldenCross,
-                Rsi = rsi.RSI12,
+                Rsi = rsi.RSI12, Bbi = bbi,
             });
         }
 
@@ -230,7 +231,7 @@ public class MarketSnapshotSyncService
                 e.AvgPrice = snap.AvgPrice;
                 e.MainNetInflow = snap.MainNetInflow; e.Rise20d = snap.Rise20d;
                 e.Ma5 = snap.Ma5; e.Ma10 = snap.Ma10; e.Ma20 = snap.Ma20;
-                e.MacdDif = snap.MacdDif; e.MacdDea = snap.MacdDea; e.MacdGoldenCross = snap.MacdGoldenCross; e.Rsi = snap.Rsi;
+                e.MacdDif = snap.MacdDif; e.MacdDea = snap.MacdDea; e.MacdGoldenCross = snap.MacdGoldenCross; e.Rsi = snap.Rsi; e.Bbi = snap.Bbi;
             }
             else db.DailyMarketSnapshot.Add(snap);
         }
@@ -251,6 +252,7 @@ public class MarketSnapshotSyncService
         var ma = featureCalculator.CalculateMA(ordered);
         var macd = featureCalculator.CalculateMACD(ordered);
         var rsi = featureCalculator.CalculateRSI(ordered);
+        var bbi = featureCalculator.CalculateBBI(ordered);
 
         // 估值/资金流为外部增量接口，失败不阻断（取不到则为 0）
         QuoteData? quote = null;
@@ -290,7 +292,8 @@ public class MarketSnapshotSyncService
             MacdDif = macd.DIF,
             MacdDea = macd.DEA,
             MacdGoldenCross = goldenCross,
-            Rsi = rsi.RSI12
+            Rsi = rsi.RSI12,
+            Bbi = bbi
         };
     }
 
@@ -329,6 +332,7 @@ public class MarketSnapshotSyncService
             existing.MacdDea = snap.MacdDea;
             existing.MacdGoldenCross = snap.MacdGoldenCross;
             existing.Rsi = snap.Rsi;
+            existing.Bbi = snap.Bbi;
         }
 
         await db.SaveChangesAsync(ct);

@@ -27,6 +27,7 @@ public static class SnapshotRebuilder
         var ma = fc.CalculateMA(ordered);
         var macd = fc.CalculateMACD(ordered);
         var rsi = fc.CalculateRSI(ordered);
+        var bbi = fc.CalculateBBI(ordered);
 
         var changePercent = prevClose > 0 ? (last.Close - prevClose) / prevClose * 100m : 0m;
         var rise20d = close20Ago > 0 ? (last.Close - close20Ago) / close20Ago * 100m : 0m;
@@ -65,6 +66,7 @@ public static class SnapshotRebuilder
             MacdDea = macd.DEA,
             MacdGoldenCross = goldenCross,
             Rsi = rsi.RSI12,
+            Bbi = bbi,
         };
     }
 

@@ -87,6 +87,7 @@ public class ConfigurableSelectionStrategy : WeightedSelectionStrategyBase
             Sector = SelectionScorers.Sector(s.Code, ctx),
             Volatility = SelectionScorers.Volatility(seq),
             RelativeStrength = SelectionScorers.RelativeStrength(s, ctx),
+            News = SelectionScorers.News(s.Code, ctx),
         };
 
     protected override decimal Penalty(DailyMarketSnapshotEntity s, SequenceFeatures seq, SelectionCriteria criteria)

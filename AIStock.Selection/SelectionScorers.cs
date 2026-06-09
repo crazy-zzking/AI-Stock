@@ -100,6 +100,8 @@ public static class SelectionScorers
 
         if (s.AvgPrice > 0 && s.Close >= s.AvgPrice) score += 10;
 
+        if (s.Bbi > 0 && s.Close >= s.Bbi) score += 8; // 收盘站上 BBI：多周期均线多头共振
+
         return Math.Min(score, 100m);
     }
 
@@ -132,6 +134,8 @@ public static class SelectionScorers
         };
 
         if (s.AvgPrice > 0 && s.Close >= s.AvgPrice) score += 8;
+
+        if (s.Bbi > 0 && s.Close >= s.Bbi) score += 8; // 收盘站上 BBI：多周期均线多头共振
 
         return Math.Min(score, 100m);
     }
@@ -241,7 +245,11 @@ public static class SelectionScorers
         => f.Capital * w.Capital + f.Technical * w.Technical + f.Position * w.Position
          + f.Form * w.Form + f.DragonTiger * w.DragonTiger + f.Activity * w.Activity
          + f.Theme * w.Theme + f.Sector * w.Sector + f.Volatility * w.Volatility
-         + f.RelativeStrength * w.RelativeStrength;
+         + f.RelativeStrength * w.RelativeStrength + f.News * w.News;
+
+    /// <summary>消息面分（0-100，50中性）：取上下文里该股 news/report 事件分类结果。无上下文/无事件=中性。</summary>
+    public static decimal News(string code, SelectionContext? ctx)
+        => ctx != null && ctx.NewsByCode.TryGetValue(code, out var sig) ? sig.Score : 50m;
 
     /// <summary>大盘环境综合分系数。</summary>
     public static decimal RegimeFactor(MarketRegimeLevel level, SelectionWeights w) => level switch

@@ -46,6 +46,7 @@ public class TrendStrategy : WeightedSelectionStrategyBase
             Sector = SelectionScorers.Sector(s.Code, ctx),
             Volatility = SelectionScorers.Volatility(seq),
             RelativeStrength = SelectionScorers.RelativeStrength(s, ctx),
+            News = SelectionScorers.News(s.Code, ctx),
         };
 
     // 趋势策略追强，不惩罚涨停/连板（强势特征）；仅对极端单日暴涨轻微提示由位置分体现。

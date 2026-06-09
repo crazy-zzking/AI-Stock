@@ -19,7 +19,7 @@ interface SelectionResult {
   code: string; name: string; industry: string; concepts: string[]; hotConcepts: string[];
   ratingStars: number; tags: string[];
   close: number; changePercent: number; totalMarketCap: number;
-  rise20d: number; peTtm: number; mainNetInflow: number;
+  rise20d: number; peTtm: number; bbi?: number; mainNetInflow: number;
   totalScore: number; factors: FactorScores; coreLogic: string;
   marketRegime?: string; recommendedStrategy?: string;
   review?: LlmReview | null;

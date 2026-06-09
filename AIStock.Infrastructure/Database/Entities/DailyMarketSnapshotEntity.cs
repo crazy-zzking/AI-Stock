@@ -86,6 +86,9 @@ public class DailyMarketSnapshotEntity
     [Column("macd_golden_cross")] public bool MacdGoldenCross { get; set; }
     [Column("rsi")] public decimal Rsi { get; set; }
 
+    /// <summary>BBI 多空指数 =(MA3+MA6+MA12+MA24)/4。收盘价站上 BBI 视为多头占优。</summary>
+    [Column("bbi")] public decimal Bbi { get; set; }
+
     [Column("created_at")]
     public DateTime CreatedAt { get; set; } = DateTime.Now;
 }

@@ -68,6 +68,24 @@ public class ReplayBacktestService
             .Select(s => new { s.Code, s.Industry })
             .ToDictionaryAsync(x => x.Code, x => x.Industry!, ct);
 
+        // 预载区间事件（供逐日消息面排雷/打分，无前视）。事件史浅(05-30起)，更早日期自然为空、优雅降级。
+        var allCodesSet = allCodes.ToHashSet();
+        var newsSince = from.Date.AddDays(-(Math.Max(1, criteria.NewsLookbackDays) + 4));
+        var eventsByCode = new Dictionary<string, List<(DateTime Date, string? Type, string? Sentiment, int? Imp, string? Title)>>();
+        var evRows = await _db.EventRecord
+            .Where(e => e.RelatedStocks != null && e.RelatedStocks != ""
+                && (e.EventTime ?? e.CreatedAt) >= newsSince && (e.EventTime ?? e.CreatedAt) <= to.Date.AddDays(1))
+            .Select(e => new { e.EventType, e.Sentiment, e.Importance, e.Title, e.RelatedStocks, D = (e.EventTime ?? e.CreatedAt) })
+            .ToListAsync(ct);
+        foreach (var r in evRows)
+            foreach (var raw in r.RelatedStocks!.Split(new[] { ',', '，', ';', '；', ' ' }, StringSplitOptions.RemoveEmptyEntries))
+            {
+                var code = raw.Trim();
+                if (!allCodesSet.Contains(code)) continue;
+                if (!eventsByCode.TryGetValue(code, out var list)) eventsByCode[code] = list = new();
+                list.Add((r.D.Date, r.EventType, r.Sentiment, r.Importance, r.Title));
+            }
+
         var dragonsByDate = (await _db.DragonTiger
                 .Where(d => d.Date >= from.Date && d.Date <= to.Date)
                 .ToListAsync(ct))
@@ -117,6 +135,36 @@ public class ReplayBacktestService
             };
 
             var activePool = ActivityScreener.Screen(dayShots.ToList(), criteria);
+
+            // 消息面（截至当日近 N 日，无前视）：news/report 分类 + knowledge-star 小作文；重雷池级排雷
+            var lookStart = day.AddDays(-(Math.Max(1, criteria.NewsLookbackDays) + 4));
+            var dayNews = new Dictionary<string, NewsSignal>();
+            var dayKnowledge = new Dictionary<string, List<string>>();
+            foreach (var hit in activePool)
+            {
+                var code = hit.Snapshot.Code;
+                if (!eventsByCode.TryGetValue(code, out var evs)) continue;
+                var newsEvs = new List<NewsEvent>();
+                foreach (var e in evs)
+                {
+                    if (e.Date < lookStart || e.Date > day) continue;
+                    if (string.Equals(e.Type, "knowledge-star", StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (!dayKnowledge.TryGetValue(code, out var kl)) dayKnowledge[code] = kl = new();
+                        if (kl.Count < 3 && !string.IsNullOrWhiteSpace(e.Title)) kl.Add(e.Title!);
+                    }
+                    else newsEvs.Add(new NewsEvent(e.Type, e.Sentiment, e.Imp, e.Title));
+                }
+                if (newsEvs.Count > 0)
+                {
+                    var sig = NewsEventClassifier.Classify(newsEvs);
+                    if (sig.Veto || sig.Score != 50m) dayNews[code] = sig;
+                }
+            }
+            context.NewsByCode = dayNews;
+            context.KnowledgeNotesByCode = dayKnowledge;
+            if (criteria.EnableNewsVeto && dayNews.Count > 0)
+                activePool = activePool.Where(h => !(dayNews.TryGetValue(h.Snapshot.Code, out var sg) && sg.Veto)).ToList();
 
             // 仅对活跃池股票算"截至当日"的多日序列特征
             var seqByCode = new Dictionary<string, SequenceFeatures>();

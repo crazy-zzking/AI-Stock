@@ -39,6 +39,11 @@ public class SelectionCriteria
     /// <summary>是否启用 LLM 生成核心逻辑（默认规则模板）</summary>
     public bool UseLlmNarrative { get; set; } = false;
 
+    /// <summary>是否启用"重雷硬否决"（命中立案/处罚/退市/问询函等事件的票直接剔除）。默认开。</summary>
+    public bool EnableNewsVeto { get; set; } = true;
+    /// <summary>消息面事件回看交易日数（取候选股近 N 日的 news/report 事件）。</summary>
+    public int NewsLookbackDays { get; set; } = 5;
+
     /// <summary>
     /// 运行时选择的 K 线形态键（取值见 CandlePatternAnalyzer.PatternKeys）。
     /// 仅对启用形态过滤的策略（如 kpattern）生效：非空时覆盖策略定义里的形态列表；空=用策略默认（全部形态）。
@@ -80,6 +85,9 @@ public class SelectionWeights
     public decimal Volatility { get; set; } = 0m;
     /// <summary>相对强度权重（个股 20 日涨幅相对大盘基准的超额）。默认 0 不启用。</summary>
     public decimal RelativeStrength { get; set; } = 0m;
+
+    /// <summary>消息面权重（news/report 事件利好/利空）。默认 0 不启用（先观察，回测无法验证）。</summary>
+    public decimal News { get; set; } = 0m;
 
     /// <summary>弱市综合分系数（&lt;1 收紧）</summary>
     public decimal RegimeWeakFactor { get; set; } = 0.88m;
@@ -165,6 +173,9 @@ public class SelectionFactorScores
     public decimal Volatility { get; set; }
     /// <summary>相对强度（个股 20 日涨幅相对大盘基准的超额）</summary>
     public decimal RelativeStrength { get; set; }
+
+    /// <summary>消息面（news/report 事件：利好加分 / 利空降分，50 中性）。knowledge-star 不计入。</summary>
+    public decimal News { get; set; }
 }
 
 /// <summary>
@@ -267,11 +278,17 @@ public class StockSelectionResult
     /// <summary>标签（主力+X万 / MACD刚金叉 / 概念…）</summary>
     public List<string> Tags { get; set; } = new();
 
+    /// <summary>关联的知识星球"小作文"标题（仅展示提示，不参与排雷/打分；最多取最近几条）。</summary>
+    public List<string> KnowledgeStarNotes { get; set; } = new();
+
     public decimal Close { get; set; }
     public decimal ChangePercent { get; set; }
     public decimal TotalMarketCap { get; set; }
     public decimal Rise20d { get; set; }
     public decimal PeTtm { get; set; }
+
+    /// <summary>BBI 多空指数 =(MA3+MA6+MA12+MA24)/4；收盘价 ≥ BBI 视为多头占优。</summary>
+    public decimal Bbi { get; set; }
 
     /// <summary>主力净流入（元）</summary>
     public decimal MainNetInflow { get; set; }

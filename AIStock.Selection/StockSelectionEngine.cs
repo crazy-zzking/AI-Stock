@@ -83,11 +83,12 @@ public class StockSelectionEngine
             var sector = SelectionScorers.Sector(s.Code, context);                        // 板块强弱
             var volatility = SelectionScorers.Volatility(seq);                            // 波动/风险（低波动高分）
             var relStrength = SelectionScorers.RelativeStrength(s, context);              // 相对大盘强度
+            var news = SelectionScorers.News(s.Code, context);                            // 消息面（默认权重0）
 
             var total = capital * w.Capital + technical * w.Technical + position * w.Position
                         + form * w.Form + dragon * w.DragonTiger + activity * w.Activity
                         + theme * w.Theme + sector * w.Sector + volatility * w.Volatility
-                        + relStrength * w.RelativeStrength;
+                        + relStrength * w.RelativeStrength + news * w.News;
 
             // 涨停性质惩罚（多日）：区分低位首板（仍有空间，轻罚）与高位/连板（追高风险，重罚）
             total -= SelectionScorers.LimitUpPenalty(s, seq, criteria);
@@ -103,6 +104,7 @@ public class StockSelectionEngine
                 TotalMarketCap = s.TotalMarketCap,
                 Rise20d = s.Rise20d,
                 PeTtm = s.PeTtm,
+                Bbi = s.Bbi,
                 MainNetInflow = s.MainNetInflow,
                 ConsecutiveInflowDays = seq.ConsecutiveInflowDays,
                 ConsecutiveLimitUp = seq.ConsecutiveLimitUp,
@@ -120,7 +122,8 @@ public class StockSelectionEngine
                     Theme = Math.Round(theme, 1),
                     Sector = Math.Round(sector, 1),
                     Volatility = Math.Round(volatility, 1),
-                    RelativeStrength = Math.Round(relStrength, 1)
+                    RelativeStrength = Math.Round(relStrength, 1),
+                    News = Math.Round(news, 1)
                 }
             };
 
@@ -157,6 +160,7 @@ public class StockSelectionEngine
         if (s.MacdGoldenCross) tags.Add("MACD刚金叉");
         if (s.Rsi is > 0m and < 40m) tags.Add("超卖反弹");
         if (s.AvgPrice > 0 && s.Close >= s.AvgPrice) tags.Add("站上均价");
+        if (s.Bbi > 0 && s.Close >= s.Bbi) tags.Add("站上BBI");
         if (seq.BreakoutNewHigh) tags.Add("突破新高");
         else if (seq.PullbackStabilize) tags.Add("回踩企稳");
         if (activityFeatures.Contains("温和放量")) tags.Add("温和放量");

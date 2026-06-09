@@ -44,6 +44,7 @@ public class ThemeStrategy : WeightedSelectionStrategyBase
             Sector = SelectionScorers.Sector(s.Code, ctx),
             Volatility = SelectionScorers.Volatility(seq),
             RelativeStrength = SelectionScorers.RelativeStrength(s, ctx),
+            News = SelectionScorers.News(s.Code, ctx),
         };
 
     // 题材龙头常涨停，沿用低吸口径的涨停惩罚以防高位连板接盘。

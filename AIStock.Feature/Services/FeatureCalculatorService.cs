@@ -17,6 +17,12 @@ public class FeatureCalculatorService : IFeatureCalculator
 
         var closes = klines.Select(k => k.Close).ToList();
 
+        // BBI 用均线（短中周期）
+        if (closes.Count >= 3) result.MA3 = CalculateSMA(closes, 3);
+        if (closes.Count >= 6) result.MA6 = CalculateSMA(closes, 6);
+        if (closes.Count >= 12) result.MA12 = CalculateSMA(closes, 12);
+        if (closes.Count >= 24) result.MA24 = CalculateSMA(closes, 24);
+
         result.MA5 = CalculateSMA(closes, 5);
         if (closes.Count >= 10) result.MA10 = CalculateSMA(closes, 10);
         if (closes.Count >= 20) result.MA20 = CalculateSMA(closes, 20);
@@ -25,6 +31,15 @@ public class FeatureCalculatorService : IFeatureCalculator
         if (closes.Count >= 250) result.MA250 = CalculateSMA(closes, 250);
 
         return result;
+    }
+
+    public decimal CalculateBBI(List<KlineData> klines)
+    {
+        if (klines == null || klines.Count < 24) return 0;
+        var closes = klines.Select(k => k.Close).ToList();
+        var bbi = (CalculateSMA(closes, 3) + CalculateSMA(closes, 6)
+                   + CalculateSMA(closes, 12) + CalculateSMA(closes, 24)) / 4m;
+        return Math.Round(bbi, 4);
     }
 
     public MACDIndicator CalculateMACD(List<KlineData> klines, int fastPeriod = 12, int slowPeriod = 26, int signalPeriod = 9)
@@ -149,6 +164,7 @@ public class FeatureCalculatorService : IFeatureCalculator
             indicator.RSI = CalculateRSI(klines);
             indicator.Volatility = CalculateVolatility(klines);
             indicator.ATR = CalculateATR(klines);
+            indicator.BBI = CalculateBBI(klines);
         }
 
         if (intradayData != null && intradayData.Count > 0)

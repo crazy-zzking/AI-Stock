@@ -22,6 +22,7 @@ public static class DependencyInjection
         services.AddScoped<ISelectionStrategy, TrendStrategy>();
         services.AddScoped<ISelectionStrategy, ThemeStrategy>();
         services.AddScoped<ISelectionStrategy, KPatternStrategy>();
+        services.AddScoped<ISelectionStrategy, HotMoneyStrategy>();
         // 合并"内置 + 数据库自建"策略，供运行时解析/列出/回测
         services.AddScoped<ISelectionStrategyProvider, SelectionStrategyProvider>();
 

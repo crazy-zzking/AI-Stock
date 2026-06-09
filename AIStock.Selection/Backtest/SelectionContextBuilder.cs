@@ -10,10 +10,28 @@ namespace AIStock.Selection.Backtest;
 /// </summary>
 public static class SelectionContextBuilder
 {
-    /// <summary>当日热门题材：活跃股（涨停/大涨/放量）扎堆的概念 → 活跃股数（≥2 才算）。</summary>
+    /// <summary>
+    /// "宽筐"概念黑名单关键词：资金通道/指数成分/地域政策筐/财务状态筐——不是可交易题材，是噪声，命中即剔除。
+    /// </summary>
+    private static readonly string[] ConceptBlocklistKeywords =
+    {
+        "融资融券", "沪股通", "深股通", "转融券", "MSCI", "富时", "标普", "创业板综",
+        "机构重仓", "预盈", "预增", "高送转", "破净", "次新股",
+        "一带一路", "西部大开发", "深圳特区", "创投",
+    };
+
+    private static bool IsBlockedConcept(string name)
+        => ConceptBlocklistKeywords.Any(k => name.Contains(k, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>
+    /// 当日热门题材：当日活跃股（涨停/涨≥5%/放量红盘）扎堆的概念，按"集中度加权热度"取 TopN。
+    /// 热度排序用 活跃数²/成分数（既看参与度又看集中度，压制成分上千的宽概念）；剔除宽筐黑名单；
+    /// 护栏：成分 ≥5 且 活跃 ≥2。返回 概念→活跃股数（值仍为活跃数，保持 Theme 因子热度口径不变）。
+    /// </summary>
     public static Dictionary<string, int> ComputeHotConcepts(
         IReadOnlyList<DailyMarketSnapshotEntity> dayShots,
-        IReadOnlyDictionary<string, List<string>> conceptsByCode)
+        IReadOnlyDictionary<string, List<string>> conceptsByCode,
+        int topN = 20)
     {
         var activeCodes = dayShots
             .Where(s => s.IsLimitUp || s.ChangePercent >= 5m || (s.VolumeRatio >= 2m && s.ChangePercent > 0))
@@ -21,17 +39,29 @@ public static class SelectionContextBuilder
             .ToHashSet();
         if (activeCodes.Count == 0) return new();
 
-        var counter = new Dictionary<string, HashSet<string>>();
+        // 概念 → 活跃成分（去重）/ 总成分数
+        var activeMembers = new Dictionary<string, HashSet<string>>();
+        var totalMembers = new Dictionary<string, int>();
         foreach (var (code, concepts) in conceptsByCode)
-        {
-            if (!activeCodes.Contains(code)) continue;
             foreach (var c in concepts)
             {
-                if (!counter.TryGetValue(c, out var set)) counter[c] = set = new HashSet<string>();
-                set.Add(code);
+                totalMembers[c] = totalMembers.GetValueOrDefault(c) + 1;
+                if (activeCodes.Contains(code))
+                {
+                    if (!activeMembers.TryGetValue(c, out var set)) activeMembers[c] = set = new HashSet<string>();
+                    set.Add(code);
+                }
             }
-        }
-        return counter.Where(kv => kv.Value.Count >= 2).ToDictionary(kv => kv.Key, kv => kv.Value.Count);
+
+        return activeMembers
+            .Where(kv => !IsBlockedConcept(kv.Key)
+                         && totalMembers.GetValueOrDefault(kv.Key) >= 5   // 护栏：概念不能太小
+                         && kv.Value.Count >= 2)                          // 至少 2 只活跃股
+            .Select(kv => new { Concept = kv.Key, Active = kv.Value.Count, Size = totalMembers[kv.Key] })
+            .OrderByDescending(x => (double)x.Active * x.Active / x.Size)  // 集中度加权热度
+            .ThenByDescending(x => x.Active)
+            .Take(Math.Max(1, topN))
+            .ToDictionary(x => x.Concept, x => x.Active);
     }
 
     /// <summary>板块强度：行业平均涨幅分位（0-100）；行业内不足 3 只记中性。</summary>

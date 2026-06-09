@@ -18,6 +18,11 @@ public interface IFeatureCalculator
     MACDIndicator CalculateMACD(List<KlineData> klines, int fastPeriod = 12, int slowPeriod = 26, int signalPeriod = 9);
 
     /// <summary>
+    /// 计算 BBI 多空指数 =(MA3+MA6+MA12+MA24)/4。不足 24 根返回 0。
+    /// </summary>
+    decimal CalculateBBI(List<KlineData> klines);
+
+    /// <summary>
     /// 计算RSI指标
     /// </summary>
     RSIIndicator CalculateRSI(List<KlineData> klines);

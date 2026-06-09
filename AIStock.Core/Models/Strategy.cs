@@ -44,6 +44,11 @@ public class TechnicalIndicator
     /// ATR指标
     /// </summary>
     public decimal? ATR { get; set; }
+
+    /// <summary>
+    /// BBI 多空指数 =(MA3+MA6+MA12+MA24)/4。收盘价站上 BBI 视为多头占优。
+    /// </summary>
+    public decimal? BBI { get; set; }
 }
 
 /// <summary>
@@ -51,6 +56,18 @@ public class TechnicalIndicator
 /// </summary>
 public class MAIndicator
 {
+    /// <summary>MA3（BBI 用）</summary>
+    public decimal? MA3 { get; set; }
+
+    /// <summary>MA6（BBI 用）</summary>
+    public decimal? MA6 { get; set; }
+
+    /// <summary>MA12（BBI 用）</summary>
+    public decimal? MA12 { get; set; }
+
+    /// <summary>MA24（BBI 用）</summary>
+    public decimal? MA24 { get; set; }
+
     /// <summary>
     /// MA5
     /// </summary>

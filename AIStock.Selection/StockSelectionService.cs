@@ -97,9 +97,25 @@ public class StockSelectionService
             : activePool.Select(h => h.Snapshot.Code).Distinct().ToList();
         context.PatternsByCode = await LoadPatternsAsync(patternCodes, latestDate, ct);
 
+        // 消息面：近 N 日 news/report 事件 → 分类(排雷/利空/利好)；knowledge-star → 小作文提示（不计分）
+        var (newsByCode, knowledgeNotes) = await LoadNewsAsync(activePool, latestDate, criteria.NewsLookbackDays, ct);
+        context.NewsByCode = newsByCode;
+        context.KnowledgeNotesByCode = knowledgeNotes;
+        // 重雷硬否决：池级剔除，覆盖所有策略（含 lowdip 引擎路径）
+        if (criteria.EnableNewsVeto && newsByCode.Count > 0)
+        {
+            var before = activePool.Count;
+            activePool = activePool
+                .Where(h => !(newsByCode.TryGetValue(h.Snapshot.Code, out var sig) && sig.Veto))
+                .ToList();
+            if (activePool.Count < before)
+                _logger.LogInformation("消息面排雷：剔除 {N} 只命中重雷事件的标的", before - activePool.Count);
+        }
+
         var results = strategy.Select(activePool, dragonByCode, sequenceByCode, criteria, context);
         EnrichIndustryConcepts(results, context);
         EnrichPatterns(results, context);
+        EnrichKnowledgeNotes(results, context);
         _logger.LogInformation("选股完成：策略[{Strategy}]，大盘[{Regime}]，活跃池 {Pool} 只，入选 TOP {Top}，当日热门题材 {Hot} 个",
             strategy.Name, regime.Level, activePool.Count, results.Count, hotConcepts.Count);
         return results;
@@ -166,31 +182,10 @@ public class StockSelectionService
     /// 计算当日热门题材：当日活跃股（涨停/大涨/放量）扎堆的概念，活跃股越多越热。
     /// 返回 概念→活跃股数。反映"当下市场在炒什么"。
     /// </summary>
+    // 当日热门题材：集中度加权 + 宽筐黑名单 + TopN。实盘/回放共用同一实现，避免口径漂移。
     private static Dictionary<string, int> ComputeHotConcepts(
         List<DailyMarketSnapshotEntity> latest, IReadOnlyDictionary<string, List<string>> conceptsByCode)
-    {
-        var activeCodes = latest
-            .Where(s => s.IsLimitUp || s.ChangePercent >= 5m
-                || (s.VolumeRatio >= 2m && s.ChangePercent > 0))
-            .Select(s => s.Code)
-            .ToHashSet();
-        if (activeCodes.Count == 0) return new Dictionary<string, int>();
-
-        // 概念 → 活跃股数（去重）
-        var counter = new Dictionary<string, HashSet<string>>();
-        foreach (var (code, concepts) in conceptsByCode)
-        {
-            if (!activeCodes.Contains(code)) continue;
-            foreach (var c in concepts)
-            {
-                if (!counter.TryGetValue(c, out var set)) counter[c] = set = new HashSet<string>();
-                set.Add(code);
-            }
-        }
-        return counter
-            .Where(kv => kv.Value.Count >= 2) // 至少 2 只活跃股才算成"题材"
-            .ToDictionary(kv => kv.Key, kv => kv.Value.Count);
-    }
+        => Backtest.SelectionContextBuilder.ComputeHotConcepts(latest, conceptsByCode);
 
     /// <summary>取今日全部股票的概念关联：股票代码 → 概念列表。</summary>
     private async Task<Dictionary<string, List<string>>> LoadConceptsByCodeAsync(
@@ -204,6 +199,76 @@ public class StockSelectionService
                 .ToListAsync(ct))
             .GroupBy(c => c.StockCode)
             .ToDictionary(g => g.Key, g => g.Select(x => x.ConceptName).Distinct().ToList());
+    }
+
+    /// <summary>
+    /// 取活跃池个股近 N 日事件：news/report 经 <see cref="NewsEventClassifier"/> 聚合成消息面信号（含重雷否决）；
+    /// knowledge-star 单独收集"小作文"标题（仅展示，不计分/不排雷）。回看窗口用日历日+缓冲近似交易日。
+    /// </summary>
+    private async Task<(Dictionary<string, NewsSignal> News, Dictionary<string, List<string>> Knowledge)> LoadNewsAsync(
+        IReadOnlyList<ActivityScreener.ActivityHit> pool, DateTime latestDate, int lookbackDays, CancellationToken ct)
+    {
+        var news = new Dictionary<string, NewsSignal>();
+        var knowledge = new Dictionary<string, List<string>>();
+        if (pool.Count == 0) return (news, knowledge);
+
+        // related_stocks 可能是代码（news/report）或名称（knowledge-star）→ 统一按"代码或名称"解析到代码
+        var codeSet = pool.Select(h => h.Snapshot.Code).ToHashSet();
+        var codeByName = new Dictionary<string, string>();
+        foreach (var h in pool)
+            if (!string.IsNullOrEmpty(h.Snapshot.Name)) codeByName[h.Snapshot.Name] = h.Snapshot.Code;
+
+        var since = latestDate.AddDays(-(Math.Max(1, lookbackDays) + 4)); // 缓冲覆盖周末/节假
+
+        var rows = await _db.EventRecord
+            .Where(e => e.RelatedStocks != null && e.RelatedStocks != ""
+                && (e.EventTime ?? e.CreatedAt) >= since && (e.EventTime ?? e.CreatedAt) <= latestDate.AddDays(1))
+            .Select(e => new { e.EventType, e.Sentiment, e.Importance, e.Title, e.RelatedStocks })
+            .ToListAsync(ct);
+
+        var newsEvents = new Dictionary<string, List<NewsEvent>>();
+        foreach (var r in rows)
+        {
+            var isKs = string.Equals(r.EventType, "knowledge-star", StringComparison.OrdinalIgnoreCase);
+            var tokens = r.RelatedStocks!.Split(new[] { ',', '，', ';', '；', ' ' }, StringSplitOptions.RemoveEmptyEntries);
+            foreach (var raw in tokens)
+            {
+                var tok = raw.Trim();
+                string code = codeSet.Contains(tok) ? tok
+                    : codeByName.TryGetValue(tok, out var c) ? c : null;
+                if (code == null) continue;
+                if (isKs)
+                {
+                    if (!knowledge.TryGetValue(code, out var list)) knowledge[code] = list = new();
+                    if (list.Count < 3 && !string.IsNullOrWhiteSpace(r.Title)) list.Add(r.Title!);
+                }
+                else
+                {
+                    if (!newsEvents.TryGetValue(code, out var list)) newsEvents[code] = list = new();
+                    list.Add(new NewsEvent(r.EventType, r.Sentiment, r.Importance, r.Title));
+                }
+            }
+        }
+
+        foreach (var (code, evs) in newsEvents)
+        {
+            var sig = NewsEventClassifier.Classify(evs);
+            if (sig.Veto || sig.Score != 50m) news[code] = sig; // 中性不存，省内存；打分侧缺省即中性
+        }
+        return (news, knowledge);
+    }
+
+    /// <summary>富化：选中票附知识星球"小作文"标题 + 标签（仅提示，不影响选股）。</summary>
+    private static void EnrichKnowledgeNotes(List<StockSelectionResult> results, SelectionContext ctx)
+    {
+        foreach (var r in results)
+        {
+            if (ctx.KnowledgeNotesByCode.TryGetValue(r.Code, out var notes) && notes.Count > 0)
+            {
+                r.KnowledgeStarNotes = notes;
+                if (!r.Tags.Contains("知识星球·小作文")) r.Tags.Add("知识星球·小作文");
+            }
+        }
     }
 
     /// <summary>

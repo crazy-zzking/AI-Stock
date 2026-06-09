@@ -28,4 +28,10 @@ public class SelectionContext
     /// <summary>个股 K 线形态：股票代码 → 当日命中的形态（仅对活跃池股票计算，按需填充）。</summary>
     public IReadOnlyDictionary<string, CandlePatternFeatures> PatternsByCode { get; set; }
         = new Dictionary<string, CandlePatternFeatures>();
+
+    /// <summary>个股消息面信号：股票代码 → {是否重雷, 消息面分}。来自近 N 日 news/report 事件分类。无事件=中性。</summary>
+    public IReadOnlyDictionary<string, NewsSignal> NewsByCode { get; set; } = new Dictionary<string, NewsSignal>();
+
+    /// <summary>个股关联的知识星球"小作文"标题（仅展示提示，不参与排雷/打分）。</summary>
+    public IReadOnlyDictionary<string, List<string>> KnowledgeNotesByCode { get; set; } = new Dictionary<string, List<string>>();
 }

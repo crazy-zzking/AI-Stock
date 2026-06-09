@@ -45,4 +45,5 @@ public static class StrategyKeys
     public const string Trend = "trend";
     public const string Theme = "theme";
     public const string KPattern = "kpattern";
+    public const string HotMoney = "hotmoney";
 }
