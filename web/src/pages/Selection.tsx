@@ -17,6 +17,7 @@ interface FactorScores {
 }
 interface SelectionResult {
   code: string; name: string; industry: string; concepts: string[]; hotConcepts: string[];
+  themeReasons?: string[];
   ratingStars: number; tags: string[];
   close: number; changePercent: number; totalMarketCap: number;
   rise20d: number; peTtm: number; bbi?: number; mainNetInflow: number;
@@ -192,6 +193,13 @@ const Selection: React.FC = () => {
               {(r.tags || []).map((t) => <Tag color="blue" key={t}>{t}</Tag>)}
               <Tag>评分 {r.totalScore}</Tag>
             </div>
+
+            {(r.themeReasons?.length ?? 0) > 0 && (
+              <div style={{ marginBottom: 12 }}>
+                <span style={{ fontSize: 12, color: '#999', marginRight: 6 }}>炒作点：</span>
+                {r.themeReasons!.map((t) => <Tag color="volcano" key={t}>💡 {t}</Tag>)}
+              </div>
+            )}
 
             {(r.concepts?.length ?? 0) > 0 && (
               <div style={{ marginBottom: 12 }}>
