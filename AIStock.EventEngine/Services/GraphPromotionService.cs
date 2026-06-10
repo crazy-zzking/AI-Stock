@@ -1,9 +1,9 @@
+using AIStock.Core.Interfaces;
 using AIStock.Infrastructure.Database.Context;
 using AIStock.Infrastructure.Database.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 
 namespace AIStock.EventEngine.Services;
 
@@ -14,21 +14,23 @@ namespace AIStock.EventEngine.Services;
 public class GraphPromotionService
 {
     private readonly IServiceScopeFactory _scopeFactory;
-    private readonly GraphPromotionOptions _options;
+    private readonly IWorkerConfigProvider _config;
+    private GraphPromotionOptions _options = new();
     private readonly ILogger<GraphPromotionService> _logger;
 
     public GraphPromotionService(
         IServiceScopeFactory scopeFactory,
-        IOptions<GraphPromotionOptions> options,
+        IWorkerConfigProvider config,
         ILogger<GraphPromotionService> logger)
     {
         _scopeFactory = scopeFactory;
-        _options = options.Value;
+        _config = config;
         _logger = logger;
     }
 
     public async Task<int> PromoteAsync(CancellationToken ct = default)
     {
+        _options = await _config.GetAsync<GraphPromotionOptions>(GraphPromotionOptions.SectionName, ct);
         using var scope = _scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AIStockDbContext>();
 

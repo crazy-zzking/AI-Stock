@@ -20,24 +20,30 @@ public class MarketSnapshotSyncService
 {
     private readonly IDataProviderResolver _resolver;
     private readonly IServiceScopeFactory _scopeFactory;
-    private readonly MarketSnapshotOptions _options;
+    private readonly IWorkerConfigProvider _config;
+    private MarketSnapshotOptions _options = new();
     private readonly ILogger<MarketSnapshotSyncService> _logger;
 
     public MarketSnapshotSyncService(
         IDataProviderResolver resolver,
         IServiceScopeFactory scopeFactory,
-        IOptions<MarketSnapshotOptions> options,
+        IWorkerConfigProvider config,
         ILogger<MarketSnapshotSyncService> logger)
     {
         _resolver = resolver;
         _scopeFactory = scopeFactory;
-        _options = options.Value;
+        _config = config;
         _logger = logger;
     }
+
+    /// <summary>从配置中心热读当前 MarketSnapshot 参数（每个任务入口调用，实现热生效）。</summary>
+    private async Task RefreshOptionsAsync(CancellationToken ct)
+        => _options = await _config.GetAsync<MarketSnapshotOptions>(MarketSnapshotOptions.SectionName, ct);
 
     /// <summary>遍历股票池采集当日快照，返回成功落库条数。</summary>
     public async Task<int> SyncAsync(CancellationToken ct = default)
     {
+        await RefreshOptionsAsync(ct);
         // 行情/估值/资金流统一用东财：GetDefaultProvider 返回的是散户(交易接口)，
         // 它对 quote/资金流返回空数据（市值/PE/资金流全 0 的根因）。
         var provider = _resolver.GetProviders(DataCapability.Quote)
@@ -99,6 +105,7 @@ public class MarketSnapshotSyncService
     /// </summary>
     public async Task<int> SyncIntradayAsync(CancellationToken ct = default)
     {
+        await RefreshOptionsAsync(ct);
         var tencent = _resolver.GetProviders(DataCapability.Quote)
             .FirstOrDefault(p => p.ProviderId == "tencent") as TencentProvider;
         var eastmoney = _resolver.GetProviders(DataCapability.CapitalFlow)

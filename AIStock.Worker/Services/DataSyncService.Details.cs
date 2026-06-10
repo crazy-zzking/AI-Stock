@@ -19,6 +19,7 @@ public partial class DataSyncService
     /// </summary>
     public async Task<int> SyncStockDetailsAsync(CancellationToken ct = default)
     {
+        await RefreshOptionsAsync(ct);
         // 先刷新东财板块目录（概念/行业/地域），供概念名校验/导航
         await SyncBoardCatalogAsync(ct);
 

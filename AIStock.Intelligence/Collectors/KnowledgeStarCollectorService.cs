@@ -5,7 +5,6 @@ using System.Text.Json;
 using AIStock.Core.Interfaces;
 using AIStock.Core.Models;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 
 namespace AIStock.Intelligence.Collectors;
 
@@ -18,7 +17,8 @@ namespace AIStock.Intelligence.Collectors;
 public class KnowledgeStarCollectorService : IKnowledgeStarCollector
 {
     private readonly IHttpClientFactory _httpClientFactory;
-    private readonly KnowledgeStarOptions _options;
+    private readonly IWorkerConfigProvider _config;
+    private KnowledgeStarOptions _options = new();
     private readonly ILogger<KnowledgeStarCollectorService> _logger;
     private readonly Random _rand = new();
 
@@ -26,16 +26,17 @@ public class KnowledgeStarCollectorService : IKnowledgeStarCollector
 
     public KnowledgeStarCollectorService(
         IHttpClientFactory httpClientFactory,
-        IOptions<KnowledgeStarOptions> options,
+        IWorkerConfigProvider config,
         ILogger<KnowledgeStarCollectorService> logger)
     {
         _httpClientFactory = httpClientFactory;
-        _options = options.Value;
+        _config = config;
         _logger = logger;
     }
 
     public async Task<List<KnowledgeStarContent>> GetLatestContentAsync(int count = 20, CancellationToken cancellationToken = default)
     {
+        _options = await _config.GetAsync<KnowledgeStarOptions>(KnowledgeStarOptions.SectionName, cancellationToken);
         var all = new List<KnowledgeStarContent>();
         if (_options.GroupIds.Count == 0)
         {

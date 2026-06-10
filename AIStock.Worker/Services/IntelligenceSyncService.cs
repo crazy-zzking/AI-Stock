@@ -4,7 +4,6 @@ using AIStock.EventEngine.Services;
 using AIStock.Intelligence;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 
 namespace AIStock.Worker.Services;
 
@@ -14,24 +13,30 @@ namespace AIStock.Worker.Services;
 public class IntelligenceSyncService
 {
     private readonly IServiceScopeFactory _scopeFactory;
-    private readonly IntelligenceSyncOptions _options;
+    private readonly IWorkerConfigProvider _config;
+    private IntelligenceSyncOptions _options = new();
     private readonly ILogger<IntelligenceSyncService> _logger;
 
     public IntelligenceSyncService(
         IServiceScopeFactory scopeFactory,
-        IOptions<IntelligenceSyncOptions> options,
+        IWorkerConfigProvider config,
         ILogger<IntelligenceSyncService> logger)
     {
         _scopeFactory = scopeFactory;
-        _options = options.Value;
+        _config = config;
         _logger = logger;
     }
+
+    /// <summary>从配置中心热读当前 IntelligenceSync 参数（每个任务入口调用，实现热生效）。</summary>
+    private async Task RefreshOptionsAsync(CancellationToken ct)
+        => _options = await _config.GetAsync<IntelligenceSyncOptions>(IntelligenceSyncOptions.SectionName, ct);
 
     /// <summary>
     /// 采集新闻并处理入库。返回成功处理的条数。
     /// </summary>
     public async Task<int> SyncNewsAsync(CancellationToken ct = default)
     {
+        await RefreshOptionsAsync(ct);
         using var scope = _scopeFactory.CreateScope();
         var collector = scope.ServiceProvider.GetRequiredService<INewsCollector>();
         var engine = scope.ServiceProvider.GetRequiredService<EventEngineService>();
@@ -71,6 +76,7 @@ public class IntelligenceSyncService
     /// </summary>
     public async Task<int> SyncAnnouncementsAsync(CancellationToken ct = default)
     {
+        await RefreshOptionsAsync(ct);
         using var scope = _scopeFactory.CreateScope();
         var collector = scope.ServiceProvider.GetRequiredService<INewsCollector>();
         var engine = scope.ServiceProvider.GetRequiredService<EventEngineService>();
@@ -115,11 +121,12 @@ public class IntelligenceSyncService
     /// </summary>
     public async Task<int> SyncKnowledgeStarAsync(CancellationToken ct = default)
     {
+        await RefreshOptionsAsync(ct);
         using var scope = _scopeFactory.CreateScope();
         var collector = scope.ServiceProvider.GetRequiredService<IKnowledgeStarCollector>();
         var essay = scope.ServiceProvider.GetRequiredService<IEssayAnalyzer>();
         var engine = scope.ServiceProvider.GetRequiredService<EventEngineService>();
-        var ksOptions = scope.ServiceProvider.GetRequiredService<IOptions<KnowledgeStarOptions>>().Value;
+        var ksOptions = await _config.GetAsync<KnowledgeStarOptions>(KnowledgeStarOptions.SectionName, ct);
 
         var items = await collector.GetLatestContentAsync(20, ct);
         if (items.Count == 0)
@@ -194,6 +201,7 @@ public class IntelligenceSyncService
     /// </summary>
     public async Task<int> SyncReportsAsync(CancellationToken ct = default)
     {
+        await RefreshOptionsAsync(ct);
         using var scope = _scopeFactory.CreateScope();
         var collector = scope.ServiceProvider.GetRequiredService<IReportCollector>();
         var engine = scope.ServiceProvider.GetRequiredService<EventEngineService>();

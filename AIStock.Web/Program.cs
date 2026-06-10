@@ -9,6 +9,7 @@ using AIStock.EventEngine;
 using AIStock.Execution;
 using AIStock.Feature;
 using AIStock.GraphRAG;
+using AIStock.Infrastructure.Configuration;
 using AIStock.Infrastructure.Database.Context;
 using AIStock.Infrastructure.MessageBus;
 using AIStock.Intelligence;
@@ -104,6 +105,9 @@ else
 var connectionString = builder.Configuration.GetConnectionString("MySQL");
 builder.Services.AddDbContext<AIStockDbContext>(options =>
     options.UseMySql(connectionString!, ServerVersion.AutoDetect(connectionString!)));
+
+// Worker 任务配置中心（与 Worker 共用 worker_config 表；Web 端读写供前端配置）
+builder.Services.AddSingleton<IWorkerConfigProvider, WorkerConfigService>();
 
 // 配置Redis
 var redisConnection = builder.Configuration.GetConnectionString("Redis");

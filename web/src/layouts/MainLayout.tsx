@@ -36,6 +36,7 @@ const ROUTE_META: Record<string, { label: string; icon: React.ReactNode }> = {
   '/llm': { label: 'LLM管理', icon: <RobotOutlined /> },
   '/prompts': { label: 'Prompt', icon: <FileTextOutlined /> },
   '/observability': { label: '系统观测', icon: <ControlOutlined /> },
+  '/worker-config': { label: '任务配置', icon: <ToolOutlined /> },
 };
 
 /** 一级分组 → 二级路由 */
@@ -44,7 +45,7 @@ const GROUPS: { key: string; label: string; icon: React.ReactNode; children: str
   { key: 'g-trade', label: '交易', icon: <ThunderboltOutlined />, children: ['/auto-trading', '/positions', '/strategy'] },
   { key: 'g-ai', label: '智能体', icon: <DeploymentUnitOutlined />, children: ['/agents', '/ai-chat', '/workflow', '/memory'] },
   { key: 'g-knowledge', label: '知识库', icon: <ApartmentOutlined />, children: ['/knowledge'] },
-  { key: 'g-sys', label: '系统', icon: <ToolOutlined />, children: ['/llm', '/prompts', '/observability'] },
+  { key: 'g-sys', label: '系统', icon: <ToolOutlined />, children: ['/llm', '/prompts', '/worker-config', '/observability'] },
 ];
 
 const leaf = (path: string) => ({ key: path, icon: ROUTE_META[path]?.icon, label: ROUTE_META[path]?.label ?? path });

@@ -21,7 +21,8 @@ public partial class DataSyncService
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ITradingCalendar _tradingCalendar;
-    private readonly DataSyncOptions _options;
+    private readonly IWorkerConfigProvider _config;
+    private DataSyncOptions _options = new();
     private readonly ILogger<DataSyncService> _logger;
 
     public DataSyncService(
@@ -29,16 +30,20 @@ public partial class DataSyncService
         IServiceScopeFactory scopeFactory,
         IHttpClientFactory httpClientFactory,
         ITradingCalendar tradingCalendar,
-        IOptions<DataSyncOptions> options,
+        IWorkerConfigProvider config,
         ILogger<DataSyncService> logger)
     {
         _resolver = resolver;
         _scopeFactory = scopeFactory;
         _httpClientFactory = httpClientFactory;
         _tradingCalendar = tradingCalendar;
-        _options = options.Value;
+        _config = config;
         _logger = logger;
     }
+
+    /// <summary>从配置中心热读当前 DataSync 参数（每个任务入口调用，实现热生效）。</summary>
+    private async Task RefreshOptionsAsync(CancellationToken ct)
+        => _options = await _config.GetAsync<DataSyncOptions>(DataSyncOptions.SectionName, ct);
 
     /// <summary>
     /// 从股票池接口获取全市场代码。
@@ -63,6 +68,7 @@ public partial class DataSyncService
     /// </summary>
     public async Task<int> SyncStockBaseAsync(CancellationToken ct = default)
     {
+        await RefreshOptionsAsync(ct);
         var stocks = await FetchStockUniverseAsync(ct);
         if (stocks.Count == 0)
         {
@@ -113,6 +119,7 @@ public partial class DataSyncService
     /// </summary>
     public async Task<int> SyncKlinesAsync(CancellationToken ct = default)
     {
+        await RefreshOptionsAsync(ct);
         using var scope = _scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AIStockDbContext>();
 

@@ -248,4 +248,25 @@ export const reloadPrompts = () => api.post('/prompt/reload');
 export const getAgentMemoryHistory = (agentId: string, stockCode: string, count = 10) =>
   api.get<AgentMemoryRecord[]>(`/orchestrator/memory/${agentId}/${stockCode}`, { params: { count } });
 
+// ============ Worker 任务配置（前端可配置，热生效） ============
+export interface WorkerJobConfig {
+  name: string;
+  displayName: string;
+  dynamic: boolean;
+  hint: string;
+  enabled: boolean;
+  runOnStartup: boolean;
+  intervalSeconds: number;
+  dailyAtHour: number;
+  dailyAtMinute: number;
+}
+export interface WorkerSectionMeta { section: string; displayName: string; }
+export const getWorkerJobs = () => api.get<WorkerJobConfig[]>('/workerconfig/jobs');
+export const saveWorkerJobs = (jobs: WorkerJobConfig[]) => api.put('/workerconfig/jobs', jobs);
+export const listWorkerSections = () => api.get<WorkerSectionMeta[]>('/workerconfig/sections');
+export const getWorkerSection = (section: string) =>
+  api.get<Record<string, unknown>>(`/workerconfig/sections/${section}`);
+export const saveWorkerSection = (section: string, body: Record<string, unknown>) =>
+  api.put(`/workerconfig/sections/${section}`, body);
+
 export default api;

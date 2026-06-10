@@ -25,6 +25,7 @@ import PromptManager from './pages/PromptManager';
 import SelectionConfig from './pages/SelectionConfig';
 import StrategyManager from './pages/StrategyManager';
 import Backtest from './pages/Backtest';
+import WorkerConfig from './pages/WorkerConfig';
 
 function AppShell() {
   const { dark } = useThemeMode();
@@ -57,6 +58,7 @@ function AppShell() {
               <Route path="stock-detail" element={<StockDetail />} />
               <Route path="ai-chat" element={<AIChat />} />
               <Route path="prompts" element={<PromptManager />} />
+              <Route path="worker-config" element={<WorkerConfig />} />
             </Route>
           </Routes>
         </BrowserRouter>

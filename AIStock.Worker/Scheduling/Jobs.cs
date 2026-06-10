@@ -1,6 +1,5 @@
 using AIStock.Core.Interfaces;
 using AIStock.Worker.Services;
-using Microsoft.Extensions.Options;
 
 namespace AIStock.Worker.Scheduling;
 
@@ -28,13 +27,13 @@ public class StockDetailSyncJob : IScheduledJob
 public class KlineSyncJob : IScheduledJob
 {
     private readonly DataSyncService _sync;
-    private readonly DataSyncOptions _options;
+    private readonly IWorkerConfigProvider _config;
     private readonly ILogger<KlineSyncJob> _logger;
 
-    public KlineSyncJob(DataSyncService sync, IOptions<DataSyncOptions> options, ILogger<KlineSyncJob> logger)
+    public KlineSyncJob(DataSyncService sync, IWorkerConfigProvider config, ILogger<KlineSyncJob> logger)
     {
         _sync = sync;
-        _options = options.Value;
+        _config = config;
         _logger = logger;
     }
 
@@ -42,7 +41,8 @@ public class KlineSyncJob : IScheduledJob
 
     public async Task ExecuteAsync(CancellationToken ct)
     {
-        var (need, last, target) = await _sync.ShouldSyncKlinesAsync(_options.SyncHour, ct);
+        var opt = await _config.GetAsync<DataSyncOptions>(DataSyncOptions.SectionName, ct);
+        var (need, last, target) = await _sync.ShouldSyncKlinesAsync(opt.SyncHour, ct);
         if (!need)
         {
             _logger.LogInformation("K线已最新（截至 {Last}），跳过", last?.ToString("yyyy-MM-dd"));
@@ -135,22 +135,27 @@ public class MarketSnapshotSyncJob : IScheduledJob
 {
     private readonly MarketSnapshotSyncService _svc;
     private readonly ITradingCalendar _calendar;
-    private readonly MarketSnapshotOptions _options;
+    private readonly IWorkerConfigProvider _config;
+    private MarketSnapshotOptions _options = new();
     private readonly ILogger<MarketSnapshotSyncJob> _logger;
 
     public MarketSnapshotSyncJob(MarketSnapshotSyncService svc, ITradingCalendar calendar,
-        IOptions<MarketSnapshotOptions> options, ILogger<MarketSnapshotSyncJob> logger)
+        IWorkerConfigProvider config, ILogger<MarketSnapshotSyncJob> logger)
     {
         _svc = svc;
         _calendar = calendar;
-        _options = options.Value;
+        _config = config;
         _logger = logger;
     }
 
     public string Name => "market-snapshot";
 
+    private async Task RefreshOptionsAsync(CancellationToken ct)
+        => _options = await _config.GetAsync<MarketSnapshotOptions>(MarketSnapshotOptions.SectionName, ct);
+
     public async Task ExecuteAsync(CancellationToken ct)
     {
+        await RefreshOptionsAsync(ct);
         if (!_options.EnableIntraday)
         {
             await _svc.SyncAsync(ct); // 未启用盘中：收盘后全量
@@ -168,6 +173,7 @@ public class MarketSnapshotSyncJob : IScheduledJob
 
     public async Task<TimeSpan?> GetNextDelayAsync(CancellationToken ct)
     {
+        await RefreshOptionsAsync(ct);
         if (!_options.EnableIntraday) return null; // 走配置(DailyAtHour/IntervalSeconds)
         var now = DateTime.Now;
         var isTradingDay = await _calendar.IsTradingDayAsync(now.Date, ct);

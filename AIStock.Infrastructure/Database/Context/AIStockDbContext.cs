@@ -137,6 +137,11 @@ public class AIStockDbContext : DbContext
     /// </summary>
     public DbSet<TailPositionEntity> TailPosition { get; set; }
 
+    /// <summary>
+    /// Worker 任务配置（前端可配置：调度 + 业务参数，按段存 JSON）
+    /// </summary>
+    public DbSet<WorkerConfigEntity> WorkerConfig { get; set; }
+
     public override int SaveChanges()
     {
         UpdateTimestamps();

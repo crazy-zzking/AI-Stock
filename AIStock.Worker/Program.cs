@@ -1,6 +1,7 @@
 using AIStock.Data;
 using AIStock.EventEngine;
 using AIStock.Feature;
+using AIStock.Infrastructure.Configuration;
 using AIStock.Infrastructure.Database.Context;
 using AIStock.Infrastructure.MessageBus;
 using AIStock.Intelligence;
@@ -61,6 +62,9 @@ if (!string.IsNullOrWhiteSpace(redisConnection))
 // 内存缓存（LLM 模型配置缓存依赖）
 builder.Services.AddMemoryCache();
 
+// Worker 任务配置中心（前端可配置：调度 + 业务参数，DB 存储 + TTL 热读）
+builder.Services.AddSingleton<IWorkerConfigProvider, WorkerConfigService>();
+
 // LLM / 情报 / 事件引擎服务（情报抽取入库链路）
 builder.Services.AddLLMServices();
 builder.Services.AddIntelligenceServices();
@@ -80,9 +84,7 @@ builder.Services.AddSingleton<IndexKlineSyncService>();
 builder.Services.AddSingleton<CapitalFlowSyncService>();
 builder.Services.AddSingleton<ConceptDigestService>();
 
-// 调度：每个后台任务独立注册，调度参数由 Jobs:<Name> 配置
-builder.Services.Configure<JobSchedulerOptions>(o =>
-    builder.Configuration.GetSection(JobSchedulerOptions.SectionName).Bind(o.Items));
+// 调度：每个后台任务独立注册，调度参数由 worker_config 表 Jobs 段（前端可配）热读
 builder.Services.AddSingleton<IScheduledJob, StockBaseSyncJob>();
 builder.Services.AddSingleton<IScheduledJob, StockDetailSyncJob>();
 builder.Services.AddSingleton<IScheduledJob, KlineSyncJob>();
@@ -108,6 +110,25 @@ using (var scope = host.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AIStockDbContext>();
     await db.Database.MigrateAsync();
+}
+
+// 任务配置种子化：把 appsettings 各段默认值固化进 worker_config（仅当该段尚无 DB 行）。
+// 此后 DB 即权威源，前端改动热生效；appsettings 仅作首次种子来源。
+{
+    var cfg = host.Services.GetRequiredService<IWorkerConfigProvider>();
+    var c = builder.Configuration;
+    await cfg.EnsureSeededAsync(JobSchedulerOptions.SectionName,
+        c.GetSection(JobSchedulerOptions.SectionName).Get<Dictionary<string, JobOptions>>() ?? new());
+    await cfg.EnsureSeededAsync(DataSyncOptions.SectionName,
+        c.GetSection(DataSyncOptions.SectionName).Get<DataSyncOptions>() ?? new());
+    await cfg.EnsureSeededAsync(IntelligenceSyncOptions.SectionName,
+        c.GetSection(IntelligenceSyncOptions.SectionName).Get<IntelligenceSyncOptions>() ?? new());
+    await cfg.EnsureSeededAsync(MarketSnapshotOptions.SectionName,
+        c.GetSection(MarketSnapshotOptions.SectionName).Get<MarketSnapshotOptions>() ?? new());
+    await cfg.EnsureSeededAsync(KnowledgeStarOptions.SectionName,
+        c.GetSection(KnowledgeStarOptions.SectionName).Get<KnowledgeStarOptions>() ?? new());
+    await cfg.EnsureSeededAsync(GraphPromotionOptions.SectionName,
+        c.GetSection(GraphPromotionOptions.SectionName).Get<GraphPromotionOptions>() ?? new());
 }
 
 // 启动时将 Provider 灌入 Resolver

@@ -16,6 +16,9 @@ public class JobOptions
 
     /// <summary>每日运行时刻（0-23，24制）。&gt;=0 时按每日定点运行（优先级高于 IntervalSeconds）。-1 表示不用。</summary>
     public int DailyAtHour { get; set; } = -1;
+
+    /// <summary>每日运行的分钟（0-59）。仅当 DailyAtHour&gt;=0 时生效；默认 0（整点）。</summary>
+    public int DailyAtMinute { get; set; } = 0;
 }
 
 /// <summary>
