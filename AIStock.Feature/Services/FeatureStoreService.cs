@@ -35,7 +35,7 @@ public class FeatureStoreService : IFeatureStore
             var indexKey = $"{IndexKeyPrefix}{code}";
             var timestamp = dateTime.ToUniversalTime().Ticks;
 
-            var json = JsonSerializer.Serialize(indicators);
+            var json = JsonSerializer.Serialize(indicators, AIStock.Core.Json.AppJson.Default);
 
             // 保存最新特征（热数据，24h TTL）
             await db.StringSetAsync(key, json, TimeSpan.FromHours(24));
@@ -118,7 +118,7 @@ public class FeatureStoreService : IFeatureStore
                 var key = $"{KeyPrefix}{code}";
                 var indexKey = $"{IndexKeyPrefix}{code}";
                 var timestamp = dateTime.ToUniversalTime().Ticks;
-                var json = JsonSerializer.Serialize(indicators);
+                var json = JsonSerializer.Serialize(indicators, AIStock.Core.Json.AppJson.Default);
 
                 tasks.Add(db.StringSetAsync(key, json, TimeSpan.FromHours(24)));
                 tasks.Add(db.SortedSetAddAsync(indexKey, json, timestamp));

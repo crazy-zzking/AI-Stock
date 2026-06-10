@@ -16,7 +16,7 @@ public class SelectionConfigService
     /// <summary>默认配置名（当前单策略；多策略阶段每策略一个名）</summary>
     public const string DefaultName = "默认";
 
-    private static readonly JsonSerializerOptions JsonOpts = new() { WriteIndented = false };
+    private static readonly JsonSerializerOptions JsonOpts = new() { WriteIndented = false, Encoder = AIStock.Core.Json.AppJson.CjkEncoder };
 
     private readonly AIStockDbContext _db;
     private readonly ILogger<SelectionConfigService> _logger;

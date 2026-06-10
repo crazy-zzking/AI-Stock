@@ -15,7 +15,7 @@ namespace AIStock.Selection;
 /// </summary>
 public class StrategyDefinitionService
 {
-    private static readonly JsonSerializerOptions JsonOpts = new() { WriteIndented = false };
+    private static readonly JsonSerializerOptions JsonOpts = new() { WriteIndented = false, Encoder = AIStock.Core.Json.AppJson.CjkEncoder };
     private static readonly Regex KeyPattern = new("^[a-z][a-z0-9_]{1,49}$", RegexOptions.Compiled);
 
     /// <summary>内置 key（不可被自建策略占用/顶替）。</summary>

@@ -105,7 +105,7 @@ public class SelectionReviewService
             }
 
             // 回写（targets 是 all 前 N 个的同一引用，已就地赋值 Review）
-            row.ResultsJson = JsonSerializer.Serialize(all);
+            row.ResultsJson = JsonSerializer.Serialize(all, AIStock.Core.Json.AppJson.Default);
             row.ReviewStatus = "done";
             row.ReviewedAt = DateTime.Now;
             await _db.SaveChangesAsync(ct);

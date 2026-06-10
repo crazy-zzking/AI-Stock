@@ -23,6 +23,7 @@ public class WorkerConfigService : IWorkerConfigProvider
     {
         PropertyNameCaseInsensitive = true,
         WriteIndented = false,
+        Encoder = AIStock.Core.Json.AppJson.CjkEncoder,
     };
 
     private readonly IServiceScopeFactory _scopeFactory;

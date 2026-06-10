@@ -84,8 +84,8 @@ public class DragonTigerSyncService
             {
                 var buySeats = await FetchSeatsAsync(client, rec.Code, date, "RPT_BILLBOARD_DAILYDETAILSBUY", ct);
                 var sellSeats = await FetchSeatsAsync(client, rec.Code, date, "RPT_BILLBOARD_DAILYDETAILSSELL", ct);
-                rec.BuySeatsJson = JsonSerializer.Serialize(buySeats);
-                rec.SellSeatsJson = JsonSerializer.Serialize(sellSeats);
+                rec.BuySeatsJson = JsonSerializer.Serialize(buySeats, AIStock.Core.Json.AppJson.Default);
+                rec.SellSeatsJson = JsonSerializer.Serialize(sellSeats, AIStock.Core.Json.AppJson.Default);
                 rec.HasInstitution = buySeats.Any(s => s.IsInstitution);
                 seatsByCode[rec.Code] = (buySeats, sellSeats);
             }

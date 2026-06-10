@@ -80,7 +80,7 @@ public class DailyReviewService
         var report = await GenerateAsync(tradingDate, ct);
         if (report == null) return null;
 
-        var json = JsonSerializer.Serialize(report);
+        var json = JsonSerializer.Serialize(report, AIStock.Core.Json.AppJson.Default);
         var row = await _db.DailyReview.FirstOrDefaultAsync(r => r.TradingDate == report.TradingDate, ct);
         if (row == null)
         {

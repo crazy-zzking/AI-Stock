@@ -439,7 +439,7 @@ public class EssayAnalyzerService : IEssayAnalyzer
 
         // 写入 Redis，1 小时过期
         var redisDb = _redis.GetDatabase();
-        var json = JsonSerializer.Serialize(nameToCode);
+        var json = JsonSerializer.Serialize(nameToCode, AIStock.Core.Json.AppJson.Default);
         await redisDb.StringSetAsync(NameCodeCacheKey, json, TimeSpan.FromHours(1));
         _logger.LogDebug("Stock name→code map cached to Redis ({Count} stocks)", nameToCode.Count);
 

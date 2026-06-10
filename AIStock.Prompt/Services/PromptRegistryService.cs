@@ -21,7 +21,7 @@ public class PromptRegistryService : IPromptRegistry
     private bool _loaded = false;
     private readonly SemaphoreSlim _loadLock = new(1, 1);
 
-    private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
+    private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase, Encoder = AIStock.Core.Json.AppJson.CjkEncoder };
 
     public PromptRegistryService(
         AIStockDbContext dbContext,

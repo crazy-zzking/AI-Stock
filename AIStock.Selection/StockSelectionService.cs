@@ -427,7 +427,7 @@ public class StockSelectionService
             TopN = criteria.TopN,
             Strategy = strategy.Key,
             StrategyName = strategy.Name,
-            ResultsJson = JsonSerializer.Serialize(results),
+            ResultsJson = JsonSerializer.Serialize(results, AIStock.Core.Json.AppJson.Default),
             // LLM 复评改为手动触发：新批次默认未复评，等用户在历史页点「LLM 复评」
             ReviewStatus = "skipped",
         };
@@ -451,7 +451,7 @@ public class StockSelectionService
             TopN = picks.Count,
             Strategy = "import",
             StrategyName = "导入",
-            ResultsJson = JsonSerializer.Serialize(picks),
+            ResultsJson = JsonSerializer.Serialize(picks, AIStock.Core.Json.AppJson.Default),
         });
         await _db.SaveChangesAsync(ct);
         _logger.LogInformation("导入选股结果：{Date}，{Count} 只", tradingDate.ToString("yyyy-MM-dd"), picks.Count);

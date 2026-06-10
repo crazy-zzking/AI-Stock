@@ -22,7 +22,8 @@ public class PositionCacheService
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+        Encoder = AIStock.Core.Json.AppJson.CjkEncoder
     };
 
     public PositionCacheService(

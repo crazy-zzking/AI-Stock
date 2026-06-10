@@ -19,7 +19,8 @@ public class AgentMemoryService : IAgentMemory
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        WriteIndented = false
+        WriteIndented = false,
+        Encoder = AIStock.Core.Json.AppJson.CjkEncoder
     };
 
     public AgentMemoryService(

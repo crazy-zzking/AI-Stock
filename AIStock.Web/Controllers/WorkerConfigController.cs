@@ -48,6 +48,7 @@ public class WorkerConfigController : ControllerBase
     {
         PropertyNameCaseInsensitive = true,
         WriteIndented = false,
+        Encoder = AIStock.Core.Json.AppJson.CjkEncoder,
     };
 
     private readonly IWorkerConfigProvider _config;
