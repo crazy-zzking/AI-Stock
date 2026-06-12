@@ -20,6 +20,9 @@ public class WhisperThemeStrategy : WeightedSelectionStrategyBase
     public override string Description => "知识星球小作文点名 × 命中当日热门题材（板块炒作中）双条件共振进场";
     public override string PreferredRegime => "题材市 / 情绪活跃";
 
+    /// <summary>小作文点名的票可能尚未活跃（埋伏价值最大的窗口），跳过活跃度粗筛全市场扫描。</summary>
+    public override bool ScanFullUniverse => true;
+
     /// <summary>当前股票的小作文加成（ComputeFactors 暂存 → ComputeTotalScore 消费；Select 单线程逐股调用）。</summary>
     private decimal _whisperBonus;
 

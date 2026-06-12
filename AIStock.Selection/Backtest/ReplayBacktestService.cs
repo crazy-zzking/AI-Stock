@@ -162,7 +162,10 @@ public class ReplayBacktestService
                     ? Math.Round(indices.Average(i => i.Rise20d), 2) : null,
             };
 
-            var activePool = ActivityScreener.Screen(dayShots.ToList(), criteria);
+            // 与实盘同口径：全市场扫描策略（吸筹/小作文类）跳过活跃度粗筛
+            var activePool = strategy.ScanFullUniverse
+                ? ActivityScreener.ScreenAll(dayShots, criteria)
+                : ActivityScreener.Screen(dayShots.ToList(), criteria);
 
             // 消息面（截至当日近 N 日，无前视）：news/report 分类 + knowledge-star 小作文；重雷池级排雷
             var lookStart = day.AddDays(-(Math.Max(1, criteria.NewsLookbackDays) + 4));

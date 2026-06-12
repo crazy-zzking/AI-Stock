@@ -98,12 +98,20 @@ public class StockSelectionService
             ? ActivityScreener.ScreenAll(latest, criteria)
             : ActivityScreener.Screen(latest, criteria);
 
-        // K 线形态：全扫时对全市场算（不按代码过滤，避免巨型 IN）；否则只对活跃池算（控成本）
+        // K 线形态：全扫且策略不用形态时跳过（全市场算形态很重，ambush/whisper 用不上）；
+        // 形态策略全扫对全市场算（不按代码过滤，避免巨型 IN）；普通策略只对活跃池算（控成本+展示标签）
         var latestDate = latest.Max(s => s.Date);
-        var patternCodes = scanAll
-            ? null
-            : activePool.Select(h => h.Snapshot.Code).Distinct().ToList();
-        context.PatternsByCode = await LoadPatternsAsync(patternCodes, latestDate, ct);
+        if (scanAll && !strategy.UsesPatterns)
+        {
+            context.PatternsByCode = new Dictionary<string, CandlePatternFeatures>();
+        }
+        else
+        {
+            var patternCodes = scanAll
+                ? null
+                : activePool.Select(h => h.Snapshot.Code).Distinct().ToList();
+            context.PatternsByCode = await LoadPatternsAsync(patternCodes, latestDate, ct);
+        }
 
         // 消息面：近 N 日 news/report 事件 → 分类(排雷/利空/利好)；knowledge-star → 小作文提示（不计分）
         var (newsByCode, knowledgeNotes) = await LoadNewsAsync(activePool, latestDate, criteria.NewsLookbackDays, ct);
