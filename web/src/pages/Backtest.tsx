@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
   Card, Row, Col, Statistic, InputNumber, Select, Button, Table, Tag,
-  message, Space, DatePicker, Alert,
+  message, Space, DatePicker, Alert, Switch, Tooltip,
 } from 'antd';
 import { ExperimentOutlined, PlayCircleOutlined } from '@ant-design/icons';
 import dayjs, { Dayjs } from 'dayjs';
@@ -14,6 +14,8 @@ const Backtest: React.FC = () => {
   const [holdDays, setHoldDays] = useState(5);
   const [entry, setEntry] = useState('NextOpen');
   const [range, setRange] = useState<[Dayjs | null, Dayjs | null] | null>(null);
+  const [tradability, setTradability] = useState(true);
+  const [friction, setFriction] = useState(0.3);
   const [report, setReport] = useState<BacktestReportDto | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -22,7 +24,7 @@ const Backtest: React.FC = () => {
     try {
       const from = range?.[0]?.format('YYYY-MM-DD');
       const to = range?.[1]?.format('YYYY-MM-DD');
-      const res = await getBacktest(holdDays, entry, from, to);
+      const res = await getBacktest(holdDays, entry, from, to, tradability, friction);
       setReport(res.data);
       if (res.data.executedTrades === 0) message.warning('无可回测成交（检查是否有历史选股记录与对应 K 线）');
     } catch {
@@ -37,7 +39,15 @@ const Backtest: React.FC = () => {
     { title: '名称', dataIndex: 'name', key: 'name', width: 110, ellipsis: true },
     { title: '信号日', dataIndex: 'signalDate', key: 'signalDate', width: 110, render: (v: string) => v?.slice(0, 10) },
     { title: '买入价', dataIndex: 'entryPrice', key: 'entryPrice', width: 90, render: (v: number) => v?.toFixed(2) },
-    { title: '卖出价', dataIndex: 'exitPrice', key: 'exitPrice', width: 90, render: (v: number) => v?.toFixed(2) },
+    {
+      title: '卖出价', dataIndex: 'exitPrice', key: 'exitPrice', width: 110,
+      render: (v: number, r: BacktestTradeDto) => (
+        <Space size={4}>
+          {v?.toFixed(2)}
+          {r.exitDeferred && <Tooltip title="原定卖出日一字跌停，顺延成交"><Tag color="orange">延</Tag></Tooltip>}
+        </Space>
+      ),
+    },
     { title: '持有(日)', dataIndex: 'holdDays', key: 'holdDays', width: 80 },
     {
       title: '收益', dataIndex: 'returnPct', key: 'returnPct', width: 90,
@@ -77,6 +87,14 @@ const Backtest: React.FC = () => {
             onChange={(v) => setRange(v as any)}
             allowEmpty={[true, true]}
           />
+          <Tooltip title="开启：一字涨停买不进剔除、一字跌停卖出顺延（贴近实盘）；关闭：理想化任意成交">
+            <span>可成交性</span>
+          </Tooltip>
+          <Switch checked={tradability} onChange={setTradability} />
+          <Tooltip title="单笔往返摩擦（佣金+印花税+滑点），从每笔收益中扣除">
+            <span>摩擦%</span>
+          </Tooltip>
+          <InputNumber min={0} max={3} step={0.1} value={friction} onChange={(v) => setFriction(v ?? 0.3)} style={{ width: 80 }} />
           <Button type="primary" icon={<PlayCircleOutlined />} loading={loading} onClick={run}>运行回测</Button>
         </Space>
       </Card>
@@ -98,6 +116,23 @@ const Backtest: React.FC = () => {
             <Col span={4}><Card size="small"><Statistic title="最佳" value={report.bestReturnPct} suffix="%" valueStyle={{ color: upDown(report.bestReturnPct) }} /></Card></Col>
             <Col span={4}><Card size="small"><Statistic title="最差" value={report.worstReturnPct} suffix="%" valueStyle={{ color: upDown(report.worstReturnPct) }} /></Card></Col>
             <Col span={4}><Card size="small"><Statistic title="无数据跳过" value={report.skippedNoData} /></Card></Col>
+          </Row>
+          <Row gutter={16} style={{ marginBottom: 16 }}>
+            <Col span={4}>
+              <Card size="small">
+                <Tooltip title="买入日开盘即≈涨停（一字板），实盘买不进，剔除不计收益">
+                  <Statistic title="一字板剔除" value={report.skippedUntradable} valueStyle={{ color: report.skippedUntradable > 0 ? '#fa8c16' : undefined }} />
+                </Tooltip>
+              </Card>
+            </Col>
+            <Col span={4}>
+              <Card size="small">
+                <Tooltip title="卖出日一字跌停卖不出，顺延到下一个可卖日成交">
+                  <Statistic title="跌停顺延" value={report.deferredExits} />
+                </Tooltip>
+              </Card>
+            </Col>
+            <Col span={4}><Card size="small"><Statistic title="已扣摩擦" value={report.frictionPct} suffix="%/笔" /></Card></Col>
           </Row>
 
           <Card title={`成交明细（持有 ${report.holdDays} 日 · ${report.entry === 'SignalClose' ? '信号日收盘买入' : 'T+1 开盘买入'}）`}>

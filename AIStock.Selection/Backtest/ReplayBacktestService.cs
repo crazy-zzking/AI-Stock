@@ -69,7 +69,11 @@ public class ReplayBacktestService
             .ToDictionaryAsync(x => x.Code, x => x.Industry!, ct);
 
         // 预载区间事件（供逐日消息面排雷/打分，无前视）。事件史浅(05-30起)，更早日期自然为空、优雅降级。
+        // related_stocks 可能是代码（news/report）或名称（knowledge-star）→ 与实盘 LoadNewsAsync 同口径按"代码或名称"解析
         var allCodesSet = allCodes.ToHashSet();
+        var codeByName = new Dictionary<string, string>();
+        foreach (var s in allShots)
+            if (!string.IsNullOrEmpty(s.Name)) codeByName[s.Name] = s.Code;
         var newsSince = from.Date.AddDays(-(Math.Max(1, criteria.NewsLookbackDays) + 4));
         var eventsByCode = new Dictionary<string, List<(DateTime Date, string? Type, string? Sentiment, int? Imp, string? Title)>>();
         var evRows = await _db.EventRecord
@@ -80,8 +84,10 @@ public class ReplayBacktestService
         foreach (var r in evRows)
             foreach (var raw in r.RelatedStocks!.Split(new[] { ',', '，', ';', '；', ' ' }, StringSplitOptions.RemoveEmptyEntries))
             {
-                var code = raw.Trim();
-                if (!allCodesSet.Contains(code)) continue;
+                var tok = raw.Trim();
+                var code = allCodesSet.Contains(tok) ? tok
+                    : codeByName.TryGetValue(tok, out var c) ? c : null;
+                if (code == null) continue;
                 if (!eventsByCode.TryGetValue(code, out var list)) eventsByCode[code] = list = new();
                 list.Add((r.D.Date, r.EventType, r.Sentiment, r.Importance, r.Title));
             }
@@ -108,6 +114,12 @@ public class ReplayBacktestService
 
         var emptyDragons = new Dictionary<string, DragonTigerEntity>();
         var signals = new List<BacktestSignal>();
+
+        // K线形态懒加载缓存（仅 UsesPatterns 策略需要）：code → 升序 (日期, K线)。
+        // 首次遇到的代码按需从 kline_data 拉全窗口+120日缓冲，后续各日内存切片，避免逐日查库。
+        var patternBarsCache = strategy.UsesPatterns
+            ? new Dictionary<string, List<(DateTime Date, CandleBar Bar)>>() : null;
+        var patternBarsSince = from.Date.AddDays(-120);
 
         foreach (var day in tradingDays)
         {
@@ -165,6 +177,37 @@ public class ReplayBacktestService
             context.KnowledgeNotesByCode = dayKnowledge;
             if (criteria.EnableNewsVeto && dayNews.Count > 0)
                 activePool = activePool.Where(h => !(dayNews.TryGetValue(h.Snapshot.Code, out var sg) && sg.Veto)).ToList();
+
+            // K线形态（截至当日，无前视）：与实盘 LoadPatternsAsync 同口径，由 kline 日K识别
+            if (patternBarsCache != null)
+            {
+                var missing = activePool.Select(h => h.Snapshot.Code)
+                    .Where(c => !patternBarsCache.ContainsKey(c)).Distinct().ToList();
+                if (missing.Count > 0)
+                {
+                    var rows = await _db.KlineData
+                        .Where(k => k.Interval == daily && missing.Contains(k.Code)
+                            && k.DateTime >= patternBarsSince && k.DateTime <= to.Date)
+                        .Select(k => new { k.Code, k.DateTime, k.Open, k.High, k.Low, k.Close, k.Volume })
+                        .ToListAsync(ct);
+                    foreach (var c in missing) patternBarsCache[c] = new(); // 无K线的也占位，避免重复查
+                    foreach (var g in rows.GroupBy(r => r.Code))
+                        patternBarsCache[g.Key] = g.OrderBy(r => r.DateTime)
+                            .Select(r => (r.DateTime, new CandleBar(r.Open, r.High, r.Low, r.Close, r.Volume)))
+                            .ToList();
+                }
+
+                var dayPatterns = new Dictionary<string, CandlePatternFeatures>();
+                foreach (var hit in activePool)
+                {
+                    if (!patternBarsCache.TryGetValue(hit.Snapshot.Code, out var pbars) || pbars.Count == 0) continue;
+                    var candles = pbars.Where(b => b.Date.Date <= day).Select(b => b.Bar).ToList();
+                    if (candles.Count == 0) continue;
+                    var pf = CandlePatternAnalyzer.Analyze(candles);
+                    if (pf.Any) dayPatterns[hit.Snapshot.Code] = pf;
+                }
+                context.PatternsByCode = dayPatterns;
+            }
 
             // 仅对活跃池股票算"截至当日"的多日序列特征
             var seqByCode = new Dictionary<string, SequenceFeatures>();

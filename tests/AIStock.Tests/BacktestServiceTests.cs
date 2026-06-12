@@ -54,7 +54,7 @@ public class BacktestServiceTests
         AddKline(db, ref id, "A", 6, 11, 13, 11, 12);    // exit close 12 → +20%
         await db.SaveChangesAsync();
 
-        var report = await NewSvc(db).BacktestHistoryAsync(new BacktestConfig { HoldDays = 5 });
+        var report = await NewSvc(db).BacktestHistoryAsync(new BacktestConfig { HoldDays = 5, ApplyTradability = false, FrictionPct = 0 });
 
         Assert.Equal(1, report.ExecutedTrades);
         Assert.Equal(20m, report.Trades[0].ReturnPct);
@@ -65,7 +65,7 @@ public class BacktestServiceTests
     public async Task BacktestHistory_NoSignals_ReturnsEmptyReport()
     {
         using var db = NewDb();
-        var report = await NewSvc(db).BacktestHistoryAsync(new BacktestConfig { HoldDays = 5 });
+        var report = await NewSvc(db).BacktestHistoryAsync(new BacktestConfig { HoldDays = 5, ApplyTradability = false, FrictionPct = 0 });
 
         Assert.Equal(0, report.TotalSignals);
         Assert.Equal(0, report.ExecutedTrades);
@@ -91,7 +91,7 @@ public class BacktestServiceTests
         AddKline(db, ref id, "A", 2, 10, 11, 10, 11);
         await db.SaveChangesAsync();
 
-        var report = await NewSvc(db).BacktestHistoryAsync(new BacktestConfig { HoldDays = 5 });
+        var report = await NewSvc(db).BacktestHistoryAsync(new BacktestConfig { HoldDays = 5, ApplyTradability = false, FrictionPct = 0 });
 
         Assert.Equal(1, report.TotalSignals); // 去重后仅 1 个信号
     }

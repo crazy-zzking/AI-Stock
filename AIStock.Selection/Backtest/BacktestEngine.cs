@@ -1,19 +1,29 @@
+using AIStock.Selection.Performance;
+
 namespace AIStock.Selection.Backtest;
 
 /// <summary>
 /// 统一回测引擎（纯计算）。给定一批选股信号 + 各股日 K，按"T+1 开盘买入、持有 N 个交易日收盘卖出"
 /// 模拟成交并汇总：胜率 / 平均收益 / 盈亏比 / 最大回撤 / 浮盈浮亏。不依赖快照历史完整性，便于严格单测。
+/// 可成交性约束（默认开）：买入价已≈涨停 → 买不进剔除；卖出日一字跌停 → 顺延到可卖日；
+/// 每笔收益扣除往返摩擦（佣金+印花税+滑点）。涨跌停幅度按板块/ST 推断（同绩效归因口径）。
 /// </summary>
 public static class BacktestEngine
 {
+    /// <summary>价格达到涨/跌停价 99.8% 即视为触板（容忍数据源精度误差）。</summary>
+    private const decimal LimitTolerance = 0.998m;
+
     public static BacktestReport Run(
         IReadOnlyList<BacktestSignal> signals,
         IReadOnlyDictionary<string, List<BacktestBar>> barsByCode,
         BacktestConfig config)
     {
         var holdDays = Math.Max(1, config.HoldDays);
+        var friction = Math.Max(0m, config.FrictionPct);
         var trades = new List<SelectionBacktestTrade>();
         var skipped = 0;
+        var skippedUntradable = 0;
+        var deferredExits = 0;
 
         foreach (var sig in signals)
         {
@@ -32,6 +42,8 @@ public static class BacktestEngine
                 continue;
             }
 
+            var limitRatio = PerformanceCalculator.LimitUpRatio(sig.Code, sig.Name);
+
             // 买入：T+1 开盘（默认）或信号日收盘
             int entryIdx;
             decimal entryPrice;
@@ -48,12 +60,37 @@ public static class BacktestEngine
             }
             if (entryPrice <= 0) { skipped++; continue; }
 
+            // 可成交性：买入价已≈涨停（一字开盘 / 收盘封板）→ 买不进
+            if (config.ApplyTradability && entryIdx > 0)
+            {
+                var prevClose = ordered[entryIdx - 1].Close;
+                if (prevClose > 0 && entryPrice >= LimitPrice(prevClose, limitRatio) * LimitTolerance)
+                {
+                    skippedUntradable++;
+                    continue;
+                }
+            }
+
             // 卖出：持有 holdDays 个交易日后的收盘；不足则持有到最后一根
             var exitIdx = Math.Min(entryIdx + holdDays, ordered.Count - 1);
             if (exitIdx <= entryIdx && config.Entry == BacktestEntryTiming.NextOpen)
             {
                 // 买入即末根，无持有区间
                 exitIdx = entryIdx;
+            }
+
+            // 可成交性：卖出日一字跌停（最高=最低≈跌停价）→ 顺延到下一个可卖日；
+            // 顺延到最后一根仍跌停则按该根收盘成交（无法再延，保守接受）
+            var exitDeferred = false;
+            if (config.ApplyTradability)
+            {
+                while (exitIdx < ordered.Count - 1 && exitIdx > 0
+                    && IsLimitDownOneWord(ordered[exitIdx], ordered[exitIdx - 1].Close, limitRatio))
+                {
+                    exitIdx++;
+                    exitDeferred = true;
+                }
+                if (exitDeferred) deferredExits++;
             }
 
             var exitBar = ordered[exitIdx];
@@ -71,13 +108,30 @@ public static class BacktestEngine
                 ExitDate = exitBar.Date,
                 ExitPrice = exitBar.Close,
                 HoldDays = exitIdx - entryIdx,
-                ReturnPct = Pct(exitBar.Close),
+                ReturnPct = Pct(exitBar.Close) - friction,
+                ExitDeferred = exitDeferred,
                 MaxRisePct = Pct(span.Max(b => b.High)),
                 MaxDropPct = Pct(span.Min(b => b.Low)),
             });
         }
 
-        return Summarize(trades, skipped, signals.Count, holdDays, config.Entry);
+        var report = Summarize(trades, skipped, signals.Count, holdDays, config.Entry);
+        report.SkippedUntradable = skippedUntradable;
+        report.DeferredExits = deferredExits;
+        report.FrictionPct = friction;
+        return report;
+    }
+
+    /// <summary>涨停价（昨收 × (1+幅度)，A股两位小数四舍五入）。</summary>
+    private static decimal LimitPrice(decimal prevClose, decimal ratio)
+        => Math.Round(prevClose * (1 + ratio), 2);
+
+    /// <summary>一字跌停：最高=最低 且 收盘 ≤ 跌停价附近 → 全天封死卖不出。</summary>
+    private static bool IsLimitDownOneWord(BacktestBar bar, decimal prevClose, decimal ratio)
+    {
+        if (prevClose <= 0 || bar.High != bar.Low) return false;
+        var limitDown = Math.Round(prevClose * (1 - ratio), 2);
+        return bar.Close <= limitDown / LimitTolerance;
     }
 
     private static BacktestReport Summarize(

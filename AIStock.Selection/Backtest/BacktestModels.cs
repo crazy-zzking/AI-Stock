@@ -16,6 +16,15 @@ public class BacktestConfig
     public int HoldDays { get; set; } = 5;
     /// <summary>买入时点。</summary>
     public BacktestEntryTiming Entry { get; set; } = BacktestEntryTiming.NextOpen;
+
+    /// <summary>
+    /// 可成交性约束（默认开）：买入日开盘一字涨停 → 买不进剔除；卖出日一字跌停 → 顺延到可卖日。
+    /// 关闭后退回理想化口径（任何价格都能成交），仅用于对比。
+    /// </summary>
+    public bool ApplyTradability { get; set; } = true;
+
+    /// <summary>单笔往返交易摩擦（%，佣金+印花税+滑点合计，从每笔收益中扣除）。默认 0.3。</summary>
+    public decimal FrictionPct { get; set; } = 0.3m;
 }
 
 /// <summary>一个选股信号（某交易日选出的一只股票）。</summary>
@@ -47,8 +56,10 @@ public class SelectionBacktestTrade
     public DateTime ExitDate { get; set; }
     public decimal ExitPrice { get; set; }
     public int HoldDays { get; set; }
-    /// <summary>收益率（%）。</summary>
+    /// <summary>收益率（%，已扣除交易摩擦）。</summary>
     public decimal ReturnPct { get; set; }
+    /// <summary>卖出是否因跌停一字顺延过。</summary>
+    public bool ExitDeferred { get; set; }
     /// <summary>持有期最高浮盈（%，相对买入价）。</summary>
     public decimal MaxRisePct { get; set; }
     /// <summary>持有期最大浮亏（%，相对买入价，负值）。</summary>
@@ -68,6 +79,12 @@ public class BacktestReport
     public int ExecutedTrades { get; set; }
     /// <summary>因 K 线数据不足跳过的信号数。</summary>
     public int SkippedNoData { get; set; }
+    /// <summary>因买入日一字涨停买不进剔除的信号数（仅 ApplyTradability 开启时）。</summary>
+    public int SkippedUntradable { get; set; }
+    /// <summary>卖出日一字跌停顺延的笔数（仅 ApplyTradability 开启时）。</summary>
+    public int DeferredExits { get; set; }
+    /// <summary>本次回测使用的单笔往返摩擦（%）。</summary>
+    public decimal FrictionPct { get; set; }
 
     /// <summary>胜率（%，收益&gt;0 占比）。</summary>
     public decimal WinRatePct { get; set; }

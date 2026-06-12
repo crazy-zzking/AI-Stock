@@ -165,17 +165,22 @@ public class SelectionController : ControllerBase
     /// <summary>
     /// 回测历史选股结果：把 [from,to] 区间内已落库的选股记录当信号，按持有期/买点用 K 线统计
     /// 胜率/平均收益/盈亏比/回撤。entry: NextOpen(默认,T+1开盘) | SignalClose(信号日收盘)。
+    /// tradability=true(默认)：一字涨停买不进剔除、一字跌停卖出顺延；friction：单笔往返摩擦(%)。
     /// </summary>
     [HttpGet("backtest")]
     public async Task<ActionResult<BacktestReport>> Backtest(
         [FromQuery] int holdDays = 5, [FromQuery] string entry = "NextOpen",
-        [FromQuery] string? from = null, [FromQuery] string? to = null, CancellationToken ct = default)
+        [FromQuery] string? from = null, [FromQuery] string? to = null,
+        [FromQuery] bool tradability = true, [FromQuery] decimal friction = 0.3m,
+        CancellationToken ct = default)
     {
         var config = new BacktestConfig
         {
             HoldDays = holdDays,
             Entry = string.Equals(entry, "SignalClose", StringComparison.OrdinalIgnoreCase)
                 ? BacktestEntryTiming.SignalClose : BacktestEntryTiming.NextOpen,
+            ApplyTradability = tradability,
+            FrictionPct = friction,
         };
         DateTime? f = DateTime.TryParse(from, out var fd) ? fd : null;
         DateTime? t = DateTime.TryParse(to, out var td) ? td : null;
@@ -191,7 +196,9 @@ public class SelectionController : ControllerBase
     public async Task<ActionResult<BacktestReport>> ReplayBacktest(
         [FromBody] SelectionCriteria? criteria,
         [FromQuery] string? strategy, [FromQuery] string? from, [FromQuery] string? to,
-        [FromQuery] int holdDays = 5, [FromQuery] string entry = "NextOpen", CancellationToken ct = default)
+        [FromQuery] int holdDays = 5, [FromQuery] string entry = "NextOpen",
+        [FromQuery] bool tradability = true, [FromQuery] decimal friction = 0.3m,
+        CancellationToken ct = default)
     {
         var c = criteria ?? await _config.GetActiveCriteriaAsync(
             string.IsNullOrWhiteSpace(strategy) ? SelectionConfigService.DefaultName : strategy, ct);
@@ -202,6 +209,8 @@ public class SelectionController : ControllerBase
             HoldDays = holdDays,
             Entry = string.Equals(entry, "SignalClose", StringComparison.OrdinalIgnoreCase)
                 ? BacktestEntryTiming.SignalClose : BacktestEntryTiming.NextOpen,
+            ApplyTradability = tradability,
+            FrictionPct = friction,
         };
         var report = await _replay.BacktestParamsAsync(strategy, c, fromD, toD, config, ct);
         return Ok(report);

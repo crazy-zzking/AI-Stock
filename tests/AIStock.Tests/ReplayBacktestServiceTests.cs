@@ -74,7 +74,7 @@ public class ReplayBacktestServiceTests
 
         var report = await NewSvc(db).BacktestParamsAsync(
             StrategyKeys.LowDip, new SelectionCriteria(),
-            Base.AddDays(24), Base.AddDays(25), new BacktestConfig { HoldDays = 3 });
+            Base.AddDays(24), Base.AddDays(25), new BacktestConfig { HoldDays = 3, ApplyTradability = false, FrictionPct = 0 });
 
         Assert.True(report.TotalSignals >= 1, "应从 K 线重建并选出至少一个信号");
         Assert.True(report.ExecutedTrades >= 1);
@@ -90,7 +90,7 @@ public class ReplayBacktestServiceTests
         // MaxRsi 调到 1：任何股票都被超买过滤 → 无信号（验证参数确实驱动回放）
         var strict = new SelectionCriteria { MaxRsi = 1m };
         var report = await NewSvc(db).BacktestParamsAsync(
-            StrategyKeys.LowDip, strict, Base.AddDays(24), Base.AddDays(24), new BacktestConfig { HoldDays = 3 });
+            StrategyKeys.LowDip, strict, Base.AddDays(24), Base.AddDays(24), new BacktestConfig { HoldDays = 3, ApplyTradability = false, FrictionPct = 0 });
 
         Assert.Equal(0, report.TotalSignals);
     }

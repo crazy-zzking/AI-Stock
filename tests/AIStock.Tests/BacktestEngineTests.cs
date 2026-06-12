@@ -33,7 +33,7 @@ public class BacktestEngineTests
         var report = BacktestEngine.Run(
             new[] { Sig("A") },
             new Dictionary<string, List<BacktestBar>> { ["A"] = bars },
-            new BacktestConfig { HoldDays = 5 });
+            new BacktestConfig { HoldDays = 5, ApplyTradability = false, FrictionPct = 0 });
 
         Assert.Equal(1, report.ExecutedTrades);
         Assert.Equal(0, report.SkippedNoData);
@@ -54,7 +54,7 @@ public class BacktestEngineTests
         var report = BacktestEngine.Run(
             new[] { Sig("NOPE") },
             new Dictionary<string, List<BacktestBar>>(),
-            new BacktestConfig { HoldDays = 5 });
+            new BacktestConfig { HoldDays = 5, ApplyTradability = false, FrictionPct = 0 });
 
         Assert.Equal(0, report.ExecutedTrades);
         Assert.Equal(1, report.SkippedNoData);
@@ -79,7 +79,7 @@ public class BacktestEngineTests
         var report = BacktestEngine.Run(
             new[] { Sig("A"), Sig("B") },
             new Dictionary<string, List<BacktestBar>> { ["A"] = Series(12m), ["B"] = Series(9m) },
-            new BacktestConfig { HoldDays = 5 });
+            new BacktestConfig { HoldDays = 5, ApplyTradability = false, FrictionPct = 0 });
 
         Assert.Equal(2, report.ExecutedTrades);
         Assert.Equal(50m, report.WinRatePct);
@@ -102,7 +102,7 @@ public class BacktestEngineTests
         var report = BacktestEngine.Run(
             new[] { Sig("A") },
             new Dictionary<string, List<BacktestBar>> { ["A"] = bars },
-            new BacktestConfig { HoldDays = 5 });
+            new BacktestConfig { HoldDays = 5, ApplyTradability = false, FrictionPct = 0 });
 
         var t = report.Trades[0];
         Assert.Equal(Base.AddDays(3), t.ExitDate);
@@ -123,12 +123,155 @@ public class BacktestEngineTests
         var report = BacktestEngine.Run(
             new[] { Sig("A") },
             new Dictionary<string, List<BacktestBar>> { ["A"] = bars },
-            new BacktestConfig { HoldDays = 1, Entry = BacktestEntryTiming.SignalClose });
+            new BacktestConfig { HoldDays = 1, Entry = BacktestEntryTiming.SignalClose, ApplyTradability = false, FrictionPct = 0 });
 
         var t = report.Trades[0];
         Assert.Equal(10m, t.EntryPrice);     // 信号日收盘
         Assert.Equal(Base, t.EntryDate);
         Assert.Equal(11m, t.ExitPrice);      // 持有1日到 day1 收盘
         Assert.Equal(10m, t.ReturnPct);
+    }
+
+    // ---- 可成交性约束 + 交易摩擦 ----
+
+    [Fact]
+    public void Tradability_LimitUpOpen_SkippedUntradable()
+    {
+        // 主板 10%：昨收 10 → 涨停价 11，T+1 开盘 11 一字 → 买不进
+        var bars = new List<BacktestBar>
+        {
+            Bar(0, 10, 10, 10, 10),
+            Bar(1, 11, 11, 11, 11),
+            Bar(2, 12.1m, 12.1m, 12.1m, 12.1m),
+        };
+        var report = BacktestEngine.Run(
+            new[] { Sig("600001") },
+            new Dictionary<string, List<BacktestBar>> { ["600001"] = bars },
+            new BacktestConfig { HoldDays = 1, FrictionPct = 0 });
+
+        Assert.Equal(0, report.ExecutedTrades);
+        Assert.Equal(1, report.SkippedUntradable);
+        Assert.Equal(0, report.SkippedNoData);
+    }
+
+    [Fact]
+    public void Tradability_ChiNextTenPercentOpen_StillTradable()
+    {
+        // 创业板 20%：昨收 10 → 涨停价 12，开盘 11(+10%) 可以买
+        var bars = new List<BacktestBar>
+        {
+            Bar(0, 10, 10, 10, 10),
+            Bar(1, 11, 11.5m, 11, 11.5m),
+            Bar(2, 11.5m, 12, 11, 12),
+        };
+        var report = BacktestEngine.Run(
+            new[] { Sig("300001") },
+            new Dictionary<string, List<BacktestBar>> { ["300001"] = bars },
+            new BacktestConfig { HoldDays = 1, FrictionPct = 0 });
+
+        Assert.Equal(1, report.ExecutedTrades);
+        Assert.Equal(0, report.SkippedUntradable);
+        Assert.Equal(11m, report.Trades[0].EntryPrice);
+    }
+
+    [Fact]
+    public void Tradability_LimitDownOneWordExit_DefersToNextSellableDay()
+    {
+        // 买入 10；原定卖出日(day2) 一字跌停(9×0.9=8.1) → 顺延到 day3 收盘 8.5 成交
+        var bars = new List<BacktestBar>
+        {
+            Bar(0, 10, 10, 10, 10),
+            Bar(1, 10, 10, 10, 9),            // entry open=10（未触涨停）
+            Bar(2, 8.1m, 8.1m, 8.1m, 8.1m),   // 一字跌停（昨收9 → 跌停价8.1）
+            Bar(3, 8.2m, 8.6m, 8, 8.5m),      // 可卖
+        };
+        var report = BacktestEngine.Run(
+            new[] { Sig("600001") },
+            new Dictionary<string, List<BacktestBar>> { ["600001"] = bars },
+            new BacktestConfig { HoldDays = 1, FrictionPct = 0 });
+
+        Assert.Equal(1, report.DeferredExits);
+        var t = report.Trades[0];
+        Assert.True(t.ExitDeferred);
+        Assert.Equal(Base.AddDays(3), t.ExitDate);
+        Assert.Equal(8.5m, t.ExitPrice);
+        Assert.Equal(-15m, t.ReturnPct); // (8.5-10)/10
+    }
+
+    [Fact]
+    public void Tradability_NonOneWordLimitDown_ExitsNormally()
+    {
+        // 卖出日触跌停但非一字（盘中有高于跌停的价）→ 视为可卖，不顺延
+        var bars = new List<BacktestBar>
+        {
+            Bar(0, 10, 10, 10, 10),
+            Bar(1, 10, 10, 10, 9),
+            Bar(2, 8.8m, 8.8m, 8.1m, 8.1m),  // 收在跌停但开盘 8.8 可卖
+        };
+        var report = BacktestEngine.Run(
+            new[] { Sig("600001") },
+            new Dictionary<string, List<BacktestBar>> { ["600001"] = bars },
+            new BacktestConfig { HoldDays = 1, FrictionPct = 0 });
+
+        Assert.Equal(0, report.DeferredExits);
+        Assert.False(report.Trades[0].ExitDeferred);
+        Assert.Equal(Base.AddDays(2), report.Trades[0].ExitDate);
+    }
+
+    [Fact]
+    public void Friction_DeductedFromEachTradeReturn()
+    {
+        // 毛收益 +5%，摩擦 0.3 → 净 +4.7%
+        var bars = new List<BacktestBar>
+        {
+            Bar(0, 10, 10, 10, 10),
+            Bar(1, 10, 10.5m, 10, 10.5m),
+        };
+        var report = BacktestEngine.Run(
+            new[] { Sig("600001") },
+            new Dictionary<string, List<BacktestBar>> { ["600001"] = bars },
+            new BacktestConfig { HoldDays = 1, FrictionPct = 0.3m });
+
+        Assert.Equal(4.7m, report.Trades[0].ReturnPct);
+        Assert.Equal(0.3m, report.FrictionPct);
+    }
+
+    [Fact]
+    public void Tradability_Disabled_LimitUpOpenStillTrades()
+    {
+        // 关闭可成交性：一字涨停照样按开盘价成交（理想化对比口径）
+        var bars = new List<BacktestBar>
+        {
+            Bar(0, 10, 10, 10, 10),
+            Bar(1, 11, 11, 11, 11),
+            Bar(2, 11, 11, 11, 11),
+        };
+        var report = BacktestEngine.Run(
+            new[] { Sig("600001") },
+            new Dictionary<string, List<BacktestBar>> { ["600001"] = bars },
+            new BacktestConfig { HoldDays = 1, ApplyTradability = false, FrictionPct = 0 });
+
+        Assert.Equal(1, report.ExecutedTrades);
+        Assert.Equal(0, report.SkippedUntradable);
+        Assert.Equal(11m, report.Trades[0].EntryPrice);
+    }
+
+    [Fact]
+    public void Tradability_StSignal_FivePercentLimit()
+    {
+        // ST 5%：昨收 10 → 涨停价 10.5，开盘 10.5 → 买不进
+        var bars = new List<BacktestBar>
+        {
+            Bar(0, 10, 10, 10, 10),
+            Bar(1, 10.5m, 10.5m, 10.5m, 10.5m),
+            Bar(2, 11, 11, 11, 11),
+        };
+        var sig = new BacktestSignal { Code = "600001", Name = "ST某某", Date = Base };
+        var report = BacktestEngine.Run(
+            new[] { sig },
+            new Dictionary<string, List<BacktestBar>> { ["600001"] = bars },
+            new BacktestConfig { HoldDays = 1, FrictionPct = 0 });
+
+        Assert.Equal(1, report.SkippedUntradable);
     }
 }
