@@ -49,6 +49,14 @@ public class DailyMarketSnapshotEntity
     [Column("amplitude")]
     public decimal Amplitude { get; set; }
 
+    /// <summary>当日最高价（不落库：回放由 K 线回填，供"守前低"等需要日内高低点的特征；实盘快照未带则为 0）。</summary>
+    [NotMapped]
+    public decimal High { get; set; }
+
+    /// <summary>当日最低价（不落库：回放由 K 线回填，供"守前低"判断；实盘快照未带则为 0，特征退化用收盘价近似）。</summary>
+    [NotMapped]
+    public decimal Low { get; set; }
+
     /// <summary>当日均价（盘中：现价站上均价为强势信号；收盘≈VWAP）</summary>
     [Column("avg_price")]
     public decimal AvgPrice { get; set; }

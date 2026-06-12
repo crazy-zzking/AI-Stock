@@ -23,12 +23,16 @@ public static class DependencyInjection
         services.AddScoped<ISelectionStrategy, ThemeStrategy>();
         services.AddScoped<ISelectionStrategy, KPatternStrategy>();
         services.AddScoped<ISelectionStrategy, HotMoneyStrategy>();
+        services.AddScoped<ISelectionStrategy, AmbushStrategy>();
+        services.AddScoped<ISelectionStrategy, WhisperThemeStrategy>();
         // 合并"内置 + 数据库自建"策略，供运行时解析/列出/回测
         services.AddScoped<ISelectionStrategyProvider, SelectionStrategyProvider>();
 
         services.AddScoped<StockSelectionService>();
         services.AddScoped<BacktestService>();
         services.AddScoped<ReplayBacktestService>();
+        // 选股信号前向绩效（策略记分板）：Worker 每日补算，Web 查询聚合
+        services.AddScoped<Performance.SelectionPerformanceService>();
 
         // LLM 复评（异步附加步骤）。队列默认空实现；Web 层用 Channel 版 + 后台消费替换。
         services.AddScoped<SelectionReviewService>();

@@ -46,4 +46,6 @@ public static class StrategyKeys
     public const string Theme = "theme";
     public const string KPattern = "kpattern";
     public const string HotMoney = "hotmoney";
+    public const string Ambush = "ambush";
+    public const string Whisper = "whisper";
 }

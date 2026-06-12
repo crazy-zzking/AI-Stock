@@ -139,10 +139,10 @@ public class StockSelectionEngine
             results.Add(result);
         }
 
-        return results
-            .OrderByDescending(r => r.TotalScore)
-            .Take(criteria.TopN)
-            .ToList();
+        // 出手闸门：弱市/风险释放收紧分数下限并压缩出手数量（中性/强市零改动）
+        return RegimeGate.Apply(
+            results.OrderByDescending(r => r.TotalScore),
+            criteria, level, regime?.Kind ?? RegimeKind.Range);
     }
 
     private static List<string> BuildTags(DailyMarketSnapshotEntity s, DragonTigerEntity? dt, List<string> activityFeatures,

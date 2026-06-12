@@ -88,4 +88,60 @@ public class SequenceAnalyzerTests
         };
         Assert.True(SequenceAnalyzer.Analyze(seq).PullbackStabilize);
     }
+
+    /// <summary>带最高/最低/振幅的快照（用于守前低/振幅收敛特征）。</summary>
+    private static DailyMarketSnapshotEntity DHL(
+        int day, decimal close, decimal low, decimal amplitude = 3m, bool limitUp = false) =>
+        new() { Code = "A", Date = new DateTime(2026, 5, day), Close = close, Low = low, High = close, Amplitude = amplitude, IsLimitUp = limitUp };
+
+    private static DailyMarketSnapshotEntity DAmp(int day, decimal close, decimal amplitude) =>
+        new() { Code = "A", Date = new DateTime(2026, 5, day), Close = close, Amplitude = amplitude };
+
+    [Fact]
+    public void HoldsStartLow_TrueWhenPullbackHoldsStartBarLow_FalseWhenBroken()
+    {
+        // 启动涨停(第2天,最低10.0) + 其后回踩：回踩低点 10.1 ≥ 启动低 10.0 → 守前低 true
+        var hold = new[]
+        {
+            DHL(1, 9.5m, 9.3m), DHL(2, 10.5m, 10.0m, limitUp: true),
+            DHL(3, 10.8m, 10.4m), DHL(4, 10.6m, 10.2m), DHL(5, 10.7m, 10.1m),
+        };
+        Assert.True(SequenceAnalyzer.Analyze(hold).HoldsStartLow);
+
+        // 跌破启动低：回踩到 9.6 < 启动低 10.0*0.99 → false（突破失败/出货）
+        var broken = new[]
+        {
+            DHL(1, 9.5m, 9.3m), DHL(2, 10.5m, 10.0m, limitUp: true),
+            DHL(3, 10.2m, 9.9m), DHL(4, 9.9m, 9.6m), DHL(5, 9.8m, 9.6m),
+        };
+        Assert.False(SequenceAnalyzer.Analyze(broken).HoldsStartLow);
+    }
+
+    [Fact]
+    public void HoldsStartLow_FalseWhenNoRecentLimitUp()
+    {
+        // 近期无涨停启动 → 无启动平台可守 → false
+        var noStart = new[] { DHL(1, 10m, 9.8m), DHL(2, 10.1m, 9.9m), DHL(3, 10.2m, 10.0m) };
+        Assert.False(SequenceAnalyzer.Analyze(noStart).HoldsStartLow);
+    }
+
+    [Fact]
+    public void AmplitudeConverging_TrueWhenRecentNarrowerThanPrior()
+    {
+        // 振幅收敛：前3日均振幅 6%，近3日均振幅 2% → true
+        var conv = new[]
+        {
+            DAmp(1, 11m, 6), DAmp(2, 11m, 6), DAmp(3, 11m, 6),
+            DAmp(4, 11m, 2), DAmp(5, 11m, 2), DAmp(6, 11m, 2),
+        };
+        Assert.True(SequenceAnalyzer.Analyze(conv).AmplitudeConverging);
+
+        // 振幅放大：前3日 2%，近3日 6% → false
+        var diverge = new[]
+        {
+            DAmp(1, 11m, 2), DAmp(2, 11m, 2), DAmp(3, 11m, 2),
+            DAmp(4, 11m, 6), DAmp(5, 11m, 6), DAmp(6, 11m, 6),
+        };
+        Assert.False(SequenceAnalyzer.Analyze(diverge).AmplitudeConverging);
+    }
 }

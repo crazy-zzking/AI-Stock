@@ -16,6 +16,9 @@ public abstract class WeightedSelectionStrategyBase : ISelectionStrategy
     public virtual bool ScanFullUniverse => false;
     public virtual bool UsesPatterns => false;
 
+    /// <summary>是否应用"弱市出手闸门"（弧市压缩 TopN/分数下限）。右侧动量策略=true；左侧埋伏策略可覆盖为 false。</summary>
+    protected virtual bool AppliesRegimeGate => true;
+
     public List<StockSelectionResult> Select(
         IReadOnlyList<ActivityScreener.ActivityHit> activePool,
         IReadOnlyDictionary<string, DragonTigerEntity> dragonTigerByCode,
@@ -40,10 +43,7 @@ public abstract class WeightedSelectionStrategyBase : ISelectionStrategy
 
             var factors = ComputeFactors(s, seq, dt, hit, context, out var hitHotConcepts);
 
-            var total = SelectionScorers.WeightedTotal(factors, w);
-            total -= Penalty(s, seq, criteria);
-            total *= scoreFactor;
-            total = Math.Clamp(total, 0m, 100m);
+            var total = ComputeTotalScore(s, seq, factors, w, scoreFactor, criteria);
 
             var result = new StockSelectionResult
             {
@@ -82,10 +82,12 @@ public abstract class WeightedSelectionStrategyBase : ISelectionStrategy
             results.Add(result);
         }
 
-        return results
-            .OrderByDescending(r => r.TotalScore)
-            .Take(criteria.TopN)
-            .ToList();
+        var ordered = results.OrderByDescending(r => r.TotalScore);
+        // 出手闸门：弱市/风险释放收紧分数下限并压缩出手数量（中性/强市零改动）。
+        // 左侧埋伏策略豁免（弱市/震荡正是吸筹潜伏时机，不受动量择时压制）。
+        return AppliesRegimeGate
+            ? RegimeGate.Apply(ordered, criteria, level, context?.Regime?.Kind ?? RegimeKind.Range)
+            : ordered.Take(criteria.TopN).ToList();
     }
 
     /// <summary>硬过滤：返回 false 则淘汰。各策略口径不同。</summary>
@@ -100,6 +102,20 @@ public abstract class WeightedSelectionStrategyBase : ISelectionStrategy
 
     /// <summary>涨停/追高惩罚（默认无）。</summary>
     protected virtual decimal Penalty(DailyMarketSnapshotEntity s, SequenceFeatures seq, SelectionCriteria criteria) => 0m;
+
+    /// <summary>
+    /// 综合分（决定排序与入选）。默认 = 8 因子加权 − 涨停惩罚 × 大盘环境系数。
+    /// 左侧埋伏类策略可覆盖为"吸筹质量分"等不含动量的口径，避免动量打分把真吸筹票挤掉。
+    /// </summary>
+    protected virtual decimal ComputeTotalScore(
+        DailyMarketSnapshotEntity s, SequenceFeatures seq, SelectionFactorScores factors,
+        SelectionWeights w, decimal scoreFactor, SelectionCriteria criteria)
+    {
+        var total = SelectionScorers.WeightedTotal(factors, w);
+        total -= Penalty(s, seq, criteria);
+        total *= scoreFactor;
+        return Math.Clamp(total, 0m, 100m);
+    }
 
     protected abstract List<string> BuildTags(
         DailyMarketSnapshotEntity s, DragonTigerEntity? dt, ActivityScreener.ActivityHit hit,

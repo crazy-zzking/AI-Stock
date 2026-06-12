@@ -251,6 +251,53 @@ public static class SelectionScorers
     public static decimal News(string code, SelectionContext? ctx)
         => ctx != null && ctx.NewsByCode.TryGetValue(code, out var sig) ? sig.Score : 50m;
 
+    /// <summary>
+    /// 吸筹质量分（0-100，不含任何动量/涨幅口径）—— 专供"吸筹埋伏"排序，
+    /// 让"缩量、波动收敛、回踩到位、资金有承接"的真吸筹票排在前面，
+    /// 避免被动量打分把要破位的票顶上来。
+    /// 维度：缩量度 0.30 + 波动收敛 0.25 + 回踩到位(贴 MA10) 0.25 + 资金承接 0.20。
+    /// </summary>
+    public static decimal AmbushQuality(DailyMarketSnapshotEntity s, SequenceFeatures seq)
+    {
+        // ① 缩量度：量比越低=筹码越锁定、抛压越小
+        var volScore = s.VolumeRatio switch
+        {
+            <= 0m => 50m,            // 无量比数据：中性
+            <= 0.6m => 100m,
+            <= 0.8m => 85m,
+            <= 1.0m => 65m,
+            <= 1.3m => 45m,
+            _ => 25m,
+        };
+
+        // ② 波动收敛：近5日均振幅越低越紧（复用 Volatility 口径），收敛中再加成
+        var tightScore = Volatility(seq);
+        if (seq.AmplitudeConverging) tightScore = Math.Min(100m, tightScore + 10m);
+
+        // ③ 回踩到位：收盘贴近 MA10 最佳（踩线企稳）；离线太远=没回踩到位；破线偏多=偏弱
+        var nearScore = 50m;
+        if (s.Ma10 > 0)
+        {
+            var r = s.Close / s.Ma10;
+            nearScore = r switch
+            {
+                >= 1.00m and <= 1.03m => 100m,  // 刚踩在线上企稳
+                >= 0.98m and < 1.00m => 85m,    // 微破即收回
+                > 1.03m and <= 1.08m => 70m,    // 略高于线
+                >= 0.95m and < 0.98m => 55m,    // 破线偏多
+                > 1.08m => 40m,                 // 离均线太远，还没回踩到位
+                _ => 30m,                       // 深破
+            };
+        }
+
+        // ④ 资金承接：近5日累计主力净流入为正=吸筹有承接；连续净流入再加成
+        var capScore = seq.CumNetInflow5 > 0 ? 80m : (seq.CumNetInflow5 == 0 ? 50m : 30m);
+        if (seq.ConsecutiveInflowDays >= 2) capScore = Math.Min(100m, capScore + 15m);
+
+        var q = volScore * 0.30m + tightScore * 0.25m + nearScore * 0.25m + capScore * 0.20m;
+        return Math.Round(Math.Clamp(q, 0m, 100m), 1);
+    }
+
     /// <summary>大盘环境综合分系数。</summary>
     public static decimal RegimeFactor(MarketRegimeLevel level, SelectionWeights w) => level switch
     {

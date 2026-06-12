@@ -25,6 +25,13 @@ public record SequenceFeatures
     public int ConsecutiveLimitUp { get; init; }
     /// <summary>近 5 日平均振幅（%），衡量波动/风险</summary>
     public decimal AvgAmplitude5 { get; init; }
+    /// <summary>
+    /// 守前低：自最近一次涨停(启动)以来，回踩低点未跌破"启动放量K线群(涨停日及其后2日)"的最低价。
+    /// 突破不回头、洗盘不破位 → 吸筹；跌破启动平台 → 出货。Low 缺失(实盘快照未带最低价)时以收盘价近似。
+    /// </summary>
+    public bool HoldsStartLow { get; init; }
+    /// <summary>振幅收敛：近 3 日平均振幅小于此前 3 日（多空分歧收敛、蓄势，吸筹后段特征）</summary>
+    public bool AmplitudeConverging { get; init; }
 }
 
 /// <summary>
@@ -81,6 +88,31 @@ public static class SequenceAnalyzer
         var limitUp10 = TakeLast(asc, 10).Count(x => x.IsLimitUp);
         var consecLimit = CountFromEnd(asc, x => x.IsLimitUp);
 
+        // 守前低：自最近一次涨停(启动)以来，回踩最低价不破"启动涨停日"那根 K 线的最低价
+        // （突破不回头；跌破启动低=突破失败/出货）。Low 缺失(实盘快照未带)时以收盘价近似。
+        var holdsStartLow = false;
+        var startIdx = -1;
+        for (var i = n - 1; i >= Math.Max(0, n - 10); i--)
+            if (asc[i].IsLimitUp) { startIdx = i; break; }
+        if (startIdx >= 0 && startIdx < n - 1)   // 启动后至少有 1 根回踩 K 线
+        {
+            var startLow = LowOf(asc[startIdx]);
+            var recentLow = decimal.MaxValue;
+            for (var i = startIdx + 1; i < n; i++) recentLow = Math.Min(recentLow, LowOf(asc[i]));
+            holdsStartLow = startLow > 0 && recentLow >= startLow * 0.99m; // 1% 容错防数据毛刺
+        }
+
+        // 振幅收敛：近3日均振幅 < 前3日均振幅（分歧收敛、蓄势，需 ≥6 根）
+        var converging = false;
+        if (n >= 6)
+        {
+            var recent3 = TakeLast(asc, 3);
+            var prev3 = asc.Skip(n - 6).Take(3).ToList();
+            var recentAmp = recent3.Where(x => x.Amplitude > 0).Select(x => x.Amplitude).DefaultIfEmpty(0m).Average();
+            var prevAmp = prev3.Where(x => x.Amplitude > 0).Select(x => x.Amplitude).DefaultIfEmpty(0m).Average();
+            converging = prevAmp > 0 && recentAmp < prevAmp;
+        }
+
         return new SequenceFeatures
         {
             ConsecutiveInflowDays = consecInflow,
@@ -92,8 +124,13 @@ public static class SequenceAnalyzer
             LimitUpCountIn10 = limitUp10,
             ConsecutiveLimitUp = consecLimit,
             AvgAmplitude5 = avgAmp5,
+            HoldsStartLow = holdsStartLow,
+            AmplitudeConverging = converging,
         };
     }
+
+    /// <summary>当日最低价：有最低价用最低价，缺失(实盘快照未带)时退化用收盘价近似。</summary>
+    private static decimal LowOf(DailyMarketSnapshotEntity x) => x.Low > 0 ? x.Low : x.Close;
 
     private static int CountFromEnd(IReadOnlyList<DailyMarketSnapshotEntity> asc, Func<DailyMarketSnapshotEntity, bool> pred)
     {

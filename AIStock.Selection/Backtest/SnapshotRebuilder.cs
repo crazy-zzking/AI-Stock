@@ -49,6 +49,8 @@ public static class SnapshotRebuilder
             Name = name,
             Date = last.DateTime.Date,
             Close = last.Close,
+            High = last.High,
+            Low = last.Low,
             ChangePercent = changePercent,
             TurnoverRate = last.TurnoverRate,
             VolumeRatio = volumeRatio,

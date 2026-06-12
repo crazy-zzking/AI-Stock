@@ -93,6 +93,26 @@ public class SelectionWeights
     public decimal RegimeWeakFactor { get; set; } = 0.88m;
     /// <summary>强市综合分系数（&gt;1 放宽）</summary>
     public decimal RegimeStrongFactor { get; set; } = 1.06m;
+
+    // —— 出手闸门（让大盘环境真正控制"出不出手、出几只"，而非只给分数打折）——
+    /// <summary>全局综合分下限：低于此分一律不入选（0 = 不限，仅对中性/强市生效，弱市/风险释放另有更严下限）。</summary>
+    public decimal MinScore { get; set; } = 0m;
+    /// <summary>弱市综合分下限：弱市里低于此分不入选。</summary>
+    public decimal RegimeWeakMinScore { get; set; } = 50m;
+    /// <summary>弱市最多出手只数（压缩 TopN，宁缺毋滥）。</summary>
+    public int RegimeWeakTopNCap { get; set; } = 3;
+    /// <summary>风险释放（跌停扩散/情绪退潮）综合分下限：更严。</summary>
+    public decimal RegimeRiskOffMinScore { get; set; } = 55m;
+    /// <summary>风险释放最多出手只数（近乎空仓；设 0 则风险释放日完全空仓）。</summary>
+    public int RegimeRiskOffTopNCap { get; set; } = 1;
+
+    // —— 吸筹埋伏（ambush）硬触发阈值（默认保持原行为，供调参实验）——
+    /// <summary>吸筹埋伏：近 10 日最少涨停次数（启动背景强度，越大要求启动越强）。</summary>
+    public int AmbushMinLimitUpIn10 { get; set; } = 1;
+    /// <summary>吸筹埋伏：是否要求当日主力净流入≥0（洗盘期仍有资金承接，过滤出货阴跌）。</summary>
+    public bool AmbushRequireInflow { get; set; }
+    /// <summary>吸筹埋伏：是否要求命中当日热门题材（板块有炒作预期，埋伏才有人来抬轿）。</summary>
+    public bool AmbushRequireHotConcept { get; set; }
 }
 
 /// <summary>大盘环境等级（用于选股松紧系数）</summary>
