@@ -152,6 +152,11 @@ public class AIStockDbContext : DbContext
     /// </summary>
     public DbSet<SelectionPerformanceEntity> SelectionPerformance { get; set; }
 
+    /// <summary>
+    /// 交易闸门持久化状态（单行：kill-switch/日单数/个股暂停，跨重启保持）
+    /// </summary>
+    public DbSet<TradingGateStateEntity> TradingGateState { get; set; }
+
     public override int SaveChanges()
     {
         UpdateTimestamps();
@@ -399,6 +404,13 @@ public class AIStockDbContext : DbContext
             entity.HasIndex(e => new { e.TradingDate, e.Strategy, e.Code }).IsUnique();
             entity.HasIndex(e => e.Status);
             entity.HasIndex(e => e.Strategy);
+        });
+
+        // 交易闸门状态（单行表，Id 恒为 1、手工赋值）
+        modelBuilder.Entity<TradingGateStateEntity>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Id).ValueGeneratedNever();
         });
     }
 }

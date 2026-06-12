@@ -153,4 +153,95 @@ public class TradingGateTests
 
         Assert.False(gate.IsHalted);
     }
+
+    // ===== 状态持久化（重启恢复） =====
+
+    /// <summary>内存版 store：模拟跨进程重启的持久化存储。</summary>
+    private class FakeStore : AIStock.Core.Interfaces.ITradingGateStore
+    {
+        public AIStock.Core.Interfaces.TradingGateState? State;
+        public int SaveCount;
+        public AIStock.Core.Interfaces.TradingGateState? Load() => State;
+        public void Save(AIStock.Core.Interfaces.TradingGateState state) { State = state; SaveCount++; }
+    }
+
+    private static TradingGate CreateWithStore(FakeStore store, Action<TradingGuardOptions>? configure = null)
+    {
+        var opts = new TradingGuardOptions
+        {
+            Mode = TradingMode.DryRun,
+            MaxOrdersPerDay = 5,
+            ReservationTtlSeconds = 60
+        };
+        configure?.Invoke(opts);
+        return new TradingGate(Options.Create(opts), NullLogger<TradingGate>.Instance, store);
+    }
+
+    [Fact]
+    public void Halt_SurvivesRestart()
+    {
+        var store = new FakeStore();
+        CreateWithStore(store).Halt("盘中熔断");
+
+        // 模拟进程重启：新实例从同一 store 恢复
+        var restarted = CreateWithStore(store);
+
+        Assert.True(restarted.IsHalted);
+    }
+
+    [Fact]
+    public void Resume_SurvivesRestart()
+    {
+        var store = new FakeStore();
+        var gate = CreateWithStore(store);
+        gate.Halt("熔断");
+        gate.Resume();
+
+        var restarted = CreateWithStore(store);
+
+        Assert.False(restarted.IsHalted);
+    }
+
+    [Fact]
+    public void OrderCount_SurvivesRestart()
+    {
+        var store = new FakeStore();
+        var gate = CreateWithStore(store, o => o.MaxOrdersPerDay = 3);
+        Assert.True(gate.TryReserveOrderSlot(out _));
+        Assert.True(gate.TryReserveOrderSlot(out _));
+        Assert.True(gate.TryReserveOrderSlot(out _));
+
+        // 重启后日单数不清零：第 4 单仍被拒
+        var restarted = CreateWithStore(store, o => o.MaxOrdersPerDay = 3);
+
+        Assert.Equal(3, restarted.TodayOrderCount);
+        Assert.False(restarted.TryReserveOrderSlot(out var reason));
+        Assert.Contains("上限", reason);
+    }
+
+    [Fact]
+    public void StockSuspension_SurvivesRestart_AndExpiredOnesPruned()
+    {
+        var store = new FakeStore();
+        var gate = CreateWithStore(store);
+        gate.SuspendStock("600001", TimeSpan.FromMinutes(30), "连续失败");
+        // 手工注入一条已过期的暂停，验证恢复时被清理
+        store.State!.StockSuspensions["000002"] = DateTime.Now.AddMinutes(-1);
+
+        var restarted = CreateWithStore(store);
+
+        Assert.False(restarted.IsStockAllowed("600001", out _));   // 未过期 → 恢复
+        Assert.True(restarted.IsStockAllowed("000002", out _));    // 已过期 → 清理
+    }
+
+    [Fact]
+    public void NullStore_BehavesInMemory()
+    {
+        // 不带 store（旧行为/降级路径）：功能完整，仅不持久化
+        var gate = Create();
+        gate.Halt("x");
+        Assert.True(gate.IsHalted);
+        gate.Resume();
+        Assert.False(gate.IsHalted);
+    }
 }

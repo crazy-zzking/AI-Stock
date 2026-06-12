@@ -15,6 +15,8 @@ public static class DependencyInjection
         else
             services.Configure<TradingGuardOptions>(_ => { }); // 使用默认值（DryRun）
 
+        // 闸门状态持久化（kill-switch/日单数/个股暂停跨重启保持）；store 故障时闸门自动降级纯内存
+        services.AddSingleton<ITradingGateStore, DbTradingGateStore>();
         services.AddSingleton<ITradingGate, TradingGate>();
         services.AddScoped<ISignalGenerator, SignalGeneratorService>();
         services.AddSingleton<IOrderManager, OrderManagerService>();
