@@ -25,6 +25,12 @@ public class BacktestConfig
 
     /// <summary>单笔往返交易摩擦（%，佣金+印花税+滑点合计，从每笔收益中扣除）。默认 0.3。</summary>
     public decimal FrictionPct { get; set; } = 0.3m;
+
+    /// <summary>止损线（%，相对买入价；持有期内当日最低价跌破即按止损价卖出，跳空按开盘价更差成交）。0=关闭。</summary>
+    public decimal StopLossPct { get; set; }
+
+    /// <summary>止盈线（%，相对买入价；持有期内当日最高价触及即按止盈价卖出，跳空按开盘价更优成交）。0=关闭。</summary>
+    public decimal TakeProfitPct { get; set; }
 }
 
 /// <summary>一个选股信号（某交易日选出的一只股票）。</summary>
@@ -60,6 +66,8 @@ public class SelectionBacktestTrade
     public decimal ReturnPct { get; set; }
     /// <summary>卖出是否因跌停一字顺延过。</summary>
     public bool ExitDeferred { get; set; }
+    /// <summary>出场原因：time（持有到期）/ stoploss（止损）/ takeprofit（止盈）。</summary>
+    public string ExitReason { get; set; } = "time";
     /// <summary>持有期最高浮盈（%，相对买入价）。</summary>
     public decimal MaxRisePct { get; set; }
     /// <summary>持有期最大浮亏（%，相对买入价，负值）。</summary>

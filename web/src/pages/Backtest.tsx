@@ -16,6 +16,8 @@ const Backtest: React.FC = () => {
   const [range, setRange] = useState<[Dayjs | null, Dayjs | null] | null>(null);
   const [tradability, setTradability] = useState(true);
   const [friction, setFriction] = useState(0.3);
+  const [stopLoss, setStopLoss] = useState(0);
+  const [takeProfit, setTakeProfit] = useState(0);
   const [report, setReport] = useState<BacktestReportDto | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -24,7 +26,7 @@ const Backtest: React.FC = () => {
     try {
       const from = range?.[0]?.format('YYYY-MM-DD');
       const to = range?.[1]?.format('YYYY-MM-DD');
-      const res = await getBacktest(holdDays, entry, from, to, tradability, friction);
+      const res = await getBacktest(holdDays, entry, from, to, tradability, friction, stopLoss, takeProfit);
       setReport(res.data);
       if (res.data.executedTrades === 0) message.warning('无可回测成交（检查是否有历史选股记录与对应 K 线）');
     } catch {
@@ -40,10 +42,12 @@ const Backtest: React.FC = () => {
     { title: '信号日', dataIndex: 'signalDate', key: 'signalDate', width: 110, render: (v: string) => v?.slice(0, 10) },
     { title: '买入价', dataIndex: 'entryPrice', key: 'entryPrice', width: 90, render: (v: number) => v?.toFixed(2) },
     {
-      title: '卖出价', dataIndex: 'exitPrice', key: 'exitPrice', width: 110,
+      title: '卖出价', dataIndex: 'exitPrice', key: 'exitPrice', width: 130,
       render: (v: number, r: BacktestTradeDto) => (
         <Space size={4}>
           {v?.toFixed(2)}
+          {r.exitReason === 'stoploss' && <Tag color="red">止损</Tag>}
+          {r.exitReason === 'takeprofit' && <Tag color="green">止盈</Tag>}
           {r.exitDeferred && <Tooltip title="原定卖出日一字跌停，顺延成交"><Tag color="orange">延</Tag></Tooltip>}
         </Space>
       ),
@@ -95,6 +99,14 @@ const Backtest: React.FC = () => {
             <span>摩擦%</span>
           </Tooltip>
           <InputNumber min={0} max={3} step={0.1} value={friction} onChange={(v) => setFriction(v ?? 0.3)} style={{ width: 80 }} />
+          <Tooltip title="持有期内最低价跌破 买入价×(1-x%) 即止损卖出（跳空按开盘价更差成交，一字跌停顺延）。0=关闭">
+            <span>止损%</span>
+          </Tooltip>
+          <InputNumber min={0} max={30} step={1} value={stopLoss} onChange={(v) => setStopLoss(v ?? 0)} style={{ width: 80 }} />
+          <Tooltip title="持有期内最高价触及 买入价×(1+x%) 即止盈卖出。0=关闭">
+            <span>止盈%</span>
+          </Tooltip>
+          <InputNumber min={0} max={50} step={1} value={takeProfit} onChange={(v) => setTakeProfit(v ?? 0)} style={{ width: 80 }} />
           <Button type="primary" icon={<PlayCircleOutlined />} loading={loading} onClick={run}>运行回测</Button>
         </Space>
       </Card>

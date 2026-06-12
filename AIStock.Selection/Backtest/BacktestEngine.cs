@@ -79,10 +79,40 @@ public static class BacktestEngine
                 exitIdx = entryIdx;
             }
 
-            // 可成交性：卖出日一字跌停（最高=最低≈跌停价）→ 顺延到下一个可卖日；
+            // 规则出场（可选）：持有期内逐日先查止损（悲观优先）再查止盈；
+            // 跳空越过触发价按开盘成交（止损更差/止盈更优）；一字跌停日无法止损，顺延到次日继续判。
+            var exitReason = "time";
+            decimal? rulePrice = null;
+            if (config.StopLossPct > 0 || config.TakeProfitPct > 0)
+            {
+                var stopPrice = entryPrice * (1 - config.StopLossPct / 100m);
+                var tpPrice = entryPrice * (1 + config.TakeProfitPct / 100m);
+                for (var i = entryIdx; i <= exitIdx; i++)
+                {
+                    var bar = ordered[i];
+                    var oneWordDown = config.ApplyTradability && i > 0
+                        && IsLimitDownOneWord(bar, ordered[i - 1].Close, limitRatio);
+                    if (config.StopLossPct > 0 && !oneWordDown && bar.Low <= stopPrice)
+                    {
+                        exitIdx = i;
+                        rulePrice = Math.Min(bar.Open, stopPrice);
+                        exitReason = "stoploss";
+                        break;
+                    }
+                    if (config.TakeProfitPct > 0 && bar.High >= tpPrice)
+                    {
+                        exitIdx = i;
+                        rulePrice = Math.Max(bar.Open, tpPrice);
+                        exitReason = "takeprofit";
+                        break;
+                    }
+                }
+            }
+
+            // 可成交性：到期卖出日一字跌停（最高=最低≈跌停价）→ 顺延到下一个可卖日；
             // 顺延到最后一根仍跌停则按该根收盘成交（无法再延，保守接受）
             var exitDeferred = false;
-            if (config.ApplyTradability)
+            if (config.ApplyTradability && exitReason == "time")
             {
                 while (exitIdx < ordered.Count - 1 && exitIdx > 0
                     && IsLimitDownOneWord(ordered[exitIdx], ordered[exitIdx - 1].Close, limitRatio))
@@ -94,6 +124,7 @@ public static class BacktestEngine
             }
 
             var exitBar = ordered[exitIdx];
+            var exitPrice = rulePrice ?? exitBar.Close;
             var span = ordered.GetRange(entryIdx, exitIdx - entryIdx + 1);
 
             decimal Pct(decimal price) => Math.Round((price - entryPrice) / entryPrice * 100m, 2);
@@ -106,10 +137,11 @@ public static class BacktestEngine
                 EntryDate = ordered[entryIdx].Date,
                 EntryPrice = entryPrice,
                 ExitDate = exitBar.Date,
-                ExitPrice = exitBar.Close,
+                ExitPrice = exitPrice,
                 HoldDays = exitIdx - entryIdx,
-                ReturnPct = Pct(exitBar.Close) - friction,
+                ReturnPct = Pct(exitPrice) - friction,
                 ExitDeferred = exitDeferred,
+                ExitReason = exitReason,
                 MaxRisePct = Pct(span.Max(b => b.High)),
                 MaxDropPct = Pct(span.Min(b => b.Low)),
             });

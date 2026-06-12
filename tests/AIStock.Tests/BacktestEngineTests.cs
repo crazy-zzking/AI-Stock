@@ -256,6 +256,114 @@ public class BacktestEngineTests
         Assert.Equal(11m, report.Trades[0].EntryPrice);
     }
 
+    // ---- 规则出场（止损/止盈） ----
+
+    [Fact]
+    public void StopLoss_TriggersAtStopPrice()
+    {
+        // 买入 10，止损 8% → 止损价 9.2；day2 最低 9.0 触发 → 以 9.2 卖出
+        var bars = new List<BacktestBar>
+        {
+            Bar(0, 10, 10, 10, 10),
+            Bar(1, 10, 10.2m, 9.8m, 10),     // entry open=10
+            Bar(2, 9.8m, 9.9m, 9.0m, 9.5m),  // low 9.0 < 9.2 → 止损
+            Bar(3, 9.5m, 11, 9.5m, 11),
+        };
+        var report = BacktestEngine.Run(
+            new[] { Sig("600001") },
+            new Dictionary<string, List<BacktestBar>> { ["600001"] = bars },
+            new BacktestConfig { HoldDays = 5, FrictionPct = 0, StopLossPct = 8m });
+
+        var t = report.Trades[0];
+        Assert.Equal("stoploss", t.ExitReason);
+        Assert.Equal(9.2m, t.ExitPrice);
+        Assert.Equal(Base.AddDays(2), t.ExitDate);
+        Assert.Equal(-8m, t.ReturnPct);
+    }
+
+    [Fact]
+    public void StopLoss_GapDownOpen_ExitsAtWorseOpen()
+    {
+        // 跳空低开 8.5 < 止损价 9.2 → 按开盘 8.5 成交（更差），不是理想化的 9.2
+        var bars = new List<BacktestBar>
+        {
+            Bar(0, 10, 10, 10, 10),
+            Bar(1, 10, 10, 9.9m, 10),
+            Bar(2, 8.5m, 8.8m, 8.4m, 8.6m),
+        };
+        var report = BacktestEngine.Run(
+            new[] { Sig("600001") },
+            new Dictionary<string, List<BacktestBar>> { ["600001"] = bars },
+            new BacktestConfig { HoldDays = 5, FrictionPct = 0, StopLossPct = 8m });
+
+        Assert.Equal(8.5m, report.Trades[0].ExitPrice);
+        Assert.Equal(-15m, report.Trades[0].ReturnPct);
+    }
+
+    [Fact]
+    public void TakeProfit_TriggersAtTpPrice()
+    {
+        // 止盈 10% → 11.0；day2 最高 11.5 触发 → 以 11.0 卖出
+        var bars = new List<BacktestBar>
+        {
+            Bar(0, 10, 10, 10, 10),
+            Bar(1, 10, 10.5m, 10, 10.4m),
+            Bar(2, 10.5m, 11.5m, 10.4m, 11.2m),
+            Bar(3, 11, 11, 10, 10),
+        };
+        var report = BacktestEngine.Run(
+            new[] { Sig("600001") },
+            new Dictionary<string, List<BacktestBar>> { ["600001"] = bars },
+            new BacktestConfig { HoldDays = 5, FrictionPct = 0, TakeProfitPct = 10m });
+
+        var t = report.Trades[0];
+        Assert.Equal("takeprofit", t.ExitReason);
+        Assert.Equal(11.0m, t.ExitPrice);
+        Assert.Equal(10m, t.ReturnPct);
+    }
+
+    [Fact]
+    public void StopLoss_OneWordLimitDown_CannotSell_DefersToNextDay()
+    {
+        // day2 一字跌停（昨收10→9.0）无法止损；day3 开盘 8.8 跳空成交
+        var bars = new List<BacktestBar>
+        {
+            Bar(0, 10, 10, 10, 10),
+            Bar(1, 10, 10, 10, 10),          // entry，昨收10
+            Bar(2, 9.0m, 9.0m, 9.0m, 9.0m),  // 一字跌停（10×0.9）低于止损价但卖不出
+            Bar(3, 8.8m, 9.2m, 8.7m, 9.0m),  // 次日开盘 8.8 止损成交
+        };
+        var report = BacktestEngine.Run(
+            new[] { Sig("600001") },
+            new Dictionary<string, List<BacktestBar>> { ["600001"] = bars },
+            new BacktestConfig { HoldDays = 5, FrictionPct = 0, StopLossPct = 8m });
+
+        var t = report.Trades[0];
+        Assert.Equal("stoploss", t.ExitReason);
+        Assert.Equal(Base.AddDays(3), t.ExitDate);
+        Assert.Equal(8.8m, t.ExitPrice);
+    }
+
+    [Fact]
+    public void Rules_Disabled_BehavesAsTimeExit()
+    {
+        // 不配止损止盈：即使中途大跌也持有到期（旧行为）
+        var bars = new List<BacktestBar>
+        {
+            Bar(0, 10, 10, 10, 10),
+            Bar(1, 10, 10, 9.9m, 10),
+            Bar(2, 9, 9, 8.5m, 8.6m),
+            Bar(3, 8.6m, 10.5m, 8.6m, 10.5m), // exit (hold=2)
+        };
+        var report = BacktestEngine.Run(
+            new[] { Sig("600001") },
+            new Dictionary<string, List<BacktestBar>> { ["600001"] = bars },
+            new BacktestConfig { HoldDays = 2, FrictionPct = 0 });
+
+        Assert.Equal("time", report.Trades[0].ExitReason);
+        Assert.Equal(10.5m, report.Trades[0].ExitPrice);
+    }
+
     [Fact]
     public void Tradability_StSignal_FivePercentLimit()
     {

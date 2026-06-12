@@ -172,6 +172,7 @@ public class SelectionController : ControllerBase
         [FromQuery] int holdDays = 5, [FromQuery] string entry = "NextOpen",
         [FromQuery] string? from = null, [FromQuery] string? to = null,
         [FromQuery] bool tradability = true, [FromQuery] decimal friction = 0.3m,
+        [FromQuery] decimal stopLoss = 0m, [FromQuery] decimal takeProfit = 0m,
         CancellationToken ct = default)
     {
         var config = new BacktestConfig
@@ -181,6 +182,8 @@ public class SelectionController : ControllerBase
                 ? BacktestEntryTiming.SignalClose : BacktestEntryTiming.NextOpen,
             ApplyTradability = tradability,
             FrictionPct = friction,
+            StopLossPct = stopLoss,
+            TakeProfitPct = takeProfit,
         };
         DateTime? f = DateTime.TryParse(from, out var fd) ? fd : null;
         DateTime? t = DateTime.TryParse(to, out var td) ? td : null;
@@ -198,6 +201,7 @@ public class SelectionController : ControllerBase
         [FromQuery] string? strategy, [FromQuery] string? from, [FromQuery] string? to,
         [FromQuery] int holdDays = 5, [FromQuery] string entry = "NextOpen",
         [FromQuery] bool tradability = true, [FromQuery] decimal friction = 0.3m,
+        [FromQuery] decimal stopLoss = 0m, [FromQuery] decimal takeProfit = 0m,
         CancellationToken ct = default)
     {
         var c = criteria ?? await _config.GetActiveCriteriaAsync(
@@ -211,6 +215,8 @@ public class SelectionController : ControllerBase
                 ? BacktestEntryTiming.SignalClose : BacktestEntryTiming.NextOpen,
             ApplyTradability = tradability,
             FrictionPct = friction,
+            StopLossPct = stopLoss,
+            TakeProfitPct = takeProfit,
         };
         var report = await _replay.BacktestParamsAsync(strategy, c, fromD, toD, config, ct);
         return Ok(report);

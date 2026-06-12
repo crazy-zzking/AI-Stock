@@ -83,7 +83,8 @@ export const getSelectionPatterns = () => api.get<PatternInfo[]>('/selection/pat
 export interface BacktestTradeDto {
   code: string; name: string; signalDate: string; entryDate: string; entryPrice: number;
   exitDate: string; exitPrice: number; holdDays: number;
-  returnPct: number; exitDeferred: boolean; maxRisePct: number; maxDropPct: number; win: boolean;
+  returnPct: number; exitDeferred: boolean; exitReason: string;
+  maxRisePct: number; maxDropPct: number; win: boolean;
 }
 export interface BacktestReportDto {
   holdDays: number; entry: string;
@@ -96,10 +97,10 @@ export interface BacktestReportDto {
 }
 export const getBacktest = (
   holdDays = 5, entry = 'NextOpen', from?: string, to?: string,
-  tradability = true, friction = 0.3,
+  tradability = true, friction = 0.3, stopLoss = 0, takeProfit = 0,
 ) =>
   api.get<BacktestReportDto>('/selection/backtest', {
-    params: { holdDays, entry, from, to, tradability, friction },
+    params: { holdDays, entry, from, to, tradability, friction, stopLoss, takeProfit },
   });
 // 选股历史记录列表（元信息，按选股时间倒序）
 export const getSelectionHistory = (take = 30) =>
