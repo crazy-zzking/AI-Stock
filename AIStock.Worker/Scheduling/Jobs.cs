@@ -248,12 +248,15 @@ public class SelectionDailyJob : IScheduledJob
 {
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ITradingCalendar _calendar;
+    private readonly AIStock.Monitor.IAlertNotifier _notifier;
     private readonly ILogger<SelectionDailyJob> _logger;
 
-    public SelectionDailyJob(IServiceScopeFactory scopeFactory, ITradingCalendar calendar, ILogger<SelectionDailyJob> logger)
+    public SelectionDailyJob(IServiceScopeFactory scopeFactory, ITradingCalendar calendar,
+        AIStock.Monitor.IAlertNotifier notifier, ILogger<SelectionDailyJob> logger)
     {
         _scopeFactory = scopeFactory;
         _calendar = calendar;
+        _notifier = notifier;
         _logger = logger;
     }
 
@@ -268,7 +271,10 @@ public class SelectionDailyJob : IScheduledJob
         }
         using var scope = _scopeFactory.CreateScope();
         var svc = scope.ServiceProvider.GetRequiredService<AIStock.Selection.SelectionDailyService>();
-        await svc.RunAllAsync(ct);
+        var run = await svc.RunAllAsync(ct);
+        await _notifier.SendAsync(new AIStock.Monitor.Alert(
+            AIStock.Monitor.AlertLevel.Info, "尾盘选股报告",
+            run.FormatReport($"📊 {DateTime.Today:MM-dd} 尾盘选股（14:50）")), ct);
     }
 }
 
@@ -281,12 +287,15 @@ public class SelectionPremarketJob : IScheduledJob
 {
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ITradingCalendar _calendar;
+    private readonly AIStock.Monitor.IAlertNotifier _notifier;
     private readonly ILogger<SelectionPremarketJob> _logger;
 
-    public SelectionPremarketJob(IServiceScopeFactory scopeFactory, ITradingCalendar calendar, ILogger<SelectionPremarketJob> logger)
+    public SelectionPremarketJob(IServiceScopeFactory scopeFactory, ITradingCalendar calendar,
+        AIStock.Monitor.IAlertNotifier notifier, ILogger<SelectionPremarketJob> logger)
     {
         _scopeFactory = scopeFactory;
         _calendar = calendar;
+        _notifier = notifier;
         _logger = logger;
     }
 
@@ -301,7 +310,10 @@ public class SelectionPremarketJob : IScheduledJob
         }
         using var scope = _scopeFactory.CreateScope();
         var svc = scope.ServiceProvider.GetRequiredService<AIStock.Selection.SelectionDailyService>();
-        await svc.RunAllAsync(ct);
+        var run = await svc.RunAllAsync(ct);
+        await _notifier.SendAsync(new AIStock.Monitor.Alert(
+            AIStock.Monitor.AlertLevel.Info, "开盘前选股早报",
+            run.FormatReport($"🌅 {DateTime.Today:MM-dd} 开盘前选股（隔夜情报已纳入）")), ct);
     }
 }
 

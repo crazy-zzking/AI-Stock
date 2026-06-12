@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using AIStock.Infrastructure.Database.Context;
 using AIStock.Infrastructure.Database.Entities;
+using AIStock.Monitor;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -10,21 +11,28 @@ namespace AIStock.Worker.Scheduling;
 /// <summary>
 /// 任务运行协调器（单例）。统一所有任务的执行入口：
 /// 1) 单飞锁——同一任务禁止并发（调度触发与手动「立即运行」互斥，抢不到锁即跳过）；
-/// 2) 运行态落库——开始/结束/耗时/成功失败写入 worker_job_run，供 Web 前端展示。
+/// 2) 运行态落库——开始/结束/耗时/成功失败写入 worker_job_run，供 Web 前端展示；
+/// 3) 失败告警——任务异常经 IAlertNotifier 推送（同任务 1 小时内只告警一次，防高频任务刷屏）。
 /// </summary>
 public class JobRunCoordinator
 {
+    private static readonly TimeSpan AlertThrottle = TimeSpan.FromHours(1);
+
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<JobRunCoordinator> _logger;
+    private readonly IAlertNotifier _alert;
     private readonly IReadOnlyDictionary<string, IScheduledJob> _jobs;
     private readonly ConcurrentDictionary<string, SemaphoreSlim> _locks = new();
+    private readonly ConcurrentDictionary<string, DateTime> _lastAlertAt = new();
 
     public JobRunCoordinator(
         IEnumerable<IScheduledJob> jobs,
         IServiceScopeFactory scopeFactory,
+        IAlertNotifier alert,
         ILogger<JobRunCoordinator> logger)
     {
         _scopeFactory = scopeFactory;
+        _alert = alert;
         _logger = logger;
         var map = new Dictionary<string, IScheduledJob>();
         foreach (var j in jobs) map[j.Name] = j; // 同名以最后注册为准
@@ -77,11 +85,33 @@ public class JobRunCoordinator
             sw.Stop();
             _logger.LogError(ex, "任务[{Name}]执行异常", job.Name);
             await MarkEndAsync(job.Name, sw.ElapsedMilliseconds, false, ex.Message, CancellationToken.None);
+            await TryAlertFailureAsync(job.Name, trigger, ex);
             return true; // 已执行（失败），非"跳过"
         }
         finally
         {
             sem.Release();
+        }
+    }
+
+    /// <summary>任务失败告警：同任务 1 小时内只发一次；告警自身异常不影响调度。</summary>
+    private async Task TryAlertFailureAsync(string name, string trigger, Exception ex)
+    {
+        try
+        {
+            var now = DateTime.Now;
+            var last = _lastAlertAt.GetOrAdd(name, DateTime.MinValue);
+            if (now - last < AlertThrottle) return;
+            _lastAlertAt[name] = now;
+
+            await _alert.SendAsync(new Alert(
+                AlertLevel.Warning,
+                $"Worker 任务失败: {name}",
+                $"触发方式: {trigger}\n错误: {ex.Message}\n（同任务 1 小时内不重复告警，详情看 worker_job_run / 日志）"));
+        }
+        catch (Exception alertEx)
+        {
+            _logger.LogWarning(alertEx, "任务[{Name}]失败告警发送异常（忽略）", name);
         }
     }
 
