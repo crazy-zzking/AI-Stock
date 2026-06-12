@@ -28,8 +28,12 @@ public class TailBuyOptions
     /// <summary>额外保险：即便 TradingGate=Live 也只走计划不真下单（默认 true）</summary>
     public bool DryRunOnly { get; set; } = true;
 
-    /// <summary>持有交易日数，满则尾盘到期卖出</summary>
-    public int HoldDays { get; set; } = 5;
+    /// <summary>
+    /// 持有交易日数，满则尾盘到期卖出（开仓时固化到 tail_position，改动只影响新开仓）。
+    /// 默认 3：回放调优（2026H1，实盘化口径）显示各策略 alpha 在 T+3 后衰减殆尽，
+    /// 持有 2-3 天显著优于 5 天且分窗稳健。
+    /// </summary>
+    public int HoldDays { get; set; } = 3;
 
     /// <summary>止损百分比(%)：现价跌破 买入价×(1-该值/100) 触发止损卖出</summary>
     public decimal StopLossPercent { get; set; } = 8m;
