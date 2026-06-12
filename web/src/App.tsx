@@ -26,6 +26,7 @@ import SelectionConfig from './pages/SelectionConfig';
 import StrategyManager from './pages/StrategyManager';
 import Backtest from './pages/Backtest';
 import WorkerConfig from './pages/WorkerConfig';
+import StrategyScoreboard from './pages/StrategyScoreboard';
 
 function AppShell() {
   const { dark } = useThemeMode();
@@ -46,6 +47,7 @@ function AppShell() {
               <Route path="selection-config" element={<SelectionConfig />} />
               <Route path="strategy-manager" element={<StrategyManager />} />
               <Route path="selection-backtest" element={<Backtest />} />
+              <Route path="strategy-scoreboard" element={<StrategyScoreboard />} />
               <Route path="sector" element={<Sector />} />
               <Route path="review" element={<Review />} />
               <Route path="agents" element={<Agents />} />

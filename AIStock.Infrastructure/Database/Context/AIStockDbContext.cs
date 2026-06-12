@@ -142,6 +142,16 @@ public class AIStockDbContext : DbContext
     /// </summary>
     public DbSet<WorkerConfigEntity> WorkerConfig { get; set; }
 
+    /// <summary>
+    /// Worker 任务运行态（运行中/最近开始/耗时 + 手动运行请求）
+    /// </summary>
+    public DbSet<WorkerJobRunEntity> WorkerJobRun { get; set; }
+
+    /// <summary>
+    /// 选股信号前向绩效（每信号 T+1/3/5 收益与基准超额，策略记分板数据源）
+    /// </summary>
+    public DbSet<SelectionPerformanceEntity> SelectionPerformance { get; set; }
+
     public override int SaveChanges()
     {
         UpdateTimestamps();
@@ -380,6 +390,15 @@ public class AIStockDbContext : DbContext
             entity.HasKey(e => e.Id);
             entity.HasIndex(e => e.Status);
             entity.HasIndex(e => new { e.Code, e.Status });
+        });
+
+        // 选股信号前向绩效（同 交易日+策略+代码 唯一；按状态扫未完成、按策略聚合）
+        modelBuilder.Entity<SelectionPerformanceEntity>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => new { e.TradingDate, e.Strategy, e.Code }).IsUnique();
+            entity.HasIndex(e => e.Status);
+            entity.HasIndex(e => e.Strategy);
         });
     }
 }

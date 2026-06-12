@@ -83,6 +83,8 @@ builder.Services.AddSingleton<DragonTigerSyncService>();
 builder.Services.AddSingleton<IndexKlineSyncService>();
 builder.Services.AddSingleton<CapitalFlowSyncService>();
 builder.Services.AddSingleton<ConceptDigestService>();
+// 选股信号前向绩效（Scoped：依赖 DbContext，任务内开作用域使用）
+builder.Services.AddScoped<AIStock.Selection.Performance.SelectionPerformanceService>();
 
 // 调度：每个后台任务独立注册，调度参数由 worker_config 表 Jobs 段（前端可配）热读
 builder.Services.AddSingleton<IScheduledJob, StockBaseSyncJob>();
@@ -99,8 +101,12 @@ builder.Services.AddSingleton<IScheduledJob, DragonTigerCollectJob>();
 builder.Services.AddSingleton<IScheduledJob, IndexKlineSyncJob>();
 builder.Services.AddSingleton<IScheduledJob, CapitalFlowSyncJob>();
 builder.Services.AddSingleton<IScheduledJob, ConceptDigestJob>();
+builder.Services.AddSingleton<IScheduledJob, SelectionPerformanceJob>();
 builder.Services.Configure<GraphPromotionOptions>(
     builder.Configuration.GetSection(GraphPromotionOptions.SectionName));
+// 运行协调器（单飞防并发 + 运行态落库）与手动「立即运行」轮询器
+builder.Services.AddSingleton<JobRunCoordinator>();
+builder.Services.AddHostedService<ManualRunPoller>();
 builder.Services.AddHostedService<JobScheduler>();
 
 var host = builder.Build();
@@ -130,6 +136,9 @@ using (var scope = host.Services.CreateScope())
     await cfg.EnsureSeededAsync(GraphPromotionOptions.SectionName,
         c.GetSection(GraphPromotionOptions.SectionName).Get<GraphPromotionOptions>() ?? new());
 }
+
+// 清零残留的任务运行态（防上次 Worker 崩溃后卡死为"运行中"）
+await host.Services.GetRequiredService<JobRunCoordinator>().ResetRunningFlagsAsync();
 
 // 启动时将 Provider 灌入 Resolver
 host.Services.InitializeDataProviders();

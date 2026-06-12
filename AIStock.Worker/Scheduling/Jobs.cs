@@ -239,3 +239,21 @@ public class ConceptDigestJob : IScheduledJob
     public string Name => "concept-digest";
     public Task ExecuteAsync(CancellationToken ct) => _svc.SyncAsync(ct: ct);
 }
+
+/// <summary>
+/// 选股信号前向绩效任务（收盘后、K线同步之后）：物化当日各策略最新一批选股为信号，
+/// 并对未完成行补算 T+1/T+3/T+5 收益与沪深300超额（幂等，K线到位多少算多少）。
+/// </summary>
+public class SelectionPerformanceJob : IScheduledJob
+{
+    private readonly IServiceScopeFactory _scopeFactory;
+    public SelectionPerformanceJob(IServiceScopeFactory scopeFactory) => _scopeFactory = scopeFactory;
+    public string Name => "selection-performance";
+
+    public async Task ExecuteAsync(CancellationToken ct)
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var svc = scope.ServiceProvider.GetRequiredService<AIStock.Selection.Performance.SelectionPerformanceService>();
+        await svc.SyncAsync(ct);
+    }
+}
