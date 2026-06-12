@@ -46,6 +46,7 @@ public class WorkerConfigController : ControllerBase
         ("capital-flow",    "资金流历史同步",         false, "建议每日定点(收盘后)"),
         ("concept-digest",  "概念炒作点蒸馏",         false, "建议每日定点"),
         ("selection-daily", "每日全策略选股留痕",      false, "交易日 14:50(尾盘快照后)，只留痕不下单"),
+        ("selection-premarket", "开盘前选股",         false, "交易日 09:00，昨收数据+隔夜情报，供开盘埋伏"),
         ("selection-performance", "选股绩效补算",     false, "建议每日定点(日K同步后)"),
     };
 

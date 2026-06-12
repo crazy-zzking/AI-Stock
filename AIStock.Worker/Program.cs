@@ -103,6 +103,7 @@ builder.Services.AddSingleton<IScheduledJob, IndexKlineSyncJob>();
 builder.Services.AddSingleton<IScheduledJob, CapitalFlowSyncJob>();
 builder.Services.AddSingleton<IScheduledJob, ConceptDigestJob>();
 builder.Services.AddSingleton<IScheduledJob, SelectionDailyJob>();
+builder.Services.AddSingleton<IScheduledJob, SelectionPremarketJob>();
 builder.Services.AddSingleton<IScheduledJob, SelectionPerformanceJob>();
 builder.Services.Configure<GraphPromotionOptions>(
     builder.Configuration.GetSection(GraphPromotionOptions.SectionName));

@@ -273,6 +273,39 @@ public class SelectionDailyJob : IScheduledJob
 }
 
 /// <summary>
+/// 开盘前全策略选股留痕任务（交易日 09:00）：基于昨日完整收盘数据 + 隔夜情报
+/// （盘后公告/龙虎榜/资金流/小作文）再选一轮，供竞价/开盘埋伏决策。
+/// 与尾盘批次(selection-daily)是并集关系：记分板先入为主，开盘批新增的票按新信号追加。
+/// </summary>
+public class SelectionPremarketJob : IScheduledJob
+{
+    private readonly IServiceScopeFactory _scopeFactory;
+    private readonly ITradingCalendar _calendar;
+    private readonly ILogger<SelectionPremarketJob> _logger;
+
+    public SelectionPremarketJob(IServiceScopeFactory scopeFactory, ITradingCalendar calendar, ILogger<SelectionPremarketJob> logger)
+    {
+        _scopeFactory = scopeFactory;
+        _calendar = calendar;
+        _logger = logger;
+    }
+
+    public string Name => "selection-premarket";
+
+    public async Task ExecuteAsync(CancellationToken ct)
+    {
+        if (!await _calendar.IsTradingDayAsync(DateTime.Today, ct))
+        {
+            _logger.LogDebug("非交易日，开盘前选股跳过");
+            return;
+        }
+        using var scope = _scopeFactory.CreateScope();
+        var svc = scope.ServiceProvider.GetRequiredService<AIStock.Selection.SelectionDailyService>();
+        await svc.RunAllAsync(ct);
+    }
+}
+
+/// <summary>
 /// 选股信号前向绩效任务（收盘后、K线同步之后）：物化当日各策略最新一批选股为信号，
 /// 并对未完成行补算 T+1/T+3/T+5 收益与沪深300超额（幂等，K线到位多少算多少）。
 /// </summary>
