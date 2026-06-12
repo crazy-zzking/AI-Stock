@@ -51,6 +51,15 @@ public class SelectionPerformanceController : ControllerBase
         return Ok(rows);
     }
 
+    /// <summary>LLM 复评价值考核：按复评建议等级（Buy/Watch/Avoid）聚合前向绩效，验证复评判断力。</summary>
+    [HttpGet("review-stats")]
+    public async Task<ActionResult<List<ReviewPerformanceSummary>>> ReviewStats(
+        [FromQuery] int days = 30, CancellationToken ct = default)
+    {
+        if (days <= 0 || days > 365) days = 30;
+        return Ok(await _svc.GetReviewStatsAsync(days, ct));
+    }
+
     /// <summary>手动触发一次物化+补算（通常由 Worker 定时执行，这里用于补数/调试）。</summary>
     [HttpPost("sync")]
     public async Task<ActionResult> Sync(CancellationToken ct = default)

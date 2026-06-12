@@ -163,6 +163,61 @@ public class SelectionPerformanceService
         return (updated, finalized);
     }
 
+    /// <summary>
+    /// LLM 复评价值考核：把已复评批次中每只票的复评建议（Buy/Watch/Avoid）与前向绩效 join，
+    /// 按建议等级聚合 T+1/3/5 表现——回答"复评是否真的带来超额判断力"。
+    /// </summary>
+    public async Task<List<ReviewPerformanceSummary>> GetReviewStatsAsync(int days = 30, CancellationToken ct = default)
+    {
+        var since = DateTime.Today.AddDays(-days);
+
+        var batches = await _db.SelectionResult
+            .Where(r => r.TradingDate >= since && r.ReviewStatus == "done")
+            .Select(r => new { r.TradingDate, r.Strategy, r.ResultsJson })
+            .ToListAsync(ct);
+
+        var perfByKey = (await _db.SelectionPerformance
+                .Where(p => p.TradingDate >= since && !p.Untradable)
+                .ToListAsync(ct))
+            .GroupBy(p => (p.TradingDate.Date, p.Strategy, p.Code))
+            .ToDictionary(g => g.Key, g => g.First());
+
+        // 同 (日,策略,代码) 多批复评取最后一次解析到的建议
+        var byRec = new Dictionary<string, List<SelectionPerformanceEntity>>();
+        var reviewedTotal = 0;
+        foreach (var b in batches)
+        {
+            List<StockSelectionResult> picks;
+            try { picks = JsonSerializer.Deserialize<List<StockSelectionResult>>(b.ResultsJson, AppJson.Default) ?? new(); }
+            catch (JsonException) { continue; }
+
+            foreach (var p in picks)
+            {
+                if (p.Review == null || string.IsNullOrEmpty(p.Code)) continue;
+                reviewedTotal++;
+                if (!perfByKey.TryGetValue((b.TradingDate.Date, b.Strategy, p.Code), out var perf)) continue;
+                var rec = p.Review.Recommendation.ToString();
+                if (!byRec.TryGetValue(rec, out var list)) byRec[rec] = list = new();
+                list.Add(perf);
+            }
+        }
+
+        _logger.LogInformation("复评考核：窗口 {Days} 天，已复评票次 {Total}，可匹配绩效 {Matched}",
+            days, reviewedTotal, byRec.Values.Sum(v => v.Count));
+
+        return byRec
+            .Select(kv => new ReviewPerformanceSummary
+            {
+                Recommendation = kv.Key,
+                Count = kv.Value.Count,
+                Horizon1 = HorizonStats.From(kv.Value, p => p.Ret1, p => p.Excess1),
+                Horizon3 = HorizonStats.From(kv.Value, p => p.Ret3, p => p.Excess3),
+                Horizon5 = HorizonStats.From(kv.Value, p => p.Ret5, p => p.Excess5),
+            })
+            .OrderBy(s => s.Recommendation)
+            .ToList();
+    }
+
     /// <summary>按策略聚合最近 N 天信号的绩效（策略记分板）。</summary>
     public async Task<List<StrategyPerformanceSummary>> GetSummaryAsync(int days = 30, CancellationToken ct = default)
     {
@@ -193,6 +248,20 @@ public class SelectionPerformanceService
             .OrderByDescending(s => s.Horizon5.AvgExcess ?? decimal.MinValue)
             .ToList();
     }
+}
+
+/// <summary>LLM 复评考核 — 按建议等级（Buy/Watch/Avoid）聚合的前向绩效。</summary>
+public class ReviewPerformanceSummary
+{
+    /// <summary>复评建议等级（Buy/Watch/Avoid）</summary>
+    public string Recommendation { get; set; } = string.Empty;
+
+    /// <summary>可匹配到绩效的票次</summary>
+    public int Count { get; set; }
+
+    public HorizonStats Horizon1 { get; set; } = new();
+    public HorizonStats Horizon3 { get; set; } = new();
+    public HorizonStats Horizon5 { get; set; } = new();
 }
 
 /// <summary>策略记分板 — 单策略聚合。</summary>
