@@ -28,7 +28,7 @@ public class ConceptDigestService
     }
 
     /// <summary>蒸馏待处理关联。batchSize 每批条数(合一次LLM)，maxConcurrency 并发批数，maxRows>0 限量(调试)。返回成功条数。</summary>
-    public async Task<int> SyncAsync(int batchSize = 20, int maxConcurrency = 5, int maxRows = 0, CancellationToken ct = default)
+    public async Task<int> SyncAsync(int batchSize = 1, int maxConcurrency = 5, int maxRows = 0, CancellationToken ct = default)
     {
         List<long> pendingIds;
         using (var scope = _scopeFactory.CreateScope())

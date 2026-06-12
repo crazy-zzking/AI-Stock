@@ -83,18 +83,24 @@ export const getSelectionPatterns = () => api.get<PatternInfo[]>('/selection/pat
 export interface BacktestTradeDto {
   code: string; name: string; signalDate: string; entryDate: string; entryPrice: number;
   exitDate: string; exitPrice: number; holdDays: number;
-  returnPct: number; maxRisePct: number; maxDropPct: number; win: boolean;
+  returnPct: number; exitDeferred: boolean; maxRisePct: number; maxDropPct: number; win: boolean;
 }
 export interface BacktestReportDto {
   holdDays: number; entry: string;
   totalSignals: number; executedTrades: number; skippedNoData: number;
+  skippedUntradable: number; deferredExits: number; frictionPct: number;
   winRatePct: number; avgReturnPct: number; medianReturnPct: number;
   profitFactor: number | null; stdDevPct: number; maxDrawdownPct: number;
   avgMaxRisePct: number; avgMaxDropPct: number; bestReturnPct: number; worstReturnPct: number;
   trades: BacktestTradeDto[];
 }
-export const getBacktest = (holdDays = 5, entry = 'NextOpen', from?: string, to?: string) =>
-  api.get<BacktestReportDto>('/selection/backtest', { params: { holdDays, entry, from, to } });
+export const getBacktest = (
+  holdDays = 5, entry = 'NextOpen', from?: string, to?: string,
+  tradability = true, friction = 0.3,
+) =>
+  api.get<BacktestReportDto>('/selection/backtest', {
+    params: { holdDays, entry, from, to, tradability, friction },
+  });
 // 选股历史记录列表（元信息，按选股时间倒序）
 export const getSelectionHistory = (take = 30) =>
   api.get('/selection/history', { params: { take } });
@@ -105,6 +111,31 @@ export const getSelectionPerformance = (id: number) => api.get(`/selection/histo
 // 手动（重新）触发某批选股的 LLM 复评（异步）
 export const reviewSelectionBatch = (id: number) => api.post(`/selection/history/${id}/review`);
 export const getActivityPool = () => api.get('/selection/activity');
+
+// ============ 策略记分板（选股信号前向绩效，Worker 每日补算） ============
+export interface HorizonStatsDto {
+  count: number; winRate: number | null; avgRet: number | null;
+  avgExcess: number | null; profitFactor: number | null;
+}
+export interface ScoreboardSummaryDto {
+  strategy: string; strategyName: string; signals: number; untradable: number; pending: number;
+  horizon1: HorizonStatsDto; horizon3: HorizonStatsDto; horizon5: HorizonStatsDto;
+}
+export interface ScoreboardDetailDto {
+  id: number; tradingDate: string; strategy: string; strategyName: string;
+  code: string; name: string; score: number; signalClose: number;
+  entryDate: string | null; entryPrice: number | null; untradable: boolean;
+  ret1: number | null; ret3: number | null; ret5: number | null;
+  excess1: number | null; excess3: number | null; excess5: number | null;
+  status: string;
+}
+export const getScoreboardSummary = (days = 30) =>
+  api.get<ScoreboardSummaryDto[]>('/selection/performance/summary', { params: { days } });
+export const getScoreboardDetails = (strategy?: string, days = 30) =>
+  api.get<ScoreboardDetailDto[]>('/selection/performance/details', { params: { strategy, days } });
+// 手动触发物化+补算（补数/调试用，平时由 Worker selection-performance 任务定时执行）
+export const syncScoreboard = () =>
+  api.post<{ created: number; updated: number; finalized: number }>('/selection/performance/sync');
 
 // ============ 选股配置中心（版本化阈值 + 权重）============
 export interface SelectionWeights {
@@ -261,8 +292,22 @@ export interface WorkerJobConfig {
   dailyAtMinute: number;
 }
 export interface WorkerSectionMeta { section: string; displayName: string; }
+export interface WorkerJobStatus {
+  name: string;
+  isRunning: boolean;
+  lastStart: string | null;
+  lastEnd: string | null;
+  lastDurationMs: number | null;
+  lastTrigger: string | null;
+  lastSuccess: boolean | null;
+  lastError: string | null;
+  runRequested: boolean;
+}
 export const getWorkerJobs = () => api.get<WorkerJobConfig[]>('/workerconfig/jobs');
 export const saveWorkerJobs = (jobs: WorkerJobConfig[]) => api.put('/workerconfig/jobs', jobs);
+export const getWorkerJobsStatus = () => api.get<WorkerJobStatus[]>('/workerconfig/jobs/status');
+export const runWorkerJob = (name: string) =>
+  api.post<{ message: string; running: boolean }>(`/workerconfig/jobs/${name}/run`);
 export const listWorkerSections = () => api.get<WorkerSectionMeta[]>('/workerconfig/sections');
 export const getWorkerSection = (section: string) =>
   api.get<Record<string, unknown>>(`/workerconfig/sections/${section}`);

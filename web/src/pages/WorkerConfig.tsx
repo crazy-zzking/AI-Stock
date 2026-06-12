@@ -1,13 +1,37 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Card, Tabs, Table, Switch, InputNumber, Button, Form, Input, Select,
-  message, Tag, Tooltip, Space, Alert,
+  message, Tag, Tooltip, Space, Alert, Badge,
 } from 'antd';
-import { ReloadOutlined, SaveOutlined } from '@ant-design/icons';
+import { ReloadOutlined, SaveOutlined, PlayCircleOutlined } from '@ant-design/icons';
 import {
   getWorkerJobs, saveWorkerJobs, listWorkerSections, getWorkerSection, saveWorkerSection,
-  type WorkerJobConfig, type WorkerSectionMeta,
+  getWorkerJobsStatus, runWorkerJob,
+  type WorkerJobConfig, type WorkerSectionMeta, type WorkerJobStatus,
 } from '../api';
+
+/** 毫秒耗时格式化 */
+const fmtDuration = (ms?: number | null): string => {
+  if (ms == null) return '-';
+  if (ms < 1000) return `${ms}ms`;
+  const s = ms / 1000;
+  if (s < 60) return `${s.toFixed(1)}s`;
+  const m = Math.floor(s / 60);
+  return `${m}m${Math.round(s - m * 60)}s`;
+};
+
+/** 时间格式化（本地 HH:mm:ss / 含日期） */
+const fmtTime = (iso?: string | null): string => {
+  if (!iso) return '-';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '-';
+  const today = new Date();
+  const sameDay = d.toDateString() === today.toDateString();
+  const hh = String(d.getHours()).padStart(2, '0');
+  const mm = String(d.getMinutes()).padStart(2, '0');
+  const ss = String(d.getSeconds()).padStart(2, '0');
+  return sameDay ? `${hh}:${mm}:${ss}` : `${d.getMonth() + 1}/${d.getDate()} ${hh}:${mm}:${ss}`;
+};
 
 /** 业务参数段的字段布局（前端定义；后端按原始 JSON 存取） */
 type FieldType = 'bool' | 'number' | 'text' | 'tags';
@@ -74,8 +98,12 @@ const SECTION_FIELDS: Record<string, FieldDef[]> = {
 /** 调度层：任务表格 */
 const JobsTab: React.FC = () => {
   const [rows, setRows] = useState<WorkerJobConfig[]>([]);
+  const [status, setStatus] = useState<Record<string, WorkerJobStatus>>({});
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [triggering, setTriggering] = useState<Record<string, boolean>>({});
+  const [, setTick] = useState(0); // 驱动"运行中"耗时实时刷新
+  const statusTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -89,7 +117,26 @@ const JobsTab: React.FC = () => {
     }
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  const loadStatus = useCallback(async () => {
+    try {
+      const { data } = await getWorkerJobsStatus();
+      const map: Record<string, WorkerJobStatus> = {};
+      data.forEach((s) => { map[s.name] = s; });
+      setStatus(map);
+    } catch { /* 轮询失败静默 */ }
+  }, []);
+
+  useEffect(() => { load(); loadStatus(); }, [load, loadStatus]);
+
+  // 每 3s 轮询运行态；任一任务运行中时每 1s 刷新耗时显示
+  useEffect(() => {
+    statusTimer.current = setInterval(loadStatus, 3000);
+    const tickTimer = setInterval(() => setTick((t) => t + 1), 1000);
+    return () => {
+      if (statusTimer.current) clearInterval(statusTimer.current);
+      clearInterval(tickTimer);
+    };
+  }, [loadStatus]);
 
   const patch = (name: string, p: Partial<WorkerJobConfig>) =>
     setRows((rs) => rs.map((r) => (r.name === name ? { ...r, ...p } : r)));
@@ -106,9 +153,22 @@ const JobsTab: React.FC = () => {
     }
   };
 
+  const runNow = async (name: string) => {
+    setTriggering((t) => ({ ...t, [name]: true }));
+    try {
+      const { data } = await runWorkerJob(name);
+      message[data.running ? 'warning' : 'success'](data.message);
+      setTimeout(loadStatus, 800);
+    } catch {
+      message.error('触发失败');
+    } finally {
+      setTriggering((t) => ({ ...t, [name]: false }));
+    }
+  };
+
   const columns = [
     {
-      title: '任务', dataIndex: 'displayName', width: 220,
+      title: '任务', dataIndex: 'displayName', width: 200,
       render: (v: string, r: WorkerJobConfig) => (
         <Space direction="vertical" size={0}>
           <span>{v} {r.dynamic && <Tag color="purple">动态</Tag>}</span>
@@ -117,31 +177,67 @@ const JobsTab: React.FC = () => {
       ),
     },
     {
-      title: '启用', dataIndex: 'enabled', width: 80,
+      title: '状态', dataIndex: 'name', width: 90,
+      render: (name: string) => {
+        const s = status[name];
+        if (s?.isRunning) return <Badge status="processing" text="运行中" />;
+        if (s?.lastSuccess === false) return <Tooltip title={s.lastError ?? ''}><Badge status="error" text="失败" /></Tooltip>;
+        if (s?.lastSuccess === true) return <Badge status="success" text="空闲" />;
+        return <Badge status="default" text="—" />;
+      },
+    },
+    {
+      title: '最近开始', dataIndex: 'name', width: 110,
+      render: (name: string) => {
+        const s = status[name];
+        return <span style={{ fontSize: 12 }}>{fmtTime(s?.lastStart)}{s?.lastTrigger === 'Manual' && <Tag color="blue" style={{ marginLeft: 4 }}>手动</Tag>}</span>;
+      },
+    },
+    {
+      title: '耗时', dataIndex: 'name', width: 90,
+      render: (name: string) => {
+        const s = status[name];
+        if (s?.isRunning && s.lastStart) {
+          const elapsed = Date.now() - new Date(s.lastStart).getTime();
+          return <span style={{ fontSize: 12, color: '#1677ff' }}>{fmtDuration(elapsed)}</span>;
+        }
+        return <span style={{ fontSize: 12 }}>{fmtDuration(s?.lastDurationMs)}</span>;
+      },
+    },
+    {
+      title: '立即运行', dataIndex: 'name', width: 96,
+      render: (name: string) => (
+        <Button size="small" icon={<PlayCircleOutlined />} loading={triggering[name]}
+          disabled={status[name]?.isRunning}
+          onClick={() => runNow(name)}>运行</Button>
+      ),
+    },
+    {
+      title: '启用', dataIndex: 'enabled', width: 70,
       render: (v: boolean, r: WorkerJobConfig) =>
         <Switch checked={v} onChange={(c) => patch(r.name, { enabled: c })} />,
     },
     {
-      title: '启动即跑', dataIndex: 'runOnStartup', width: 90,
+      title: '启动即跑', dataIndex: 'runOnStartup', width: 84,
       render: (v: boolean, r: WorkerJobConfig) =>
         <Switch checked={v} onChange={(c) => patch(r.name, { runOnStartup: c })} />,
     },
     {
-      title: '周期(秒)', dataIndex: 'intervalSeconds', width: 130,
+      title: '周期(秒)', dataIndex: 'intervalSeconds', width: 120,
       render: (v: number, r: WorkerJobConfig) => (
-        <InputNumber min={0} value={v} style={{ width: 110 }}
+        <InputNumber min={0} value={v} style={{ width: 100 }}
           onChange={(n) => patch(r.name, { intervalSeconds: Number(n) || 0 })} />
       ),
     },
     {
-      title: '每日定点(时:分)', dataIndex: 'dailyAtHour', width: 190,
+      title: '每日定点(时:分)', dataIndex: 'dailyAtHour', width: 180,
       render: (_: number, r: WorkerJobConfig) => (
         <Tooltip title="时 0-23 时按每日定点运行（优先于周期）；时填 -1 表示不用。分 0-59。">
           <Space size={4}>
-            <InputNumber min={-1} max={23} value={r.dailyAtHour} style={{ width: 72 }}
+            <InputNumber min={-1} max={23} value={r.dailyAtHour} style={{ width: 68 }}
               onChange={(n) => patch(r.name, { dailyAtHour: n == null ? -1 : Number(n) })} />
             <span>:</span>
-            <InputNumber min={0} max={59} value={r.dailyAtMinute} style={{ width: 72 }}
+            <InputNumber min={0} max={59} value={r.dailyAtMinute} style={{ width: 68 }}
               disabled={r.dailyAtHour < 0}
               onChange={(n) => patch(r.name, { dailyAtMinute: n == null ? 0 : Number(n) })} />
           </Space>
@@ -153,14 +249,14 @@ const JobsTab: React.FC = () => {
   return (
     <>
       <Alert type="info" showIcon style={{ marginBottom: 12 }}
-        message="调度层控制每个任务“何时跑/是否跑”。每日定点(0-23)优先于周期间隔；动态任务的间隔由任务自定，此处定点/周期仅作回退。"
+        message="调度层控制每个任务“何时跑/是否跑”。每日定点(时:分)优先于周期间隔；动态任务的间隔由任务自定，此处定点/周期仅作回退。「立即运行」立即触发一次（同一任务运行中不并发，约数秒内开始）。"
       />
       <Space style={{ marginBottom: 12 }}>
         <Button icon={<SaveOutlined />} type="primary" loading={saving} onClick={save}>保存</Button>
-        <Button icon={<ReloadOutlined />} onClick={load}>重新加载</Button>
+        <Button icon={<ReloadOutlined />} onClick={() => { load(); loadStatus(); }}>重新加载</Button>
       </Space>
       <Table rowKey="name" size="small" loading={loading} pagination={false}
-        columns={columns} dataSource={rows} />
+        columns={columns} dataSource={rows} scroll={{ x: 1100 }} />
     </>
   );
 };

@@ -1,6 +1,9 @@
 using System.Text.Json;
 using AIStock.Core.Interfaces;
+using AIStock.Infrastructure.Database.Context;
+using AIStock.Infrastructure.Database.Entities;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 
 namespace AIStock.Web.Controllers;
 
@@ -25,7 +28,7 @@ public class WorkerConfigController : ControllerBase
         ["GraphPromotion"] = "候选边晋升",
     };
 
-    /// <summary>14 个调度任务的展示元信息（顺序即前端展示顺序）。</summary>
+    /// <summary>15 个调度任务的展示元信息（顺序即前端展示顺序）。</summary>
     private static readonly (string Name, string Display, bool Dynamic, string Hint)[] JobMeta =
     {
         ("stock-base",      "股票池同步",            false, "建议每日定点"),
@@ -42,6 +45,7 @@ public class WorkerConfigController : ControllerBase
         ("index-kline",     "指数日K同步",           false, "建议每日定点(收盘后)"),
         ("capital-flow",    "资金流历史同步",         false, "建议每日定点(收盘后)"),
         ("concept-digest",  "概念炒作点蒸馏",         false, "建议每日定点"),
+        ("selection-performance", "选股绩效补算",     false, "建议每日定点(日K同步后)"),
     };
 
     private static readonly JsonSerializerOptions JsonOpts = new()
@@ -52,11 +56,13 @@ public class WorkerConfigController : ControllerBase
     };
 
     private readonly IWorkerConfigProvider _config;
+    private readonly AIStockDbContext _db;
     private readonly ILogger<WorkerConfigController> _logger;
 
-    public WorkerConfigController(IWorkerConfigProvider config, ILogger<WorkerConfigController> logger)
+    public WorkerConfigController(IWorkerConfigProvider config, AIStockDbContext db, ILogger<WorkerConfigController> logger)
     {
         _config = config;
+        _db = db;
         _logger = logger;
     }
 
@@ -115,6 +121,53 @@ public class WorkerConfigController : ControllerBase
         await _config.SaveAsync(JobsSection, json, ct);
         _logger.LogInformation("调度配置已更新：{Count} 个任务", dict.Count);
         return Ok(new { message = "已保存", count = dict.Count });
+    }
+
+    /// <summary>取各任务运行态（运行中/最近开始/耗时/上次结果）供前端轮询。</summary>
+    [HttpGet("jobs/status")]
+    public async Task<IActionResult> GetJobsStatus(CancellationToken ct)
+    {
+        var rows = await _db.WorkerJobRun.AsNoTracking().ToDictionaryAsync(r => r.JobName, ct);
+        var list = JobMeta.Select(m =>
+        {
+            rows.TryGetValue(m.Name, out var r);
+            return new
+            {
+                name = m.Name,
+                isRunning = r?.IsRunning ?? false,
+                lastStart = r?.LastStart,
+                lastEnd = r?.LastEnd,
+                lastDurationMs = r?.LastDurationMs,
+                lastTrigger = r?.LastTrigger,
+                lastSuccess = r?.LastSuccess,
+                lastError = r?.LastError,
+                runRequested = r?.RunRequested ?? false,
+            };
+        });
+        return Ok(list);
+    }
+
+    /// <summary>请求立即运行某任务（置位 run_requested，由 Worker 轮询消费）。正在运行则不重复触发。</summary>
+    [HttpPost("jobs/{name}/run")]
+    public async Task<IActionResult> RunNow(string name, CancellationToken ct)
+    {
+        if (!JobMeta.Any(m => m.Name == name))
+            return NotFound(new { error = $"未知任务: {name}" });
+
+        var row = await _db.WorkerJobRun.FirstOrDefaultAsync(r => r.JobName == name, ct);
+        if (row == null)
+        {
+            row = new WorkerJobRunEntity { JobName = name };
+            _db.WorkerJobRun.Add(row);
+        }
+        if (row.IsRunning)
+            return Ok(new { message = "任务正在运行中，未重复触发", running = true });
+
+        row.RunRequested = true;
+        row.RequestedAt = DateTime.Now;
+        await _db.SaveChangesAsync(ct);
+        _logger.LogInformation("已请求立即运行任务 {Name}", name);
+        return Ok(new { message = "已触发，将在数秒内开始", running = false });
     }
 
     /// <summary>取某业务参数段的原始配置对象。</summary>

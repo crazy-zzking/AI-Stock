@@ -13,15 +13,18 @@ public class JobScheduler : BackgroundService
 
     private readonly IEnumerable<IScheduledJob> _jobs;
     private readonly IWorkerConfigProvider _config;
+    private readonly JobRunCoordinator _coordinator;
     private readonly ILogger<JobScheduler> _logger;
 
     public JobScheduler(
         IEnumerable<IScheduledJob> jobs,
         IWorkerConfigProvider config,
+        JobRunCoordinator coordinator,
         ILogger<JobScheduler> logger)
     {
         _jobs = jobs;
         _config = config;
+        _coordinator = coordinator;
         _logger = logger;
     }
 
@@ -79,12 +82,13 @@ public class JobScheduler : BackgroundService
             if (ct.IsCancellationRequested) break;
             try
             {
-                await job.ExecuteAsync(ct);
+                // 经协调器执行：单飞锁防并发 + 运行态落库（含异常记录）
+                await _coordinator.TryRunAsync(job, "Scheduled", ct);
             }
             catch (OperationCanceledException) { break; }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "任务[{Name}]执行异常", job.Name);
+                _logger.LogError(ex, "任务[{Name}]调度执行异常", job.Name);
             }
 
             var delay = await job.GetNextDelayAsync(ct) ?? NextDelay(opt);
