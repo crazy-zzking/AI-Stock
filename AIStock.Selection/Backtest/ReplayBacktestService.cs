@@ -75,11 +75,11 @@ public class ReplayBacktestService
         foreach (var s in allShots)
             if (!string.IsNullOrEmpty(s.Name)) codeByName[s.Name] = s.Code;
         var newsSince = from.Date.AddDays(-(Math.Max(1, criteria.NewsLookbackDays) + 4));
-        var eventsByCode = new Dictionary<string, List<(DateTime Date, string? Type, string? Sentiment, int? Imp, string? Title)>>();
+        var eventsByCode = new Dictionary<string, List<(DateTime Date, string? Type, string? Sentiment, int? Imp, int? Cred, string? Title)>>();
         var evRows = await _db.EventRecord
             .Where(e => e.RelatedStocks != null && e.RelatedStocks != ""
                 && (e.EventTime ?? e.CreatedAt) >= newsSince && (e.EventTime ?? e.CreatedAt) <= to.Date.AddDays(1))
-            .Select(e => new { e.EventType, e.Sentiment, e.Importance, e.Title, e.RelatedStocks, D = (e.EventTime ?? e.CreatedAt) })
+            .Select(e => new { e.EventType, e.Sentiment, e.Importance, e.Credibility, e.Title, e.RelatedStocks, D = (e.EventTime ?? e.CreatedAt) })
             .ToListAsync(ct);
         foreach (var r in evRows)
             foreach (var raw in r.RelatedStocks!.Split(new[] { ',', '，', ';', '；', ' ' }, StringSplitOptions.RemoveEmptyEntries))
@@ -89,7 +89,7 @@ public class ReplayBacktestService
                     : codeByName.TryGetValue(tok, out var c) ? c : null;
                 if (code == null) continue;
                 if (!eventsByCode.TryGetValue(code, out var list)) eventsByCode[code] = list = new();
-                list.Add((r.D.Date, r.EventType, r.Sentiment, r.Importance, r.Title));
+                list.Add((r.D.Date, r.EventType, r.Sentiment, r.Importance, r.Credibility, r.Title));
             }
 
         var dragonsByDate = (await _db.DragonTiger
@@ -115,6 +115,13 @@ public class ReplayBacktestService
         var emptyDragons = new Dictionary<string, DragonTigerEntity>();
         var signals = new List<BacktestSignal>();
 
+        // 题材生命周期用：每日涨停代码（按日期升序预算好，日循环内取尾窗）
+        var limitUpByDate = shotsByDate.Keys.OrderBy(d => d)
+            .Select(d => (Date: d, Codes: (IReadOnlyCollection<string>)shotsByDate[d]
+                .Where(s => s.IsLimitUp || s.ChangePercent >= 9.8m)
+                .Select(s => s.Code).ToHashSet()))
+            .ToList();
+
         // K线形态懒加载缓存（仅 UsesPatterns 策略需要）：code → 升序 (日期, K线)。
         // 首次遇到的代码按需从 kline_data 拉全窗口+120日缓冲，后续各日内存切片，避免逐日查库。
         var patternBarsCache = strategy.UsesPatterns
@@ -135,10 +142,19 @@ public class ReplayBacktestService
                 if (q != null) indices.Add(q);
             }
 
+            // 当日热门题材 + 题材生命周期退潮剔除（截至当日近 10 日，无前视，与实盘同口径）
+            var dayHot = SelectionContextBuilder.ComputeHotConcepts(dayShots, conceptsByCode);
+            var trailing = limitUpByDate
+                .Where(x => x.Date <= day)
+                .TakeLast(ConceptLifecycle.WindowDays)
+                .Select(x => x.Codes)
+                .ToList();
+            ConceptLifecycle.RemoveFading(dayHot, ConceptLifecycle.ComputeStages(trailing, conceptsByCode));
+
             var context = new SelectionContext
             {
                 Regime = SelectionContextBuilder.BuildRegime(dayShots, indices),
-                HotConcepts = SelectionContextBuilder.ComputeHotConcepts(dayShots, conceptsByCode),
+                HotConcepts = dayHot,
                 ConceptsByCode = conceptsByCode,
                 IndustryByCode = industryByCode,
                 IndustryStrength = SelectionContextBuilder.ComputeSectorStrength(dayShots, industryByCode),
@@ -151,7 +167,7 @@ public class ReplayBacktestService
             // 消息面（截至当日近 N 日，无前视）：news/report 分类 + knowledge-star 小作文；重雷池级排雷
             var lookStart = day.AddDays(-(Math.Max(1, criteria.NewsLookbackDays) + 4));
             var dayNews = new Dictionary<string, NewsSignal>();
-            var dayKnowledge = new Dictionary<string, List<string>>();
+            var dayKnowledge = new Dictionary<string, List<KnowledgeNote>>();
             foreach (var hit in activePool)
             {
                 var code = hit.Snapshot.Code;
@@ -163,7 +179,8 @@ public class ReplayBacktestService
                     if (string.Equals(e.Type, "knowledge-star", StringComparison.OrdinalIgnoreCase))
                     {
                         if (!dayKnowledge.TryGetValue(code, out var kl)) dayKnowledge[code] = kl = new();
-                        if (kl.Count < 3 && !string.IsNullOrWhiteSpace(e.Title)) kl.Add(e.Title!);
+                        if (kl.Count < 3 && !string.IsNullOrWhiteSpace(e.Title))
+                            kl.Add(new KnowledgeNote(e.Title!, e.Sentiment, e.Imp, e.Cred));
                     }
                     else newsEvs.Add(new NewsEvent(e.Type, e.Sentiment, e.Imp, e.Title));
                 }

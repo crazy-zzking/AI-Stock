@@ -35,6 +35,31 @@ public class SelectionContext
     /// <summary>个股消息面信号：股票代码 → {是否重雷, 消息面分}。来自近 N 日 news/report 事件分类。无事件=中性。</summary>
     public IReadOnlyDictionary<string, NewsSignal> NewsByCode { get; set; } = new Dictionary<string, NewsSignal>();
 
-    /// <summary>个股关联的知识星球"小作文"标题（仅展示提示，不参与排雷/打分）。</summary>
-    public IReadOnlyDictionary<string, List<string>> KnowledgeNotesByCode { get; set; } = new Dictionary<string, List<string>>();
+    /// <summary>
+    /// 个股关联的知识星球"小作文"（标题 + LLM 抽取的情绪/重要性/可信度）。
+    /// 展示与 whisper 策略共用：负面/低可信小作文由策略侧降权或剔除。
+    /// </summary>
+    public IReadOnlyDictionary<string, List<KnowledgeNote>> KnowledgeNotesByCode { get; set; }
+        = new Dictionary<string, List<KnowledgeNote>>();
+}
+
+/// <summary>
+/// 知识星球"小作文"条目（字段来自情报事件抽取管线，零额外 LLM 成本）。
+/// </summary>
+/// <param name="Title">标题。</param>
+/// <param name="Sentiment">情绪（positive/negative/neutral，可能为 null=未抽取）。</param>
+/// <param name="Importance">重要性 1-5（null=未抽取）。</param>
+/// <param name="Credibility">可信度 0-100（null=未抽取）。</param>
+public readonly record struct KnowledgeNote(string Title, string? Sentiment, int? Importance, int? Credibility)
+{
+    /// <summary>明确负面（利空小作文不构成做多依据）。</summary>
+    public bool IsNegative => string.Equals(Sentiment, "negative", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>加成权重：高可信(≥70)×1.5、低可信(&lt;40)×0.5、其余/未抽取×1。</summary>
+    public decimal BonusWeight => Credibility switch
+    {
+        >= 70 => 1.5m,
+        < 40 => 0.5m,
+        _ => 1m,
+    };
 }

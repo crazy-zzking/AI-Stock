@@ -26,16 +26,17 @@ public class WhisperThemeStrategyTests
     private static readonly Dictionary<string, DragonTigerEntity> NoDragon = new();
     private static readonly Dictionary<string, SequenceFeatures> NoSeq = new();
 
-    /// <summary>code 命中热门题材 + 指定条数小作文的上下文。</summary>
+    /// <summary>code 命中热门题材 + 指定条数小作文的上下文（默认中性情绪/未抽取可信度）。</summary>
     private static SelectionContext Ctx(params (string Code, int Notes, bool Hot)[] stocks)
     {
         var concepts = new Dictionary<string, List<string>>();
-        var knowledge = new Dictionary<string, List<string>>();
+        var knowledge = new Dictionary<string, List<KnowledgeNote>>();
         foreach (var (code, notes, hot) in stocks)
         {
             concepts[code] = new List<string> { hot ? "人工智能" : "冷门概念" };
             if (notes > 0)
-                knowledge[code] = Enumerable.Range(1, notes).Select(i => $"小作文{i}").ToList();
+                knowledge[code] = Enumerable.Range(1, notes)
+                    .Select(i => new KnowledgeNote($"小作文{i}", null, null, null)).ToList();
         }
         return new SelectionContext
         {
@@ -44,6 +45,14 @@ public class WhisperThemeStrategyTests
             KnowledgeNotesByCode = knowledge,
         };
     }
+
+    /// <summary>自定义小作文明细的上下文（单只票、命中热门题材）。</summary>
+    private static SelectionContext CtxNotes(string code, params KnowledgeNote[] notes) => new()
+    {
+        ConceptsByCode = new Dictionary<string, List<string>> { [code] = new() { "人工智能" } },
+        HotConcepts = new Dictionary<string, int> { ["人工智能"] = 5 },
+        KnowledgeNotesByCode = new Dictionary<string, List<KnowledgeNote>> { [code] = notes.ToList() },
+    };
 
     [Fact]
     public void RequiresBothWhisperAndHotConcept()
@@ -92,6 +101,39 @@ public class WhisperThemeStrategyTests
         var picks = new WhisperThemeStrategy().Select(pool, NoDragon, seq, new SelectionCriteria(), ctx);
 
         Assert.Empty(picks);
+    }
+
+    [Fact]
+    public void OnlyNegativeNotes_IsExcluded()
+    {
+        // 仅有负面小作文 → 不构成做多依据，不入选
+        var pool = new List<ActivityScreener.ActivityHit> { Hit(Snap("A")) };
+        var ctx = CtxNotes("A", new KnowledgeNote("利空小作文", "negative", 4, 80));
+
+        Assert.Empty(new WhisperThemeStrategy().Select(pool, NoDragon, NoSeq, new SelectionCriteria(), ctx));
+    }
+
+    [Fact]
+    public void HighCredibility_OutranksLowCredibility_SameCount()
+    {
+        // 同为 1 篇：高可信(90) 加成 ×1.5 > 低可信(20) ×0.5
+        var pool = new List<ActivityScreener.ActivityHit> { Hit(Snap("HI")), Hit(Snap("LO")) };
+        var ctx = new SelectionContext
+        {
+            ConceptsByCode = new Dictionary<string, List<string>> { ["HI"] = new() { "人工智能" }, ["LO"] = new() { "人工智能" } },
+            HotConcepts = new Dictionary<string, int> { ["人工智能"] = 5 },
+            KnowledgeNotesByCode = new Dictionary<string, List<KnowledgeNote>>
+            {
+                ["HI"] = new() { new KnowledgeNote("高可信", "positive", 4, 90) },
+                ["LO"] = new() { new KnowledgeNote("低可信", "positive", 4, 20) },
+            },
+        };
+
+        var picks = new WhisperThemeStrategy().Select(pool, NoDragon, NoSeq, new SelectionCriteria(), ctx);
+
+        Assert.Equal(2, picks.Count);
+        Assert.Equal("HI", picks[0].Code);
+        Assert.True(picks[0].TotalScore > picks[1].TotalScore);
     }
 
     [Fact]

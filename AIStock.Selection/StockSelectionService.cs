@@ -71,6 +71,13 @@ public class StockSelectionService
         // 题材（个股概念 + 当日热门题材）与板块强度，一次性算好供打分与展示复用
         var (conceptsByCode, conceptDigests) = await LoadConceptsByCodeAsync(latest, ct);
         var hotConcepts = ComputeHotConcepts(latest, conceptsByCode);
+
+        // 题材生命周期：近 10 日涨停家数判退潮，退潮题材从热门题材剔除（防"进场在退潮期"）
+        var fading = ConceptLifecycle.RemoveFading(hotConcepts,
+            ConceptLifecycle.ComputeStages(await LoadLimitUpHistoryAsync(ct), conceptsByCode));
+        if (fading.Count > 0)
+            _logger.LogInformation("题材退潮剔除：{Concepts}", string.Join("、", fading.Take(10)));
+
         var (industryByCode, industryStrength) = await ComputeSectorStrengthAsync(latest, ct);
 
         var context = new SelectionContext
@@ -184,6 +191,33 @@ public class StockSelectionService
     /// 返回 概念→活跃股数。反映"当下市场在炒什么"。
     /// </summary>
     // 当日热门题材：集中度加权 + 宽筐黑名单 + TopN。实盘/回放共用同一实现，避免口径漂移。
+    /// <summary>
+    /// 近 N 日"每日涨停代码清单"（升序，末位=最新交易日），供题材生命周期判断。
+    /// 涨停口径：IsLimitUp 标志或涨幅 ≥9.8%（主板兜底）。
+    /// </summary>
+    private async Task<List<IReadOnlyCollection<string>>> LoadLimitUpHistoryAsync(CancellationToken ct)
+    {
+        var dates = await _db.DailyMarketSnapshot
+            .Select(s => s.Date)
+            .Distinct()
+            .OrderByDescending(d => d)
+            .Take(ConceptLifecycle.WindowDays)
+            .ToListAsync(ct);
+        if (dates.Count == 0) return new();
+
+        var minDate = dates.Min();
+        var rows = await _db.DailyMarketSnapshot
+            .Where(s => s.Date >= minDate && (s.IsLimitUp || s.ChangePercent >= 9.8m))
+            .Select(s => new { s.Date, s.Code })
+            .ToListAsync(ct);
+
+        return rows
+            .GroupBy(r => r.Date.Date)
+            .OrderBy(g => g.Key)
+            .Select(g => (IReadOnlyCollection<string>)g.Select(x => x.Code).ToHashSet())
+            .ToList();
+    }
+
     private static Dictionary<string, int> ComputeHotConcepts(
         List<DailyMarketSnapshotEntity> latest, IReadOnlyDictionary<string, List<string>> conceptsByCode)
         => Backtest.SelectionContextBuilder.ComputeHotConcepts(latest, conceptsByCode);
@@ -214,11 +248,11 @@ public class StockSelectionService
     /// 取活跃池个股近 N 日事件：news/report 经 <see cref="NewsEventClassifier"/> 聚合成消息面信号（含重雷否决）；
     /// knowledge-star 单独收集"小作文"标题（仅展示，不计分/不排雷）。回看窗口用日历日+缓冲近似交易日。
     /// </summary>
-    private async Task<(Dictionary<string, NewsSignal> News, Dictionary<string, List<string>> Knowledge)> LoadNewsAsync(
+    private async Task<(Dictionary<string, NewsSignal> News, Dictionary<string, List<KnowledgeNote>> Knowledge)> LoadNewsAsync(
         IReadOnlyList<ActivityScreener.ActivityHit> pool, DateTime latestDate, int lookbackDays, CancellationToken ct)
     {
         var news = new Dictionary<string, NewsSignal>();
-        var knowledge = new Dictionary<string, List<string>>();
+        var knowledge = new Dictionary<string, List<KnowledgeNote>>();
         if (pool.Count == 0) return (news, knowledge);
 
         // related_stocks 可能是代码（news/report）或名称（knowledge-star）→ 统一按"代码或名称"解析到代码
@@ -232,7 +266,7 @@ public class StockSelectionService
         var rows = await _db.EventRecord
             .Where(e => e.RelatedStocks != null && e.RelatedStocks != ""
                 && (e.EventTime ?? e.CreatedAt) >= since && (e.EventTime ?? e.CreatedAt) <= latestDate.AddDays(1))
-            .Select(e => new { e.EventType, e.Sentiment, e.Importance, e.Title, e.RelatedStocks })
+            .Select(e => new { e.EventType, e.Sentiment, e.Importance, e.Credibility, e.Title, e.RelatedStocks })
             .ToListAsync(ct);
 
         var newsEvents = new Dictionary<string, List<NewsEvent>>();
@@ -249,7 +283,8 @@ public class StockSelectionService
                 if (isKs)
                 {
                     if (!knowledge.TryGetValue(code, out var list)) knowledge[code] = list = new();
-                    if (list.Count < 3 && !string.IsNullOrWhiteSpace(r.Title)) list.Add(r.Title!);
+                    if (list.Count < 3 && !string.IsNullOrWhiteSpace(r.Title))
+                        list.Add(new KnowledgeNote(r.Title!, r.Sentiment, r.Importance, r.Credibility));
                 }
                 else
                 {
@@ -274,7 +309,7 @@ public class StockSelectionService
         {
             if (ctx.KnowledgeNotesByCode.TryGetValue(r.Code, out var notes) && notes.Count > 0)
             {
-                r.KnowledgeStarNotes = notes;
+                r.KnowledgeStarNotes = notes.Select(n => n.Title).ToList();
                 if (!r.Tags.Contains("知识星球·小作文")) r.Tags.Add("知识星球·小作文");
             }
         }

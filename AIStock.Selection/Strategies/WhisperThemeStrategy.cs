@@ -27,8 +27,9 @@ public class WhisperThemeStrategy : WeightedSelectionStrategyBase
         DailyMarketSnapshotEntity s, SequenceFeatures seq, DragonTigerEntity? dt,
         ActivityScreener.ActivityHit hit, SelectionCriteria criteria, SelectionContext? ctx, MarketRegimeLevel level)
     {
-        // 双硬条件：① 近 N 日有小作文点名；② 命中当日热门题材（板块在炒，不是单票自嗨）
-        if (ctx == null || !ctx.KnowledgeNotesByCode.TryGetValue(s.Code, out var notes) || notes.Count == 0)
+        // 双硬条件：① 近 N 日有非负面小作文点名（利空小作文不构成做多依据）；② 命中当日热门题材（板块在炒，不是单票自嗨）
+        if (ctx == null || !ctx.KnowledgeNotesByCode.TryGetValue(s.Code, out var notes)
+            || !notes.Any(n => !n.IsNegative))
             return false;
         if (!SelectionScorers.HitsHotConcept(s.Code, ctx)) return false;
 
@@ -47,8 +48,10 @@ public class WhisperThemeStrategy : WeightedSelectionStrategyBase
         DailyMarketSnapshotEntity s, SequenceFeatures seq, DragonTigerEntity? dt,
         ActivityScreener.ActivityHit hit, SelectionContext? ctx, out List<string> hitHotConcepts)
     {
-        var noteCount = ctx != null && ctx.KnowledgeNotesByCode.TryGetValue(s.Code, out var notes) ? notes.Count : 0;
-        _whisperBonus = Math.Min(noteCount, MaxWhisperNotes) * BonusPerNote;
+        // 加成 = Σ(每篇 × 可信度权重)，剔除负面，封顶 MaxWhisperNotes 篇——多篇高可信互证 > 单篇低可信孤证
+        _whisperBonus = ctx != null && ctx.KnowledgeNotesByCode.TryGetValue(s.Code, out var notes)
+            ? notes.Where(n => !n.IsNegative).Take(MaxWhisperNotes).Sum(n => BonusPerNote * n.BonusWeight)
+            : 0m;
 
         return new()
         {
