@@ -45,6 +45,7 @@ public class WorkerConfigController : ControllerBase
         ("index-kline",     "指数日K同步",           false, "建议每日定点(收盘后)"),
         ("capital-flow",    "资金流历史同步",         false, "建议每日定点(收盘后)"),
         ("concept-digest",  "概念炒作点蒸馏",         false, "建议每日定点"),
+        ("selection-daily", "每日全策略选股留痕",      false, "交易日 14:50(尾盘快照后)，只留痕不下单"),
         ("selection-performance", "选股绩效补算",     false, "建议每日定点(日K同步后)"),
     };
 

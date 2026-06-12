@@ -29,6 +29,7 @@ public static class DependencyInjection
         services.AddScoped<ISelectionStrategyProvider, SelectionStrategyProvider>();
 
         services.AddScoped<StockSelectionService>();
+        services.AddScoped<SelectionDailyService>();
         services.AddScoped<BacktestService>();
         services.AddScoped<ReplayBacktestService>();
         // 选股信号前向绩效（策略记分板）：Worker 每日补算，Web 查询聚合

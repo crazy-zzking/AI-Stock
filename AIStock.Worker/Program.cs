@@ -6,6 +6,7 @@ using AIStock.Infrastructure.Database.Context;
 using AIStock.Infrastructure.MessageBus;
 using AIStock.Intelligence;
 using AIStock.LLM;
+using AIStock.Selection;
 using AIStock.Core.Interfaces;
 using AIStock.Worker;
 using AIStock.Worker.Services;
@@ -83,8 +84,8 @@ builder.Services.AddSingleton<DragonTigerSyncService>();
 builder.Services.AddSingleton<IndexKlineSyncService>();
 builder.Services.AddSingleton<CapitalFlowSyncService>();
 builder.Services.AddSingleton<ConceptDigestService>();
-// 选股信号前向绩效（Scoped：依赖 DbContext，任务内开作用域使用）
-builder.Services.AddScoped<AIStock.Selection.Performance.SelectionPerformanceService>();
+// 选股全家桶（每日选股留痕 + 绩效补算用；Scoped，任务内开作用域使用）
+builder.Services.AddSelectionServices();
 
 // 调度：每个后台任务独立注册，调度参数由 worker_config 表 Jobs 段（前端可配）热读
 builder.Services.AddSingleton<IScheduledJob, StockBaseSyncJob>();
@@ -101,6 +102,7 @@ builder.Services.AddSingleton<IScheduledJob, DragonTigerCollectJob>();
 builder.Services.AddSingleton<IScheduledJob, IndexKlineSyncJob>();
 builder.Services.AddSingleton<IScheduledJob, CapitalFlowSyncJob>();
 builder.Services.AddSingleton<IScheduledJob, ConceptDigestJob>();
+builder.Services.AddSingleton<IScheduledJob, SelectionDailyJob>();
 builder.Services.AddSingleton<IScheduledJob, SelectionPerformanceJob>();
 builder.Services.Configure<GraphPromotionOptions>(
     builder.Configuration.GetSection(GraphPromotionOptions.SectionName));

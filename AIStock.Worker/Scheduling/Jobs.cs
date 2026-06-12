@@ -241,6 +241,38 @@ public class ConceptDigestJob : IScheduledJob
 }
 
 /// <summary>
+/// 每日全策略选股留痕任务（交易日 14:50，尾盘快照刷新后）：所有策略各跑一遍并落库，
+/// 只留痕不下单——保证策略记分板每天有完整信号，不依赖人工触发。非交易日自动跳过。
+/// </summary>
+public class SelectionDailyJob : IScheduledJob
+{
+    private readonly IServiceScopeFactory _scopeFactory;
+    private readonly ITradingCalendar _calendar;
+    private readonly ILogger<SelectionDailyJob> _logger;
+
+    public SelectionDailyJob(IServiceScopeFactory scopeFactory, ITradingCalendar calendar, ILogger<SelectionDailyJob> logger)
+    {
+        _scopeFactory = scopeFactory;
+        _calendar = calendar;
+        _logger = logger;
+    }
+
+    public string Name => "selection-daily";
+
+    public async Task ExecuteAsync(CancellationToken ct)
+    {
+        if (!await _calendar.IsTradingDayAsync(DateTime.Today, ct))
+        {
+            _logger.LogDebug("非交易日，每日选股跳过");
+            return;
+        }
+        using var scope = _scopeFactory.CreateScope();
+        var svc = scope.ServiceProvider.GetRequiredService<AIStock.Selection.SelectionDailyService>();
+        await svc.RunAllAsync(ct);
+    }
+}
+
+/// <summary>
 /// 选股信号前向绩效任务（收盘后、K线同步之后）：物化当日各策略最新一批选股为信号，
 /// 并对未完成行补算 T+1/T+3/T+5 收益与沪深300超额（幂等，K线到位多少算多少）。
 /// </summary>
