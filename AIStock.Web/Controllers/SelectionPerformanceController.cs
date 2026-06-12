@@ -22,13 +22,13 @@ public class SelectionPerformanceController : ControllerBase
         _db = db;
     }
 
-    /// <summary>按策略聚合最近 N 天信号绩效（胜率/均收益/超额/盈亏比，T+1/3/5 三窗口）。</summary>
+    /// <summary>按策略聚合最近 N 天信号绩效（胜率/均收益/超额/盈亏比，T+1/3/5 三窗口）。regime 可选过滤（weak/neutral/strong）。</summary>
     [HttpGet("summary")]
     public async Task<ActionResult<List<StrategyPerformanceSummary>>> Summary(
-        [FromQuery] int days = 30, CancellationToken ct = default)
+        [FromQuery] int days = 30, [FromQuery] string? regime = null, CancellationToken ct = default)
     {
         if (days <= 0 || days > 365) days = 30;
-        return Ok(await _svc.GetSummaryAsync(days, ct));
+        return Ok(await _svc.GetSummaryAsync(days, regime, ct));
     }
 
     /// <summary>信号明细（可按策略过滤），按交易日倒序、同日按得分倒序。</summary>

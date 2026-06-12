@@ -42,7 +42,7 @@ public class SelectionPerformanceService
         return (created, updated, finalized);
     }
 
-    /// <summary>把每 (交易日, 策略) run_at 最新一批选股固化为信号行；已存在的 (交易日,策略,代码) 跳过。</summary>
+    /// <summary>把每 (交易日, 策略) run_at 最新一批选股固化为信号行；已存在的 (交易日,策略,代码) 跳过（顺带回填环境标签）。</summary>
     private async Task<int> MaterializeAsync(CancellationToken ct)
     {
         var since = DateTime.Today.AddDays(-MaterializeLookbackDays);
@@ -59,12 +59,16 @@ public class SelectionPerformanceService
             .Select(g => g.OrderByDescending(b => b.RunAt).First())
             .ToList();
 
-        var existing = (await _db.SelectionPerformance
-                .Where(p => p.TradingDate >= since)
-                .Select(p => new { p.TradingDate, p.Strategy, p.Code })
-                .ToListAsync(ct))
+        var existingRows = await _db.SelectionPerformance
+            .Where(p => p.TradingDate >= since)
+            .ToListAsync(ct);
+        var existing = existingRows
             .Select(x => (x.TradingDate.Date, x.Strategy, x.Code))
             .ToHashSet();
+        var unknownByKey = existingRows
+            .Where(x => string.IsNullOrEmpty(x.MarketRegime) || x.MarketRegime == "unknown") // 空串=建列前的存量默认值
+            .GroupBy(x => (x.TradingDate.Date, x.Strategy))
+            .ToDictionary(g => g.Key, g => g.ToList());
 
         var created = 0;
         foreach (var batch in canonical)
@@ -79,6 +83,12 @@ public class SelectionPerformanceService
                 _logger.LogWarning(ex, "选股绩效：批次 {Id} results_json 解析失败，跳过", batch.Id);
                 continue;
             }
+
+            var regime = ParseRegime(picks);
+
+            // 回填既有行缺失的环境标签（建表前物化的存量）
+            if (regime != "unknown" && unknownByKey.TryGetValue((batch.TradingDate.Date, batch.Strategy), out var olds))
+                foreach (var o in olds) o.MarketRegime = regime;
 
             foreach (var p in picks)
             {
@@ -96,13 +106,24 @@ public class SelectionPerformanceService
                     Score = p.TotalScore,
                     SignalClose = p.Close,
                     Status = PerformanceStatus.Pending,
+                    MarketRegime = regime,
                 });
                 created++;
             }
         }
 
-        if (created > 0) await _db.SaveChangesAsync(ct);
+        await _db.SaveChangesAsync(ct); // 含新增与环境回填
         return created;
+    }
+
+    /// <summary>从选股结果的大盘描述提取环境等级（"大盘强势/偏弱/中性…" → strong/weak/neutral）。</summary>
+    private static string ParseRegime(List<StockSelectionResult> picks)
+    {
+        var desc = picks.Select(p => p.MarketRegime).FirstOrDefault(d => !string.IsNullOrEmpty(d));
+        if (string.IsNullOrEmpty(desc)) return "unknown";
+        if (desc.Contains('弱')) return "weak";
+        if (desc.Contains('强')) return "strong";
+        return "neutral";
     }
 
     /// <summary>对 status != final 的行用库内日K补算收益，K线到位多少算多少。</summary>
@@ -218,13 +239,14 @@ public class SelectionPerformanceService
             .ToList();
     }
 
-    /// <summary>按策略聚合最近 N 天信号的绩效（策略记分板）。</summary>
-    public async Task<List<StrategyPerformanceSummary>> GetSummaryAsync(int days = 30, CancellationToken ct = default)
+    /// <summary>按策略聚合最近 N 天信号的绩效（策略记分板）。regime 非空时只统计该大盘环境下的信号（weak/neutral/strong）。</summary>
+    public async Task<List<StrategyPerformanceSummary>> GetSummaryAsync(
+        int days = 30, string? regime = null, CancellationToken ct = default)
     {
         var since = DateTime.Today.AddDays(-days);
-        var rows = await _db.SelectionPerformance
-            .Where(p => p.TradingDate >= since)
-            .ToListAsync(ct);
+        var q = _db.SelectionPerformance.Where(p => p.TradingDate >= since);
+        if (!string.IsNullOrEmpty(regime)) q = q.Where(p => p.MarketRegime == regime);
+        var rows = await q.ToListAsync(ct);
 
         return rows
             .GroupBy(p => p.Strategy)

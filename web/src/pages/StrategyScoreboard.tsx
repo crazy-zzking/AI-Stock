@@ -29,6 +29,7 @@ const HorizonCell: React.FC<{ h: HorizonStatsDto }> = ({ h }) => {
 /** 策略记分板 — 真实选股信号（selection_performance）的 T+1/3/5 前向收益与沪深300超额，按策略聚合 */
 const StrategyScoreboard: React.FC = () => {
   const [days, setDays] = useState(30);
+  const [regime, setRegime] = useState<string | undefined>();
   const [summary, setSummary] = useState<ScoreboardSummaryDto[]>([]);
   const [details, setDetails] = useState<ScoreboardDetailDto[]>([]);
   const [strategy, setStrategy] = useState<string | undefined>();
@@ -39,7 +40,7 @@ const StrategyScoreboard: React.FC = () => {
     setLoading(true);
     try {
       const [s, d] = await Promise.all([
-        getScoreboardSummary(days),
+        getScoreboardSummary(days, regime),
         getScoreboardDetails(strategy, days),
       ]);
       setSummary(s.data);
@@ -49,7 +50,7 @@ const StrategyScoreboard: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [days, strategy]);
+  }, [days, regime, strategy]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -148,6 +149,19 @@ const StrategyScoreboard: React.FC = () => {
               { value: 30, label: '近 30 天' },
               { value: 60, label: '近 60 天' },
               { value: 90, label: '近 90 天' },
+            ]}
+          />
+          <span>大盘环境</span>
+          <Select
+            allowClear
+            placeholder="全部环境"
+            value={regime}
+            onChange={setRegime}
+            style={{ width: 120 }}
+            options={[
+              { value: 'weak', label: '弱市' },
+              { value: 'neutral', label: '中性' },
+              { value: 'strong', label: '强市' },
             ]}
           />
           <Button icon={<ReloadOutlined />} onClick={load} loading={loading}>刷新</Button>

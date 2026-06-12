@@ -129,8 +129,8 @@ export interface ScoreboardDetailDto {
   excess1: number | null; excess3: number | null; excess5: number | null;
   status: string;
 }
-export const getScoreboardSummary = (days = 30) =>
-  api.get<ScoreboardSummaryDto[]>('/selection/performance/summary', { params: { days } });
+export const getScoreboardSummary = (days = 30, regime?: string) =>
+  api.get<ScoreboardSummaryDto[]>('/selection/performance/summary', { params: { days, regime } });
 export const getScoreboardDetails = (strategy?: string, days = 30) =>
   api.get<ScoreboardDetailDto[]>('/selection/performance/details', { params: { strategy, days } });
 // 手动触发物化+补算（补数/调试用，平时由 Worker selection-performance 任务定时执行）

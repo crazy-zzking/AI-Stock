@@ -90,6 +90,11 @@ public class SelectionPerformanceEntity
     [StringLength(20)]
     public string Status { get; set; } = PerformanceStatus.Pending;
 
+    /// <summary>信号时大盘环境（weak/neutral/strong/unknown，取自选股结果的大盘描述）——支撑"策略×环境"分桶。</summary>
+    [Column("market_regime")]
+    [StringLength(20)]
+    public string MarketRegime { get; set; } = "unknown";
+
     [Column("created_at")]
     public DateTime CreatedAt { get; set; } = DateTime.Now;
 
