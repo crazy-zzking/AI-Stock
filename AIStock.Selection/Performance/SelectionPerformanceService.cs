@@ -49,7 +49,7 @@ public class SelectionPerformanceService
 
         var batches = await _db.SelectionResult
             .Where(r => r.TradingDate >= since)
-            .Select(r => new { r.Id, r.TradingDate, r.RunAt, r.Strategy, r.StrategyName, r.ResultsJson })
+            .Select(r => new { r.Id, r.TradingDate, r.RunAt, r.Strategy, r.StrategyName, r.ConfigVersion, r.ResultsJson })
             .ToListAsync(ct);
         if (batches.Count == 0) return 0;
 
@@ -107,6 +107,7 @@ public class SelectionPerformanceService
                     SignalClose = p.Close,
                     Status = PerformanceStatus.Pending,
                     MarketRegime = regime,
+                    ConfigVersion = batch.ConfigVersion ?? string.Empty,
                 });
                 created++;
             }
@@ -248,17 +249,19 @@ public class SelectionPerformanceService
         if (!string.IsNullOrEmpty(regime)) q = q.Where(p => p.MarketRegime == regime);
         var rows = await q.ToListAsync(ct);
 
+        // 按 策略×配置版本 分段：策略迭代前后的成绩不混账
         return rows
-            .GroupBy(p => p.Strategy)
+            .GroupBy(p => (p.Strategy, Version: p.ConfigVersion ?? string.Empty))
             .Select(g =>
             {
                 var tradable = g.Where(p => !p.Untradable).ToList();
                 return new StrategyPerformanceSummary
                 {
-                    Strategy = g.Key,
+                    Strategy = g.Key.Strategy,
+                    ConfigVersion = g.Key.Version,
                     // 早期批次未记录策略键 → 显示"(未记录)"，避免前端空白行
                     StrategyName = g.Select(p => p.StrategyName).LastOrDefault(n => !string.IsNullOrEmpty(n))
-                        ?? (string.IsNullOrEmpty(g.Key) ? "(未记录)" : g.Key),
+                        ?? (string.IsNullOrEmpty(g.Key.Strategy) ? "(未记录)" : g.Key.Strategy),
                     Signals = g.Count(),
                     Untradable = g.Count(p => p.Untradable),
                     Pending = g.Count(p => p.Status == PerformanceStatus.Pending),
@@ -267,7 +270,7 @@ public class SelectionPerformanceService
                     Horizon5 = HorizonStats.From(tradable, p => p.Ret5, p => p.Excess5),
                 };
             })
-            .OrderByDescending(s => s.Horizon5.AvgExcess ?? decimal.MinValue)
+            .OrderBy(s => s.Strategy).ThenByDescending(s => s.ConfigVersion)
             .ToList();
     }
 }
@@ -291,6 +294,9 @@ public class StrategyPerformanceSummary
 {
     public string Strategy { get; set; } = string.Empty;
     public string StrategyName { get; set; } = string.Empty;
+
+    /// <summary>配置版本（vX.Y / default / custom / 空=早期未记录）——同策略不同版本分行展示</summary>
+    public string ConfigVersion { get; set; } = string.Empty;
 
     /// <summary>信号总数（含未完成/不可成交）</summary>
     public int Signals { get; set; }

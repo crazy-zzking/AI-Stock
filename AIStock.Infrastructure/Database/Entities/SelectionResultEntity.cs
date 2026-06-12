@@ -37,6 +37,11 @@ public class SelectionResultEntity
     [StringLength(100)]
     public string StrategyName { get; set; } = string.Empty;
 
+    /// <summary>选股时生效的配置版本（写入时固化：vX.Y / default=代码默认 / custom=显式传参）——策略迭代前后成绩分段对照的依据</summary>
+    [Column("config_version")]
+    [StringLength(50)]
+    public string ConfigVersion { get; set; } = string.Empty;
+
     /// <summary>选股结果列表 JSON（List&lt;StockSelectionResult&gt;）</summary>
     [Column("results_json", TypeName = "longtext")]
     public string ResultsJson { get; set; } = "[]";

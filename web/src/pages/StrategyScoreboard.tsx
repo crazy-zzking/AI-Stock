@@ -74,9 +74,16 @@ const StrategyScoreboard: React.FC = () => {
 
   const summaryColumns = [
     {
-      title: '策略', dataIndex: 'strategyName', key: 'strategyName', width: 140,
+      title: '策略', dataIndex: 'strategyName', key: 'strategyName', width: 180,
       render: (v: string, r: ScoreboardSummaryDto) => (
-        <a onClick={() => setStrategy(r.strategy)}>{v || r.strategy}</a>
+        <Space size={4}>
+          <a onClick={() => setStrategy(r.strategy)}>{v || r.strategy}</a>
+          {r.configVersion && (
+            <Tooltip title="选股时生效的配置版本（策略迭代前后成绩分段对照）">
+              <Tag color={r.configVersion === 'default' ? undefined : 'blue'}>{r.configVersion}</Tag>
+            </Tooltip>
+          )}
+        </Space>
       ),
     },
     { title: '信号', dataIndex: 'signals', key: 'signals', width: 70 },
@@ -173,7 +180,7 @@ const StrategyScoreboard: React.FC = () => {
 
       <Card title="按策略聚合" style={{ marginBottom: 16 }}>
         <Table
-          rowKey="strategy"
+          rowKey={(r) => `${r.strategy}@${r.configVersion}`}
           size="small"
           columns={summaryColumns}
           dataSource={summary}

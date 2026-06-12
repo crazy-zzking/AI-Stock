@@ -216,6 +216,8 @@ public class SelectionHistoryItem
     public string StrategyName { get; set; } = string.Empty;
     /// <summary>LLM 复评状态（pending/running/done/failed/skipped）</summary>
     public string ReviewStatus { get; set; } = "pending";
+    /// <summary>选股时生效的配置版本（vX.Y / default / custom；空=早期未记录）</summary>
+    public string ConfigVersion { get; set; } = string.Empty;
 }
 
 /// <summary>某批选股的"选后表现"汇总</summary>

@@ -95,6 +95,11 @@ public class SelectionPerformanceEntity
     [StringLength(20)]
     public string MarketRegime { get; set; } = "unknown";
 
+    /// <summary>信号时生效的配置版本（自来源批次固化）——策略迭代前后成绩分段对照。</summary>
+    [Column("config_version")]
+    [StringLength(50)]
+    public string ConfigVersion { get; set; } = string.Empty;
+
     [Column("created_at")]
     public DateTime CreatedAt { get; set; } = DateTime.Now;
 

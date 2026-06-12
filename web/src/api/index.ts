@@ -118,7 +118,8 @@ export interface HorizonStatsDto {
   avgExcess: number | null; profitFactor: number | null;
 }
 export interface ScoreboardSummaryDto {
-  strategy: string; strategyName: string; signals: number; untradable: number; pending: number;
+  strategy: string; strategyName: string; configVersion: string;
+  signals: number; untradable: number; pending: number;
   horizon1: HorizonStatsDto; horizon3: HorizonStatsDto; horizon5: HorizonStatsDto;
 }
 export interface ScoreboardDetailDto {

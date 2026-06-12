@@ -449,7 +449,10 @@ public class StockSelectionService
         SelectionCriteria? criteria = null, string? strategyKey = null, CancellationToken ct = default)
     {
         var strategy = await ResolveStrategyAsync(strategyKey, ct);
-        criteria ??= await _config.GetActiveCriteriaAsync(strategy.Key, ct);
+        // 配置版本固化进批次：vX.Y=生效配置 / default=代码默认 / custom=显式传参（调试）
+        var configVersion = "custom";
+        if (criteria == null)
+            (criteria, configVersion) = await _config.GetActiveCriteriaWithVersionAsync(strategy.Key, ct);
         var results = await SelectAsync(criteria, strategy.Key, ct);
 
         var tradingDate = await _db.DailyMarketSnapshot.MaxAsync(s => (DateTime?)s.Date, ct);
@@ -462,6 +465,7 @@ public class StockSelectionService
             TopN = criteria.TopN,
             Strategy = strategy.Key,
             StrategyName = strategy.Name,
+            ConfigVersion = configVersion,
             ResultsJson = JsonSerializer.Serialize(results, AIStock.Core.Json.AppJson.Default),
             // LLM 复评改为手动触发：新批次默认未复评，等用户在历史页点「LLM 复评」
             ReviewStatus = "skipped",
@@ -513,7 +517,7 @@ public class StockSelectionService
         var rows = await _db.SelectionResult
             .OrderByDescending(r => r.RunAt)
             .Take(take <= 0 ? 30 : take)
-            .Select(r => new { r.Id, r.TradingDate, r.RunAt, r.TopN, r.Strategy, r.StrategyName, r.ReviewStatus })
+            .Select(r => new { r.Id, r.TradingDate, r.RunAt, r.TopN, r.Strategy, r.StrategyName, r.ReviewStatus, r.ConfigVersion })
             .ToListAsync(ct);
         return rows.Select(r => new SelectionHistoryItem
         {
@@ -524,6 +528,7 @@ public class StockSelectionService
             Strategy = r.Strategy,
             StrategyName = r.StrategyName,
             ReviewStatus = r.ReviewStatus,
+            ConfigVersion = r.ConfigVersion ?? string.Empty,
         }).ToList();
     }
 

@@ -35,20 +35,25 @@ public class SelectionConfigService
     /// 无生效版本或反序列化失败时回退代码默认。
     /// </summary>
     public async Task<SelectionCriteria> GetActiveCriteriaAsync(string name = DefaultName, CancellationToken ct = default)
+        => (await GetActiveCriteriaWithVersionAsync(name, ct)).Criteria;
+
+    /// <summary>取生效配置及其版本号。版本 "default" = 无生效配置/解析失败回退代码默认。</summary>
+    public async Task<(SelectionCriteria Criteria, string Version)> GetActiveCriteriaWithVersionAsync(
+        string name = DefaultName, CancellationToken ct = default)
     {
         var active = await _db.SelectionConfig
             .Where(c => c.Name == name && c.IsActive)
             .OrderByDescending(c => c.UpdatedAt)
             .FirstOrDefaultAsync(ct);
-        if (active == null) return GetDefaultCriteria();
+        if (active == null) return (GetDefaultCriteria(), "default");
 
         var criteria = Deserialize(active.ConfigJson);
         if (criteria == null)
         {
             _logger.LogWarning("选股配置 {Name}/{Version} 反序列化失败，回退代码默认", name, active.Version);
-            return GetDefaultCriteria();
+            return (GetDefaultCriteria(), "default");
         }
-        return criteria;
+        return (criteria, active.Version);
     }
 
     /// <summary>当前生效版本的元信息（含 JSON）。无则 null。</summary>
