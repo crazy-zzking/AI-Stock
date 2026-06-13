@@ -27,6 +27,7 @@ import StrategyManager from './pages/StrategyManager';
 import Backtest from './pages/Backtest';
 import WorkerConfig from './pages/WorkerConfig';
 import StrategyScoreboard from './pages/StrategyScoreboard';
+import ReplayBacktest from './pages/ReplayBacktest';
 
 function AppShell() {
   const { dark } = useThemeMode();
@@ -48,6 +49,7 @@ function AppShell() {
               <Route path="strategy-manager" element={<StrategyManager />} />
               <Route path="selection-backtest" element={<Backtest />} />
               <Route path="strategy-scoreboard" element={<StrategyScoreboard />} />
+              <Route path="replay-backtest" element={<ReplayBacktest />} />
               <Route path="sector" element={<Sector />} />
               <Route path="review" element={<Review />} />
               <Route path="agents" element={<Agents />} />

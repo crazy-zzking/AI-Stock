@@ -1,13 +1,12 @@
 import React, { useState } from 'react';
 import {
-  Card, Row, Col, Statistic, InputNumber, Select, Button, Table, Tag,
-  message, Space, DatePicker, Alert, Switch, Tooltip,
+  Card, InputNumber, Select, Button, message, Space, DatePicker, Alert, Switch, Tooltip,
 } from 'antd';
 import { ExperimentOutlined, PlayCircleOutlined } from '@ant-design/icons';
-import dayjs, { Dayjs } from 'dayjs';
+import { Dayjs } from 'dayjs';
 import { getBacktest } from '../api';
-import type { BacktestReportDto, BacktestTradeDto } from '../api';
-import { pct, upDownColor as upDown } from '../utils/format';
+import type { BacktestReportDto } from '../api';
+import BacktestReportView from '../components/BacktestReportView';
 
 /** 选股回测 — 把历史选股结果按持有期/买点回测，统计胜率/收益/盈亏比/回撤 */
 const Backtest: React.FC = () => {
@@ -35,32 +34,6 @@ const Backtest: React.FC = () => {
       setLoading(false);
     }
   };
-
-  const columns = [
-    { title: '代码', dataIndex: 'code', key: 'code', width: 90 },
-    { title: '名称', dataIndex: 'name', key: 'name', width: 110, ellipsis: true },
-    { title: '信号日', dataIndex: 'signalDate', key: 'signalDate', width: 110, render: (v: string) => v?.slice(0, 10) },
-    { title: '买入价', dataIndex: 'entryPrice', key: 'entryPrice', width: 90, render: (v: number) => v?.toFixed(2) },
-    {
-      title: '卖出价', dataIndex: 'exitPrice', key: 'exitPrice', width: 130,
-      render: (v: number, r: BacktestTradeDto) => (
-        <Space size={4}>
-          {v?.toFixed(2)}
-          {r.exitReason === 'stoploss' && <Tag color="red">止损</Tag>}
-          {r.exitReason === 'takeprofit' && <Tag color="green">止盈</Tag>}
-          {r.exitDeferred && <Tooltip title="原定卖出日一字跌停，顺延成交"><Tag color="orange">延</Tag></Tooltip>}
-        </Space>
-      ),
-    },
-    { title: '持有(日)', dataIndex: 'holdDays', key: 'holdDays', width: 80 },
-    {
-      title: '收益', dataIndex: 'returnPct', key: 'returnPct', width: 90,
-      sorter: (a: BacktestTradeDto, b: BacktestTradeDto) => a.returnPct - b.returnPct,
-      render: (v: number) => <span style={{ color: upDown(v), fontWeight: 600 }}>{pct(v)}</span>,
-    },
-    { title: '最高浮盈', dataIndex: 'maxRisePct', key: 'maxRisePct', width: 90, render: (v: number) => <span style={{ color: upDown(v) }}>{pct(v)}</span> },
-    { title: '最大浮亏', dataIndex: 'maxDropPct', key: 'maxDropPct', width: 90, render: (v: number) => <span style={{ color: upDown(v) }}>{pct(v)}</span> },
-  ];
 
   return (
     <div>
@@ -111,54 +84,7 @@ const Backtest: React.FC = () => {
         </Space>
       </Card>
 
-      {report && (
-        <>
-          <Row gutter={16} style={{ marginBottom: 16 }}>
-            <Col span={4}><Card><Statistic title="成交笔数" value={report.executedTrades} suffix={`/${report.totalSignals}`} /></Card></Col>
-            <Col span={4}><Card><Statistic title="胜率" value={report.winRatePct} suffix="%" valueStyle={{ color: report.winRatePct >= 50 ? '#cf1322' : '#3f8600' }} /></Card></Col>
-            <Col span={4}><Card><Statistic title="平均收益" value={report.avgReturnPct} suffix="%" valueStyle={{ color: upDown(report.avgReturnPct) }} /></Card></Col>
-            <Col span={4}><Card><Statistic title="中位收益" value={report.medianReturnPct} suffix="%" valueStyle={{ color: upDown(report.medianReturnPct) }} /></Card></Col>
-            <Col span={4}><Card><Statistic title="盈亏比" value={report.profitFactor ?? '—'} /></Card></Col>
-            <Col span={4}><Card><Statistic title="最大回撤" value={report.maxDrawdownPct} suffix="pt" valueStyle={{ color: '#3f8600' }} /></Card></Col>
-          </Row>
-          <Row gutter={16} style={{ marginBottom: 16 }}>
-            <Col span={4}><Card size="small"><Statistic title="收益标准差" value={report.stdDevPct} suffix="%" /></Card></Col>
-            <Col span={4}><Card size="small"><Statistic title="平均最高浮盈" value={report.avgMaxRisePct} suffix="%" valueStyle={{ color: upDown(report.avgMaxRisePct) }} /></Card></Col>
-            <Col span={4}><Card size="small"><Statistic title="平均最大浮亏" value={report.avgMaxDropPct} suffix="%" valueStyle={{ color: upDown(report.avgMaxDropPct) }} /></Card></Col>
-            <Col span={4}><Card size="small"><Statistic title="最佳" value={report.bestReturnPct} suffix="%" valueStyle={{ color: upDown(report.bestReturnPct) }} /></Card></Col>
-            <Col span={4}><Card size="small"><Statistic title="最差" value={report.worstReturnPct} suffix="%" valueStyle={{ color: upDown(report.worstReturnPct) }} /></Card></Col>
-            <Col span={4}><Card size="small"><Statistic title="无数据跳过" value={report.skippedNoData} /></Card></Col>
-          </Row>
-          <Row gutter={16} style={{ marginBottom: 16 }}>
-            <Col span={4}>
-              <Card size="small">
-                <Tooltip title="买入日开盘即≈涨停（一字板），实盘买不进，剔除不计收益">
-                  <Statistic title="一字板剔除" value={report.skippedUntradable} valueStyle={{ color: report.skippedUntradable > 0 ? '#fa8c16' : undefined }} />
-                </Tooltip>
-              </Card>
-            </Col>
-            <Col span={4}>
-              <Card size="small">
-                <Tooltip title="卖出日一字跌停卖不出，顺延到下一个可卖日成交">
-                  <Statistic title="跌停顺延" value={report.deferredExits} />
-                </Tooltip>
-              </Card>
-            </Col>
-            <Col span={4}><Card size="small"><Statistic title="已扣摩擦" value={report.frictionPct} suffix="%/笔" /></Card></Col>
-          </Row>
-
-          <Card title={`成交明细（持有 ${report.holdDays} 日 · ${report.entry === 'SignalClose' ? '信号日收盘买入' : 'T+1 开盘买入'}）`}>
-            <Table
-              rowKey={(r) => `${r.code}-${r.signalDate}`}
-              columns={columns}
-              dataSource={report.trades}
-              size="small"
-              pagination={{ pageSize: 20 }}
-              scroll={{ x: 800 }}
-            />
-          </Card>
-        </>
-      )}
+      {report && <BacktestReportView report={report} csvName="选股回测" />}
     </div>
   );
 };

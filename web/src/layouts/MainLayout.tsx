@@ -23,6 +23,7 @@ const ROUTE_META: Record<string, { label: string; icon: React.ReactNode }> = {
   '/selection-config': { label: '选股配置', icon: <SlidersOutlined /> },
   '/strategy-manager': { label: '策略管理', icon: <PartitionOutlined /> },
   '/selection-backtest': { label: '选股回测', icon: <ExperimentOutlined /> },
+  '/replay-backtest': { label: '回放回测', icon: <ThunderboltOutlined /> },
   '/strategy-scoreboard': { label: '策略记分板', icon: <TrophyOutlined /> },
   '/review': { label: '每日复盘', icon: <FileSearchOutlined /> },
   '/sector': { label: '板块资金', icon: <FireOutlined /> },
@@ -43,7 +44,7 @@ const ROUTE_META: Record<string, { label: string; icon: React.ReactNode }> = {
 
 /** 一级分组 → 二级路由 */
 const GROUPS: { key: string; label: string; icon: React.ReactNode; children: string[] }[] = [
-  { key: 'g-decision', label: '选股决策', icon: <LineChartOutlined />, children: ['/selection', '/selection-history', '/selection-config', '/strategy-manager', '/selection-backtest', '/strategy-scoreboard', '/review', '/sector', '/stock-detail'] },
+  { key: 'g-decision', label: '选股决策', icon: <LineChartOutlined />, children: ['/selection', '/selection-history', '/selection-config', '/strategy-manager', '/selection-backtest', '/replay-backtest', '/strategy-scoreboard', '/review', '/sector', '/stock-detail'] },
   { key: 'g-trade', label: '交易', icon: <ThunderboltOutlined />, children: ['/auto-trading', '/positions', '/strategy'] },
   { key: 'g-ai', label: '智能体', icon: <DeploymentUnitOutlined />, children: ['/agents', '/ai-chat', '/workflow', '/memory'] },
   { key: 'g-knowledge', label: '知识库', icon: <ApartmentOutlined />, children: ['/knowledge'] },

@@ -102,6 +102,12 @@ export const getBacktest = (
   api.get<BacktestReportDto>('/selection/backtest', {
     params: { holdDays, entry, from, to, tradability, friction, stopLoss, takeProfit },
   });
+// 回放回测：用当前代码+生效配置在历史快照上逐日重跑指定策略（调参验证）
+// 全市场扫描策略跨数月可达 1~2 分钟，单独放宽超时到 5 分钟（全局默认 30s 会中止请求）
+export const replayBacktest = (params: {
+  strategy?: string; from?: string; to?: string; holdDays?: number; entry?: string;
+  tradability?: boolean; friction?: number; stopLoss?: number; takeProfit?: number;
+}) => api.post<BacktestReportDto>('/selection/backtest/replay', null, { params, timeout: 300000 });
 // 选股历史记录列表（元信息，按选股时间倒序）
 export const getSelectionHistory = (take = 30) =>
   api.get('/selection/history', { params: { take } });
