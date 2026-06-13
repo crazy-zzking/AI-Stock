@@ -376,15 +376,17 @@ public class EastmoneyProvider : BaseProvider
     }
 
     /// <summary>
-    /// 获取历史每日资金流（fflow/daykline lmt=0 返回全历史；解析全部 klines，供回放回测补资金面）。
+    /// 获取每日资金流（fflow/daykline）。fullHistory=true 取全历史(lmt=0)；否则只取最近 count 根做增量。
     /// </summary>
-    public async Task<List<CapitalFlowData>> GetCapitalFlowHistoryAsync(string code, CancellationToken ct = default)
+    public async Task<List<CapitalFlowData>> GetCapitalFlowHistoryAsync(
+        string code, int count = 5, bool fullHistory = true, CancellationToken ct = default)
     {
         var result = new List<CapitalFlowData>();
         try
         {
             var secid = GetMarketCode(code);
-            var url = $"{CapitalFlowUrl}?lmt=0&klt=101&secid={secid}&ut={UserToken}&fields1=f1,f2,f3,f7&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61,f62,f63,f64,f65";
+            var lmt = fullHistory ? 0 : Math.Max(1, count);
+            var url = $"{CapitalFlowUrl}?lmt={lmt}&klt=101&secid={secid}&ut={UserToken}&fields1=f1,f2,f3,f7&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61,f62,f63,f64,f65";
             var response = await SendEastmoneyRequestAsync(url);
             if (response == null) return result;
 

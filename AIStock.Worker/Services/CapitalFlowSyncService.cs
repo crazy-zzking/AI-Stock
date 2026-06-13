@@ -10,14 +10,17 @@ using Microsoft.Extensions.Logging;
 namespace AIStock.Worker.Services;
 
 /// <summary>
-/// 每日资金流同步 — 拉东财历史资金流(fflow/daykline 全历史)落库到 daily_capital_flow，
-/// 供回放回测补资金面(kline_data 无资金流)。仅插入库内缺失的日期(资金流历史不变，不重复更新)。
-/// 全市场逐股请求，分批并发 + 批间延迟防封。
+/// 每日资金流同步 — 拉东财资金流(fflow/daykline)落库到 capital_flow，供回放回测补资金面(kline_data 无资金流)。
+/// 增量模式：库中已有该票数据则只拉最近 IncrementalDays 根，无数据(首次)才拉全历史——避免每日重拉全市场全历史。
+/// 仅插入库内缺失日期(资金流历史不变，不重复更新)。全市场逐股请求，分批并发 + 批间延迟防封。
 /// </summary>
 public class CapitalFlowSyncService
 {
     private const int BatchSize = 8;
     private const int BatchDelayMs = 200;
+
+    /// <summary>增量回看根数：覆盖停牌/补数缓冲，远小于全历史(~数百根)。</summary>
+    private const int IncrementalDays = 5;
 
     private readonly IDataProviderResolver _resolver;
     private readonly IServiceScopeFactory _scopeFactory;
@@ -51,12 +54,25 @@ public class CapitalFlowSyncService
         }
         if (codes.Count == 0) { _logger.LogWarning("资金流同步：股票池为空"); return 0; }
 
+        // 库中已有资金流数据的代码集合 → 这些走增量(只拉最近 N 根)，其余首次拉全历史
+        HashSet<string> codesWithData;
+        using (var scope = _scopeFactory.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AIStockDbContext>();
+            codesWithData = (await db.CapitalFlow.Select(c => c.Code).Distinct().ToListAsync(ct)).ToHashSet();
+        }
+
         var added = 0;
         for (var i = 0; i < codes.Count; i += BatchSize)
         {
             ct.ThrowIfCancellationRequested();
             var batch = codes.Skip(i).Take(BatchSize).ToList();
-            var fetched = await Task.WhenAll(batch.Select(async c => (Code: c, Flows: await em.GetCapitalFlowHistoryAsync(c, ct))));
+            var fetched = await Task.WhenAll(batch.Select(async c =>
+            {
+                var hasData = codesWithData.Contains(c);
+                var flows = await em.GetCapitalFlowHistoryAsync(c, IncrementalDays, fullHistory: !hasData, ct);
+                return (Code: c, Flows: flows);
+            }));
 
             using var scope = _scopeFactory.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<AIStockDbContext>();
