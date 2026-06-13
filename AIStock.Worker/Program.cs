@@ -88,11 +88,12 @@ builder.Services.AddSingleton<ConceptDigestService>();
 // 选股全家桶（每日选股留痕 + 绩效补算用；Scoped，任务内开作用域使用）
 builder.Services.AddSelectionServices();
 
-// 告警通知（任务失败推送企微/钉钉，未配 WebhookUrl 则仅写日志）
+// 告警通知（任务失败推送企微/钉钉，未配 WebhookUrl 则仅写日志）。
+// 用 AddAlerting 而非 AddMonitorServices：Worker 不需要持仓监控，避免引入 Execution 依赖。
 builder.Services.AddHttpClient();
 builder.Services.Configure<AIStock.Monitor.MonitorOptions>(
     builder.Configuration.GetSection(AIStock.Monitor.MonitorOptions.SectionName));
-builder.Services.AddMonitorServices();
+builder.Services.AddAlerting();
 
 // 调度：每个后台任务独立注册，调度参数由 worker_config 表 Jobs 段（前端可配）热读
 builder.Services.AddSingleton<IScheduledJob, StockBaseSyncJob>();
