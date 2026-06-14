@@ -61,3 +61,6 @@
 #*.PDF   diff=astextplain
 #*.rtf   diff=astextplain
 #*.RTF   diff=astextplain
+
+# Shell 脚本强制 LF（部署到 Linux/容器执行，CRLF 会导致 shebang 失效）
+*.sh text eol=lf

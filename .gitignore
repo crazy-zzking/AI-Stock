@@ -48,3 +48,6 @@ secrets/
 
 ## 本地工具/IDE（Claude Code 设置、VS 启动配置、本地脚本）
 .claude/
+
+# docker compose 部署密钥（Basic Auth 密码等），不进库
+/.env

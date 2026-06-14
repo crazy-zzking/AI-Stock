@@ -1,0 +1,15 @@
+# 极小的前端 nginx 镜像：在官方 nginx:alpine 基础上加 apache2-utils（提供 htpasswd），
+# 用于启动时按环境变量生成 Basic Auth 凭证。静态文件与 nginx.conf 仍由 compose 挂载。
+# 纯 alpine 包安装，秒级、无 OOM 风险。
+FROM nginx:1.27-alpine
+
+# alpine 源换阿里云镜像（国内拉包快）
+RUN sed -i 's#dl-cdn.alpinelinux.org#mirrors.aliyun.com#g' /etc/apk/repositories \
+    && apk add --no-cache apache2-utils
+
+# 启动脚本：按 BASIC_AUTH_* 环境变量生成 .htpasswd + auth include
+COPY docker-entrypoint.d/10-basic-auth.sh /docker-entrypoint.d/10-basic-auth.sh
+RUN chmod +x /docker-entrypoint.d/10-basic-auth.sh
+
+# 兜底：保证 include 的文件存在（脚本会覆盖），避免极端情况下 nginx 启动找不到文件
+RUN touch /etc/nginx/auth_basic.inc
