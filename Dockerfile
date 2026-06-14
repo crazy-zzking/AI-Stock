@@ -2,6 +2,9 @@
 FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
 WORKDIR /src
 
+# 中央包管理：版本号集中在此文件，restore 前必须就位，否则解析到错误版本
+COPY ["Directory.Packages.props", "./"]
+
 # 复制项目文件
 COPY ["AIStock.Web/AIStock.Web.csproj", "AIStock.Web/"]
 COPY ["AIStock.Core/AIStock.Core.csproj", "AIStock.Core/"]
@@ -37,33 +40,13 @@ RUN dotnet publish -c Release -o /app/publish
 FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS final
 WORKDIR /app
 
-# 安装 Playwright 依赖（Chromium 需要的系统库）
-RUN apt-get update && apt-get install -y \
+# 中文字体（图表/导出渲染用）。Web 不做 Playwright 抓取，故不安装 Chromium。
+# 阿里云 ECS：apt 源换阿里云镜像，否则 deb.debian.org 极慢。
+RUN sed -i 's|deb.debian.org|mirrors.aliyun.com|g; s|security.debian.org|mirrors.aliyun.com|g' \
+        /etc/apt/sources.list.d/debian.sources 2>/dev/null; \
+    apt-get update && apt-get install -y --no-install-recommends \
     fonts-wqy-zenhei \
-    fonts-noto-color-emoji \
-    libatk1.0-0 \
-    libatk-bridge2.0-0 \
-    libcups2 \
-    libdrm2 \
-    libxkbcommon0 \
-    libxcomposite1 \
-    libxdamage1 \
-    libxfixes3 \
-    libxrandr2 \
-    libgbm1 \
-    libpango-1.0-0 \
-    libcairo2 \
-    libasound2 \
-    libnspr4 \
-    libnss3 \
-    libxshmfence1 \
-    wget \
-    ca-certificates \
     && rm -rf /var/lib/apt/lists/*
-
-# 安装 Playwright CLI 并下载浏览器
-RUN dotnet tool install --global Microsoft.Playwright.CLI
-ENV PATH="${PATH}:/root/.dotnet/tools"
 
 # 复制发布文件
 COPY --from=publish /app/publish .
@@ -77,10 +60,6 @@ EXPOSE 8080
 # 设置环境变量
 ENV ASPNETCORE_URLS=http://+:8080
 ENV ASPNETCORE_ENVIRONMENT=Production
-ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
-
-# 安装 Playwright 浏览器
-RUN playwright install chromium
 
 # 启动应用
 ENTRYPOINT ["dotnet", "AIStock.Web.dll"]

@@ -12,10 +12,12 @@ COPY . .
 
 # 前端通过相对路径 /api 调后端，由 nginx 反代到 api 容器；
 # 限制 node 堆内存，避免 1.8G 小机构建 OOM。
+# 小内存机器：限 node 堆，配合宿主 swap 防 OOM
 ENV REACT_APP_API_BASE_URL=/api \
     GENERATE_SOURCEMAP=false \
+    INLINE_RUNTIME_CHUNK=false \
     CI=false \
-    NODE_OPTIONS=--max-old-space-size=1536
+    NODE_OPTIONS=--max-old-space-size=1024
 RUN npm run build
 
 # ---- 运行阶段：nginx 托管 ----

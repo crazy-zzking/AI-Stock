@@ -47,14 +47,16 @@ services:
       - aistock-net
     restart: unless-stopped
 
+  # 前端静态文件在本机构建（服务器 1.8G 内存跑不动 react 生产构建会 OOM），
+  # 这里直接用 nginx 挂载预构建的 web/build/ 托管，服务器不跑 node。
   aistock-frontend:
-    build:
-      context: ./web
-      dockerfile: Dockerfile
-    image: aistock-frontend:latest
+    image: nginx:1.27-alpine
     container_name: aistock-frontend
     depends_on:
       - aistock-api
+    volumes:
+      - ./web/build:/usr/share/nginx/html:ro
+      - ./web/nginx.conf:/etc/nginx/conf.d/default.conf:ro
     ports:
       - "8088:80"   # 对外访问：http://115.29.178.22:8088 （需放行安全组）
     networks:
