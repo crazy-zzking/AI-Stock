@@ -41,6 +41,7 @@ services:
     volumes:
       - ./config/worker.user.json:/app/appsettings.user.json:ro
       - aistock_worker_logs:/app/logs
+      - ./config/zsxq-cli:/root/.config/zsxq-cli   # 知识星球 zsxq-cli 登录态（auth login 一次后持久化）
     extra_hosts:
       - "host.docker.internal:host-gateway"
     networks:
