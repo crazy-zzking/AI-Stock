@@ -1,0 +1,70 @@
+# 服务器部署用 compose —— 部署在 115.29.178.22 的 /app/aistock/
+#
+# 与本地全栈 docker-compose.yml 的区别：
+#   - 不建 MySQL 容器：直连阿里云 RDS（连接串在挂载的 appsettings.user.json 里）
+#   - 不建 Redis 容器：复用宿主机现有 redis:6379（容器内经 host.docker.internal 访问）
+#   - 端口与服务器现有项目错开：8080(tdx)/6379(redis)/5000(agile)/80(caddy) 均不占用
+#   - 密钥经挂载注入，不进镜像、不进 git
+#
+# 用法：
+#   docker compose -f docker-compose.server.yml build
+#   docker compose -f docker-compose.server.yml up -d
+services:
+  aistock-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: aistock-api:latest
+    container_name: aistock-api
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_URLS=http://+:8080
+    volumes:
+      - ./config/web.user.json:/app/appsettings.user.json:ro
+      - aistock_api_logs:/app/logs
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "127.0.0.1:5005:8080"   # 仅本机，留给调试/后续 Caddy 反代
+    networks:
+      - aistock-net
+    restart: unless-stopped
+
+  aistock-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    image: aistock-worker:latest
+    container_name: aistock-worker
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+    volumes:
+      - ./config/worker.user.json:/app/appsettings.user.json:ro
+      - aistock_worker_logs:/app/logs
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - aistock-net
+    restart: unless-stopped
+
+  aistock-frontend:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    image: aistock-frontend:latest
+    container_name: aistock-frontend
+    depends_on:
+      - aistock-api
+    ports:
+      - "8088:80"   # 对外访问：http://115.29.178.22:8088 （需放行安全组）
+    networks:
+      - aistock-net
+    restart: unless-stopped
+
+networks:
+  aistock-net:
+    driver: bridge
+
+volumes:
+  aistock_api_logs:
+  aistock_worker_logs:
