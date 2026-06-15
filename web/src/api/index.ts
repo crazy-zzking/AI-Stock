@@ -111,6 +111,9 @@ export const replayBacktest = (params: {
 // 选股历史记录列表（元信息，按选股时间倒序）
 export const getSelectionHistory = (take = 30) =>
   api.get('/selection/history', { params: { take } });
+// 选股历史分页（返回 { total, items }）
+export const getSelectionHistoryPage = (page = 1, pageSize = 20) =>
+  api.get('/selection/history/page', { params: { page, pageSize } });
 // 按 id 取某次选股的完整结果
 export const getSelectionById = (id: number) => api.get(`/selection/history/${id}`);
 // 某批选股的选后表现（次日/至今涨跌、最高涨幅、最低跌幅）

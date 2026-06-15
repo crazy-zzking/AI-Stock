@@ -90,6 +90,14 @@ public class SelectionController : ControllerBase
         return Ok(items);
     }
 
+    /// <summary>选股历史分页（按选股时间倒序，返回总数+当前页，供前端翻页）。</summary>
+    [HttpGet("history/page")]
+    public async Task<ActionResult<SelectionHistoryPage>> HistoryPage([FromQuery] int page = 1, [FromQuery] int pageSize = 20, CancellationToken ct = default)
+    {
+        var result = await _selection.GetHistoryPageAsync(page, pageSize, ct);
+        return Ok(result);
+    }
+
     /// <summary>按 id 取某次选股的完整结果。</summary>
     [HttpGet("history/{id:long}")]
     public async Task<ActionResult<List<StockSelectionResult>>> HistoryDetail(long id, CancellationToken ct)

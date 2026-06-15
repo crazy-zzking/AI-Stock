@@ -220,6 +220,15 @@ public class SelectionHistoryItem
     public string ConfigVersion { get; set; } = string.Empty;
 }
 
+/// <summary>选股历史分页结果</summary>
+public class SelectionHistoryPage
+{
+    /// <summary>符合条件的总记录数（用于前端翻页）</summary>
+    public int Total { get; set; }
+    /// <summary>当前页的历史批次</summary>
+    public List<SelectionHistoryItem> Items { get; set; } = new();
+}
+
 /// <summary>某批选股的"选后表现"汇总</summary>
 public class SelectionPerformance
 {

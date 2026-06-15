@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Card, Table, Tag, Row, Col, Spin, message, List, Statistic, Rate, Button } from 'antd';
-import { getSelectionHistory, getSelectionPerformance, getQuote, reviewSelectionBatch } from '../api';
+import { Card, Table, Tag, Row, Col, Spin, message, List, Statistic, Rate, Button, Pagination } from 'antd';
+import { getSelectionHistoryPage, getSelectionPerformance, getQuote, reviewSelectionBatch } from '../api';
 import Delta from '../components/Delta';
 import ReviewPanel from '../components/ReviewPanel';
 import { pct, upDownColor } from '../utils/format';
@@ -44,6 +44,9 @@ const SelectionHistory: React.FC = () => {
   const [quoteLoading, setQuoteLoading] = useState<Record<string, boolean>>({});
   const [reviewing, setReviewing] = useState(false);
   const [expandedKeys, setExpandedKeys] = useState<React.Key[]>([]);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
+  const [total, setTotal] = useState(0);
   const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // 展开行时懒加载实时报价（已缓存则跳过）
@@ -62,13 +65,15 @@ const SelectionHistory: React.FC = () => {
     }
   };
 
-  const loadList = async () => {
+  const loadList = async (p = page, ps = pageSize, autoSelect = false) => {
     setLoading(true);
     try {
-      const res = await getSelectionHistory(50);
-      const data: HistoryItem[] = res.data || [];
+      const res = await getSelectionHistoryPage(p, ps);
+      const data: HistoryItem[] = res.data?.items || [];
       setList(data);
-      if (data.length > 0) selectBatch(data[0].id);
+      setTotal(res.data?.total ?? 0);
+      // 仅首次加载自动选中本页第一条；翻页时保留当前选中，不打断右侧
+      if (autoSelect && data.length > 0) selectBatch(data[0].id);
     } catch {
       message.error('加载选股历史失败');
     } finally {
@@ -122,7 +127,13 @@ const SelectionHistory: React.FC = () => {
     }
   };
 
-  useEffect(() => { loadList(); return () => { if (pollRef.current) clearTimeout(pollRef.current); }; /* eslint-disable-next-line */ }, []);
+  useEffect(() => { loadList(1, pageSize, true); return () => { if (pollRef.current) clearTimeout(pollRef.current); }; /* eslint-disable-next-line */ }, []);
+
+  const onPageChange = (p: number, ps: number) => {
+    setPage(p);
+    setPageSize(ps);
+    loadList(p, ps);
+  };
 
   if (loading) return <Spin size="large" style={{ display: 'block', margin: '100px auto' }} />;
 
@@ -141,27 +152,46 @@ const SelectionHistory: React.FC = () => {
       <h2>历史选股 · 选后表现跟踪</h2>
       <Row gutter={16}>
         <Col xs={24} lg={6}>
-          <Card title="历史批次" size="small">
-            <List
-              size="small"
-              dataSource={list}
-              locale={{ emptyText: '暂无选股记录（先在选股页「重新选股」）' }}
-              renderItem={(it) => (
-                <List.Item
-                  onClick={() => selectBatch(it.id)}
-                  style={{ cursor: 'pointer', background: selectedId === it.id ? '#e6f4ff' : undefined, padding: '8px 12px' }}
-                >
-                  <div>
+          <Card
+            title="历史批次"
+            size="small"
+            styles={{ body: { padding: 0 } }}
+            style={{ position: 'sticky', top: 12 }}
+          >
+            <div style={{ maxHeight: 'calc(100vh - 200px)', overflowY: 'auto' }}>
+              <List
+                size="small"
+                dataSource={list}
+                locale={{ emptyText: '暂无选股记录（先在选股页「重新选股」）' }}
+                renderItem={(it) => (
+                  <List.Item
+                    onClick={() => selectBatch(it.id)}
+                    style={{ cursor: 'pointer', background: selectedId === it.id ? '#e6f4ff' : undefined, padding: '8px 12px' }}
+                  >
                     <div>
-                      {it.tradingDate?.slice(0, 10)}
-                      {it.strategyName && <Tag color="purple" style={{ marginLeft: 6 }}>{it.strategyName}</Tag>}
-                      <Tag style={{ marginLeft: 2 }}>TOP{it.topN}</Tag>
+                      <div>
+                        {it.tradingDate?.slice(0, 10)}
+                        {it.strategyName && <Tag color="purple" style={{ marginLeft: 6 }}>{it.strategyName}</Tag>}
+                        <Tag style={{ marginLeft: 2 }}>TOP{it.topN}</Tag>
+                      </div>
+                      <div style={{ fontSize: 12, color: '#999' }}>发起于 {fmtTime(it.runAt)}</div>
                     </div>
-                    <div style={{ fontSize: 12, color: '#999' }}>发起于 {fmtTime(it.runAt)}</div>
-                  </div>
-                </List.Item>
-              )}
-            />
+                  </List.Item>
+                )}
+              />
+            </div>
+            <div style={{ padding: '8px 12px', borderTop: '1px solid #f0f0f0', textAlign: 'center' }}>
+              <Pagination
+                size="small"
+                current={page}
+                pageSize={pageSize}
+                total={total}
+                onChange={onPageChange}
+                showSizeChanger
+                pageSizeOptions={[20, 50, 100]}
+                showTotal={(t) => `共 ${t} 批`}
+              />
+            </div>
           </Card>
         </Col>
         <Col xs={24} lg={18}>

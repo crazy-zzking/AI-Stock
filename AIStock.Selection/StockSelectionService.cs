@@ -540,6 +540,37 @@ public class StockSelectionService
         }).ToList();
     }
 
+    /// <summary>选股历史分页（按选股时间倒序，含总数）。</summary>
+    public async Task<SelectionHistoryPage> GetHistoryPageAsync(int page = 1, int pageSize = 20, CancellationToken ct = default)
+    {
+        if (page <= 0) page = 1;
+        if (pageSize <= 0) pageSize = 20;
+        if (pageSize > 200) pageSize = 200;
+
+        var total = await _db.SelectionResult.CountAsync(ct);
+        var rows = await _db.SelectionResult
+            .OrderByDescending(r => r.RunAt)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Select(r => new { r.Id, r.TradingDate, r.RunAt, r.TopN, r.Strategy, r.StrategyName, r.ReviewStatus, r.ConfigVersion })
+            .ToListAsync(ct);
+        return new SelectionHistoryPage
+        {
+            Total = total,
+            Items = rows.Select(r => new SelectionHistoryItem
+            {
+                Id = r.Id,
+                TradingDate = r.TradingDate,
+                RunAt = r.RunAt,
+                TopN = r.TopN,
+                Strategy = r.Strategy,
+                StrategyName = r.StrategyName,
+                ReviewStatus = r.ReviewStatus,
+                ConfigVersion = r.ConfigVersion ?? string.Empty,
+            }).ToList(),
+        };
+    }
+
     /// <summary>按 id 取某次选股的完整结果。</summary>
     public async Task<List<StockSelectionResult>> GetByIdAsync(long id, CancellationToken ct = default)
     {
