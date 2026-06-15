@@ -303,6 +303,100 @@ public class EventEngineService
     }
 
     /// <summary>
+    /// 分页获取事件（按 event_time 倒序）。关联个股/概念优先取关联表（个股 JOIN stock_base 带名称），
+    /// 关联表为空的老事件回退解析实体逗号串（6 位代码仍反查名称、其余按纯文本）。
+    /// </summary>
+    public async Task<PagedEventResult> GetEventsPagedAsync(
+        int page = 1, int pageSize = 20, string? eventType = null, CancellationToken cancellationToken = default)
+    {
+        if (page < 1) page = 1;
+        if (pageSize < 1) pageSize = 20;
+        if (pageSize > 100) pageSize = 100;
+
+        var query = _dbContext.EventRecord.AsQueryable();
+        if (!string.IsNullOrEmpty(eventType))
+            query = query.Where(e => e.EventType == eventType);
+
+        var total = await query.CountAsync(cancellationToken);
+
+        var events = await query
+            .OrderByDescending(e => e.EventTime)
+            .ThenByDescending(e => e.Id)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync(cancellationToken);
+
+        var eventIds = events.Select(e => e.Id).ToList();
+
+        // 关联表：股票（左连 stock_base 取名称，匹配不到名称的代码保留代码）
+        var stockRelByEvent = (await (from r in _dbContext.EventStockRelation
+                                      where eventIds.Contains(r.EventId)
+                                      join s in _dbContext.StockBase on r.StockCode equals s.Code into sj
+                                      from s in sj.DefaultIfEmpty()
+                                      select new { r.EventId, r.StockCode, Name = s != null ? s.Name : null })
+                                     .ToListAsync(cancellationToken))
+            .GroupBy(x => x.EventId)
+            .ToDictionary(
+                g => g.Key,
+                g => g.Select(x => new EventStockDto { Code = x.StockCode, Name = x.Name }).ToList());
+
+        // 关联表：概念
+        var conceptRelByEvent = (await (from r in _dbContext.EventConceptRelation
+                                        where eventIds.Contains(r.EventId)
+                                        select new { r.EventId, r.ConceptName })
+                                       .ToListAsync(cancellationToken))
+            .GroupBy(x => x.EventId)
+            .ToDictionary(g => g.Key, g => g.Select(x => x.ConceptName).Distinct().ToList());
+
+        // 回退：收集关联表无记录事件逗号串里的 6 位代码，一次性反查名称
+        var fallbackCodes = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var e in events)
+        {
+            if (stockRelByEvent.ContainsKey(e.Id)) continue;
+            foreach (var tok in SplitCsv(e.RelatedStocks))
+                if (_stockCodeRegex.IsMatch(tok)) fallbackCodes.Add(tok);
+        }
+        var fallbackNames = fallbackCodes.Count == 0
+            ? new Dictionary<string, string>()
+            : await _dbContext.StockBase
+                .Where(s => fallbackCodes.Contains(s.Code))
+                .ToDictionaryAsync(s => s.Code, s => s.Name, cancellationToken);
+
+        var items = events.Select(e => new EventListItemDto
+        {
+            Id = e.Id,
+            EventType = e.EventType,
+            Title = e.Title,
+            Content = e.Content,
+            Source = e.Source,
+            Url = e.Url,
+            Sentiment = e.Sentiment,
+            SentimentScore = e.SentimentScore,
+            Importance = e.Importance,
+            Credibility = e.Credibility,
+            EventTime = e.EventTime,
+            CreatedAt = e.CreatedAt,
+            RelatedStocks = stockRelByEvent.TryGetValue(e.Id, out var rs)
+                ? rs
+                : SplitCsv(e.RelatedStocks).Select(tok => new EventStockDto
+                {
+                    Code = _stockCodeRegex.IsMatch(tok) ? tok : null,
+                    Name = _stockCodeRegex.IsMatch(tok) ? (fallbackNames.GetValueOrDefault(tok) ?? tok) : tok,
+                }).ToList(),
+            RelatedConcepts = conceptRelByEvent.TryGetValue(e.Id, out var rc)
+                ? rc
+                : SplitCsv(e.RelatedConcepts).ToList(),
+        }).ToList();
+
+        return new PagedEventResult { Total = total, Items = items };
+    }
+
+    private static IEnumerable<string> SplitCsv(string? csv) =>
+        string.IsNullOrWhiteSpace(csv)
+            ? Enumerable.Empty<string>()
+            : csv.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Distinct();
+
+    /// <summary>
     /// 获取事件详情
     /// </summary>
     public async Task<EventRecordEntity?> GetEventAsync(long eventId, CancellationToken cancellationToken = default)
@@ -585,4 +679,43 @@ public class EventStatistics
     public double AverageImportance { get; set; }
     public double AverageCredibility { get; set; }
     public Dictionary<string, int> ByType { get; set; } = new();
+}
+
+/// <summary>
+/// 分页事件结果
+/// </summary>
+public class PagedEventResult
+{
+    public int Total { get; set; }
+    public List<EventListItemDto> Items { get; set; } = new();
+}
+
+/// <summary>
+/// 事件列表项（含关联个股/概念）
+/// </summary>
+public class EventListItemDto
+{
+    public long Id { get; set; }
+    public string EventType { get; set; } = string.Empty;
+    public string Title { get; set; } = string.Empty;
+    public string? Content { get; set; }
+    public string? Source { get; set; }
+    public string? Url { get; set; }
+    public string? Sentiment { get; set; }
+    public decimal? SentimentScore { get; set; }
+    public int? Importance { get; set; }
+    public int? Credibility { get; set; }
+    public DateTime? EventTime { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public List<EventStockDto> RelatedStocks { get; set; } = new();
+    public List<string> RelatedConcepts { get; set; } = new();
+}
+
+/// <summary>
+/// 关联个股（代码 + 名称；逗号串回退时非 6 位代码的 Code 为 null）
+/// </summary>
+public class EventStockDto
+{
+    public string? Code { get; set; }
+    public string? Name { get; set; }
 }

@@ -49,6 +49,17 @@ public class EventController : ControllerBase
     }
 
     /// <summary>
+    /// 分页获取事件（按时间倒序，可按类型筛选，含关联个股/概念）
+    /// </summary>
+    [HttpGet("page")]
+    public async Task<IActionResult> GetEventsPaged(
+        [FromQuery] int page = 1, [FromQuery] int pageSize = 20, [FromQuery] string? eventType = null)
+    {
+        var result = await _eventEngine.GetEventsPagedAsync(page, pageSize, eventType);
+        return Ok(result);
+    }
+
+    /// <summary>
     /// 获取事件详情
     /// </summary>
     [HttpGet("{eventId}")]

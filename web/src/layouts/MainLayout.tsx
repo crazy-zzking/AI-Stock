@@ -36,6 +36,7 @@ const ROUTE_META: Record<string, { label: string; icon: React.ReactNode }> = {
   '/workflow': { label: 'Workflow', icon: <NodeIndexOutlined /> },
   '/memory': { label: 'Agent记忆', icon: <HistoryOutlined /> },
   '/knowledge': { label: '知识图谱', icon: <ApartmentOutlined /> },
+  '/intelligence': { label: '情报事件', icon: <FileSearchOutlined /> },
   '/llm': { label: 'LLM管理', icon: <RobotOutlined /> },
   '/prompts': { label: 'Prompt', icon: <FileTextOutlined /> },
   '/observability': { label: '系统观测', icon: <ControlOutlined /> },
@@ -47,7 +48,7 @@ const GROUPS: { key: string; label: string; icon: React.ReactNode; children: str
   { key: 'g-decision', label: '选股决策', icon: <LineChartOutlined />, children: ['/selection', '/selection-history', '/selection-config', '/strategy-manager', '/selection-backtest', '/replay-backtest', '/strategy-scoreboard', '/review', '/sector', '/stock-detail'] },
   { key: 'g-trade', label: '交易', icon: <ThunderboltOutlined />, children: ['/auto-trading', '/positions', '/strategy'] },
   { key: 'g-ai', label: '智能体', icon: <DeploymentUnitOutlined />, children: ['/agents', '/ai-chat', '/workflow', '/memory'] },
-  { key: 'g-knowledge', label: '知识库', icon: <ApartmentOutlined />, children: ['/knowledge'] },
+  { key: 'g-knowledge', label: '知识库', icon: <ApartmentOutlined />, children: ['/knowledge', '/intelligence'] },
   { key: 'g-sys', label: '系统', icon: <ToolOutlined />, children: ['/llm', '/prompts', '/worker-config', '/observability'] },
 ];
 

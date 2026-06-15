@@ -28,6 +28,7 @@ import Backtest from './pages/Backtest';
 import WorkerConfig from './pages/WorkerConfig';
 import StrategyScoreboard from './pages/StrategyScoreboard';
 import ReplayBacktest from './pages/ReplayBacktest';
+import Intelligence from './pages/Intelligence';
 
 function AppShell() {
   const { dark } = useThemeMode();
@@ -55,6 +56,7 @@ function AppShell() {
               <Route path="agents" element={<Agents />} />
               <Route path="strategy" element={<Strategy />} />
               <Route path="knowledge" element={<KnowledgeGraph />} />
+              <Route path="intelligence" element={<Intelligence />} />
               <Route path="memory" element={<AgentMemory />} />
               <Route path="llm" element={<LLMManager />} />
               <Route path="observability" element={<Observability />} />

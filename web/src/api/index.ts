@@ -257,6 +257,28 @@ export const getCandidateEdges = (edgeType?: string, entity?: string, top = 300)
 export const getCandidateValues = (edgeType: string, top = 0) =>
   api.get<{ value: string; count: number }[]>('/knowledge/candidate-edges/values', { params: { edgeType, top } });
 
+// ============ 情报事件（event_record + 关联表） ============
+export interface EventStockDto { code: string | null; name: string | null; }
+export interface EventListItemDto {
+  id: number;
+  eventType: string;
+  title: string;
+  content: string | null;
+  source: string | null;
+  url: string | null;
+  sentiment: string | null;
+  sentimentScore: number | null;
+  importance: number | null;
+  credibility: number | null;
+  eventTime: string | null;
+  createdAt: string;
+  relatedStocks: EventStockDto[];
+  relatedConcepts: string[];
+}
+export interface PagedEventResult { total: number; items: EventListItemDto[]; }
+export const getEventsPaged = (page = 1, pageSize = 20, eventType?: string) =>
+  api.get<PagedEventResult>('/event/page', { params: { page, pageSize, eventType: eventType || undefined } });
+
 // ============ LLM ============
 export const getLLMModels = () => api.get<LLMModel[]>('/llm/models');
 export const addLLMModel = (model: LLMModel) => api.post<LLMModel>('/llm/models', model);
