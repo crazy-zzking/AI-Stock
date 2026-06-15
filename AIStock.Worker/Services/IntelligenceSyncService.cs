@@ -172,7 +172,10 @@ public class IntelligenceSyncService
                     {
                         item.Content = result.ParsedContent;
                         if (string.IsNullOrWhiteSpace(item.Title))
-                            item.Title = result.ParsedContent.Length > 40 ? result.ParsedContent[..40] : result.ParsedContent;
+                            // 标题用 LLM 从识别内容提炼的结果；提炼为空才回退截断
+                            item.Title = !string.IsNullOrWhiteSpace(result.Title)
+                                ? result.Title
+                                : (result.ParsedContent.Length > 40 ? result.ParsedContent[..40] : result.ParsedContent);
                     }
                 }
                 else

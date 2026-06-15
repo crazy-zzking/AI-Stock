@@ -159,6 +159,11 @@ public class EssayAnalyzerService : IEssayAnalyzer
         result.OriginalContent = originalContent;
         result.ParsedContent = recognizedText;
         result.AddDataSource("llm", "多模态图片识别", $"识别 {urls.Count} 张图片（模型 {mmModel.Name}）", 1);
+
+        // 纯图片帖（无配文）：把识别内容提炼成一句简短标题，供入库标题用
+        if (string.IsNullOrWhiteSpace(accompanyingText) && !string.IsNullOrWhiteSpace(recognizedText))
+            result.Title = await GenerateTitleAsync(recognizedText, cancellationToken);
+
         return result;
     }
 
@@ -279,6 +284,43 @@ public class EssayAnalyzerService : IEssayAnalyzer
         }
 
         return text.Length > 200 ? text[..200] + "..." : text;
+    }
+
+    /// <summary>
+    /// 从（图片识别）内容提炼一句简短标题（≤25 字）。失败回退首行/截断。
+    /// </summary>
+    private async Task<string> GenerateTitleAsync(string text, CancellationToken cancellationToken)
+    {
+        var fallback = FallbackTitle(text);
+        try
+        {
+            var request = new LLMRequest
+            {
+                SystemPrompt = "你是财经资讯编辑。请把内容提炼成一句不超过25个字的中文标题，准确概括核心信息（个股/概念/事件）。只输出标题本身，不要引号、标点结尾或任何解释。",
+                UserPrompt = $"内容：{(text.Length > 800 ? text[..800] : text)}",
+            };
+
+            var response = await _llmService.SendAsync(request, cancellationToken);
+            if (response.Success && !string.IsNullOrWhiteSpace(response.Content))
+            {
+                var title = response.Content.Trim().Trim('"', '“', '”', '《', '》').Replace("\n", " ").Trim();
+                if (title.Length > 40) title = title[..40];
+                if (!string.IsNullOrWhiteSpace(title)) return title;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "提炼图片标题失败，回退截断");
+        }
+        return fallback;
+    }
+
+    /// <summary>识别文取首行、去空白，截断为标题（LLM 提炼失败时的兜底）</summary>
+    private static string FallbackTitle(string text)
+    {
+        var firstLine = text.Replace("\r", "\n").Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .FirstOrDefault() ?? text.Trim();
+        return firstLine.Length > 40 ? firstLine[..40] : firstLine;
     }
 
     private string GenerateConclusion(EssayAnalysisResult result)

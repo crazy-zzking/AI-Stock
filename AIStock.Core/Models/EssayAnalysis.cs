@@ -51,6 +51,11 @@ public class EssayAnalysisResult : AnalysisResultBase
     public string Summary { get; set; } = string.Empty;
 
     /// <summary>
+    /// 提炼标题（图片帖由识别内容提炼，纯图片帖入库标题用）
+    /// </summary>
+    public string Title { get; set; } = string.Empty;
+
+    /// <summary>
     /// 风险提示
     /// </summary>
     public List<string> RiskWarnings { get; set; } = new();
