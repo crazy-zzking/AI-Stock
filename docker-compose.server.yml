@@ -19,6 +19,7 @@ services:
     environment:
       - ASPNETCORE_ENVIRONMENT=Production
       - ASPNETCORE_URLS=http://+:8080
+      - TZ=Asia/Shanghai   # 容器默认 UTC，代码假设本地即北京时间，必须设此项
     volumes:
       - ./config/web.user.json:/app/appsettings.user.json:ro
       - aistock_api_logs:/app/logs
@@ -38,10 +39,12 @@ services:
     container_name: aistock-worker
     environment:
       - ASPNETCORE_ENVIRONMENT=Production
+      - TZ=Asia/Shanghai   # 同上：定时调度/交易时段判断/run_at 都依赖本地=北京时间
     volumes:
       - ./config/worker.user.json:/app/appsettings.user.json:ro
       - aistock_worker_logs:/app/logs
-      - ./config/zsxq-cli:/root/.config/zsxq-cli   # 知识星球 zsxq-cli 登录态（auth login 一次后持久化）
+      - ./config/zsxq-cli:/root/.config/zsxq-cli            # zsxq-cli 账号/设备信息
+      - ./config/zsxq-cli-data:/root/.local/share/zsxq-cli  # zsxq-cli token/master.key（必须一起持久化，否则重建容器丢登录态）
     extra_hosts:
       - "host.docker.internal:host-gateway"
     networks:
@@ -62,6 +65,7 @@ services:
     environment:
       - BASIC_AUTH_USER=${BASIC_AUTH_USER:-admin}
       - BASIC_AUTH_PASSWORD=${BASIC_AUTH_PASSWORD:-}
+      - TZ=Asia/Shanghai   # nginx 日志时间戳用北京时间
     volumes:
       - ./web/build:/usr/share/nginx/html:ro
       - ./web/nginx.conf:/etc/nginx/conf.d/default.conf:ro

@@ -13,3 +13,6 @@ RUN chmod +x /docker-entrypoint.d/10-basic-auth.sh
 
 # 兜底：保证 include 的文件存在（脚本会覆盖），避免极端情况下 nginx 启动找不到文件
 RUN touch /etc/nginx/auth_basic.inc
+
+# 时区（nginx 日志时间戳用北京时间）
+ENV TZ=Asia/Shanghai

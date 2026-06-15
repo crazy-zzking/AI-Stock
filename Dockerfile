@@ -60,6 +60,8 @@ EXPOSE 8080
 # 设置环境变量
 ENV ASPNETCORE_URLS=http://+:8080
 ENV ASPNETCORE_ENVIRONMENT=Production
+# 时区：容器默认 UTC，但代码假设本地即北京时间（DateTime.Now）
+ENV TZ=Asia/Shanghai
 
 # 启动应用
 ENTRYPOINT ["dotnet", "AIStock.Web.dll"]
