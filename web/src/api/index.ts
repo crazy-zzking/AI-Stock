@@ -51,6 +51,36 @@ export const placeOrder = (order: OrderRequest) =>
 export const getOrders = (startTime: string, endTime: string) =>
   api.get('/execution/orders', { params: { startTime, endTime } });
 
+// ============ 交易候选池 ============
+export interface TradeCandidate {
+  id: number;
+  tradingDate: string;
+  code: string;
+  name: string;
+  strategy: string;
+  strategyName: string;
+  confidence: number;
+  riskFlags: string[];
+  narrative: string;
+  refClose: number;
+  buyLow: number;
+  buyHigh: number;
+  stopLoss: number;
+  takeProfit: number;
+  riskReward: number;
+  planBasis: string;
+  status: number;
+  orderId?: string;
+  orderPrice?: number;
+  orderVolume?: number;
+}
+export const getTradeCandidates = (params?: { days?: number; status?: number; strategy?: string; date?: string }) =>
+  api.get<{ mode: string; halted: boolean; items: TradeCandidate[] }>('/trade-candidate', { params });
+export const orderTradeCandidate = (id: number, body: { price?: number; volume: number }) =>
+  api.post<{ success: boolean; status: string; message: string; orderId: string }>(`/trade-candidate/${id}/order`, body);
+export const ignoreTradeCandidate = (id: number) =>
+  api.post<{ success: boolean }>(`/trade-candidate/${id}/ignore`);
+
 // ============ 特征工程 ============
 export const getMarketState = () => api.get<number>('/feature/market/state');
 export const getMarketSentiment = () => api.get('/feature/market/sentiment');

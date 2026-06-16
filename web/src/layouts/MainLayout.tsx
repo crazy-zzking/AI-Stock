@@ -6,7 +6,7 @@ import {
   FundOutlined, FireOutlined, FileSearchOutlined, MessageOutlined, FileTextOutlined,
   LineChartOutlined, DeploymentUnitOutlined, ToolOutlined, SlidersOutlined, ExperimentOutlined,
   PartitionOutlined, MenuFoldOutlined, MenuUnfoldOutlined, BulbOutlined, BulbFilled,
-  TrophyOutlined,
+  TrophyOutlined, ShoppingCartOutlined,
 } from '@ant-design/icons';
 import { useNavigate, useLocation, useOutlet } from 'react-router-dom';
 import { KeepAlive, useKeepAliveRef } from 'keepalive-for-react';
@@ -28,6 +28,7 @@ const ROUTE_META: Record<string, { label: string; icon: React.ReactNode }> = {
   '/review': { label: '每日复盘', icon: <FileSearchOutlined /> },
   '/sector': { label: '板块资金', icon: <FireOutlined /> },
   '/stock-detail': { label: '股票详情', icon: <SearchOutlined /> },
+  '/trade-candidates': { label: '交易候选池', icon: <ShoppingCartOutlined /> },
   '/auto-trading': { label: '自主交易', icon: <ThunderboltOutlined /> },
   '/positions': { label: '持仓', icon: <StockOutlined /> },
   '/strategy': { label: '策略', icon: <SettingOutlined /> },
@@ -46,7 +47,7 @@ const ROUTE_META: Record<string, { label: string; icon: React.ReactNode }> = {
 /** 一级分组 → 二级路由 */
 const GROUPS: { key: string; label: string; icon: React.ReactNode; children: string[] }[] = [
   { key: 'g-decision', label: '选股决策', icon: <LineChartOutlined />, children: ['/selection', '/selection-history', '/selection-config', '/strategy-manager', '/selection-backtest', '/replay-backtest', '/strategy-scoreboard', '/review', '/sector', '/stock-detail'] },
-  { key: 'g-trade', label: '交易', icon: <ThunderboltOutlined />, children: ['/auto-trading', '/positions', '/strategy'] },
+  { key: 'g-trade', label: '交易', icon: <ThunderboltOutlined />, children: ['/trade-candidates', '/auto-trading', '/positions', '/strategy'] },
   { key: 'g-ai', label: '智能体', icon: <DeploymentUnitOutlined />, children: ['/agents', '/ai-chat', '/workflow', '/memory'] },
   { key: 'g-knowledge', label: '知识库', icon: <ApartmentOutlined />, children: ['/knowledge', '/intelligence'] },
   { key: 'g-sys', label: '系统', icon: <ToolOutlined />, children: ['/llm', '/prompts', '/worker-config', '/observability'] },

@@ -1,5 +1,7 @@
 using AIStock.Core.Interfaces;
 using AIStock.Worker.Services;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace AIStock.Worker.Scheduling;
 
@@ -248,14 +250,19 @@ public class SelectionDailyJob : IScheduledJob
 {
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ITradingCalendar _calendar;
+    private readonly MarketSnapshotSyncService _snapshot;
+    private readonly IWorkerConfigProvider _config;
     private readonly AIStock.Monitor.IAlertNotifier _notifier;
     private readonly ILogger<SelectionDailyJob> _logger;
 
     public SelectionDailyJob(IServiceScopeFactory scopeFactory, ITradingCalendar calendar,
+        MarketSnapshotSyncService snapshot, IWorkerConfigProvider config,
         AIStock.Monitor.IAlertNotifier notifier, ILogger<SelectionDailyJob> logger)
     {
         _scopeFactory = scopeFactory;
         _calendar = calendar;
+        _snapshot = snapshot;
+        _config = config;
         _notifier = notifier;
         _logger = logger;
     }
@@ -269,12 +276,56 @@ public class SelectionDailyJob : IScheduledJob
             _logger.LogDebug("非交易日，每日选股跳过");
             return;
         }
+
+        // 方案A：尾盘选股前先刷一次盘中快照，保证候选数据=选股时点数据（失败不阻断，沿用旧快照继续选）
+        var snapOpt = await _config.GetAsync<MarketSnapshotOptions>(MarketSnapshotOptions.SectionName, ct);
+        if (snapOpt.EnableIntraday && snapOpt.RefreshBeforeTailSelection)
+        {
+            try
+            {
+                var n = await _snapshot.SyncIntradayAsync(ct);
+                _logger.LogInformation("尾盘选股前快照刷新完成：{Count} 只", n);
+            }
+            catch (OperationCanceledException) { throw; }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "尾盘选股前快照刷新失败，沿用现有快照继续选股");
+            }
+        }
+
+        var runStart = DateTime.Now;
         using var scope = _scopeFactory.CreateScope();
         var svc = scope.ServiceProvider.GetRequiredService<AIStock.Selection.SelectionDailyService>();
         var run = await svc.RunAllAsync(ct);
         await _notifier.SendAsync(new AIStock.Monitor.Alert(
             AIStock.Monitor.AlertLevel.Info, "尾盘选股报告",
             run.FormatReport($"📊 {DateTime.Today:MM-dd} 尾盘选股（14:50）")), ct);
+
+        // 尾盘批次自动 LLM 复评 → 建议买入的票自动入交易候选池（供人工次日手动下单）。
+        // 复评开关沿用 SelectionReview:Enabled；未启用则各批次仍为 skipped、候选池不进数据。
+        await AutoReviewNewBatchesAsync(scope, runStart, ct);
+    }
+
+    /// <summary>对本次刚落库的选股批次逐个跑 LLM 复评（复评内部会把建议买入的票写入候选池）。单批失败隔离。</summary>
+    private async Task AutoReviewNewBatchesAsync(IServiceScope scope, DateTime runStart, CancellationToken ct)
+    {
+        var review = scope.ServiceProvider.GetService<AIStock.Selection.Review.SelectionReviewService>();
+        if (review == null) return;
+        var db = scope.ServiceProvider.GetRequiredService<AIStock.Infrastructure.Database.Context.AIStockDbContext>();
+        var newIds = await db.SelectionResult
+            .Where(r => r.RunAt >= runStart)
+            .Select(r => r.Id)
+            .ToListAsync(ct);
+        if (newIds.Count == 0) return;
+
+        _logger.LogInformation("尾盘选股后自动复评 {Count} 个批次（建议买入将入候选池）", newIds.Count);
+        foreach (var id in newIds)
+        {
+            ct.ThrowIfCancellationRequested();
+            try { await review.ReviewBatchAsync(id, ct); }
+            catch (OperationCanceledException) { throw; }
+            catch (Exception ex) { _logger.LogWarning(ex, "尾盘批次 {Id} 自动复评失败，跳过", id); }
+        }
     }
 }
 

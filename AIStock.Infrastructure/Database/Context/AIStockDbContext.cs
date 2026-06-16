@@ -157,6 +157,11 @@ public class AIStockDbContext : DbContext
     /// </summary>
     public DbSet<TradingGateStateEntity> TradingGateState { get; set; }
 
+    /// <summary>
+    /// 交易候选池（每日选股复评后建议买入的票，含 AI 推荐理由+买卖价位，供人工手动下单）
+    /// </summary>
+    public DbSet<TradeCandidateEntity> TradeCandidate { get; set; }
+
     public override int SaveChanges()
     {
         UpdateTimestamps();
@@ -411,6 +416,15 @@ public class AIStockDbContext : DbContext
         {
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Id).ValueGeneratedNever();
+        });
+
+        // 交易候选池（同 交易日+策略+代码 唯一，upsert 不重复入池；按状态/交易日查）
+        modelBuilder.Entity<TradeCandidateEntity>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => new { e.TradingDate, e.Strategy, e.Code }).IsUnique();
+            entity.HasIndex(e => e.Status);
+            entity.HasIndex(e => e.TradingDate);
         });
     }
 }

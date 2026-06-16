@@ -29,6 +29,7 @@ import WorkerConfig from './pages/WorkerConfig';
 import StrategyScoreboard from './pages/StrategyScoreboard';
 import ReplayBacktest from './pages/ReplayBacktest';
 import Intelligence from './pages/Intelligence';
+import TradeCandidates from './pages/TradeCandidates';
 
 function AppShell() {
   const { dark } = useThemeMode();
@@ -42,6 +43,7 @@ function AppShell() {
           <Routes>
             <Route path="/" element={<MainLayout />}>
               <Route index element={<Dashboard />} />
+              <Route path="trade-candidates" element={<TradeCandidates />} />
               <Route path="auto-trading" element={<AutoTrading />} />
               <Route path="positions" element={<Positions />} />
               <Route path="selection" element={<Selection />} />

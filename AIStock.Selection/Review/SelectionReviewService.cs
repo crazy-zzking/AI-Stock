@@ -4,6 +4,7 @@ using AIStock.Core.Enums;
 using AIStock.Core.Interfaces;
 using AIStock.Core.Models;
 using AIStock.Infrastructure.Database.Context;
+using AIStock.Infrastructure.Database.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -110,6 +111,9 @@ public class SelectionReviewService
             row.ReviewedAt = DateTime.Now;
             await _db.SaveChangesAsync(ct);
             _logger.LogInformation("选股复评完成：批次 {Id}，成功 {Ok}/{N}", selectionResultId, ok, topN);
+
+            // 建议买入的票自动入交易候选池（含 AI 理由+买卖价位，供人工手动下单）
+            await UpsertCandidatesAsync(row, targets, ct);
         }
         catch (Exception ex)
         {
@@ -121,6 +125,58 @@ public class SelectionReviewService
             }
             catch { /* ignore */ }
         }
+    }
+
+    /// <summary>
+    /// 把本批次复评为「建议买入」且有买入计划的票 upsert 进交易候选池。
+    /// 同 (交易日+策略+代码) 唯一：已存在则刷新 AI 字段（仅当用户尚未处理 status=0 时），已下单/已忽略的不动。
+    /// </summary>
+    private async Task UpsertCandidatesAsync(SelectionResultEntity row, List<StockSelectionResult> targets, CancellationToken ct)
+    {
+        var buys = targets.Where(t => t.Review is { Recommendation: ReviewRecommendation.Buy, Plan: not null }).ToList();
+        if (buys.Count == 0) return;
+
+        var date = row.TradingDate.Date;
+        var codes = buys.Select(b => b.Code).ToList();
+        var existing = await _db.TradeCandidate
+            .Where(c => c.TradingDate == date && c.Strategy == row.Strategy && codes.Contains(c.Code))
+            .ToDictionaryAsync(c => c.Code, c => c, ct);
+
+        var added = 0; var updated = 0;
+        foreach (var b in buys)
+        {
+            var rv = b.Review!;
+            var plan = rv.Plan!;
+            var riskJson = JsonSerializer.Serialize(rv.RiskFlags ?? new List<string>(), AIStock.Core.Json.AppJson.Default);
+
+            if (existing.TryGetValue(b.Code, out var e))
+            {
+                if (e.Status != 0) continue; // 用户已下单/已忽略，不覆盖
+                e.Name = b.Name; e.StrategyName = row.StrategyName; e.SourceBatchId = row.Id;
+                e.Confidence = rv.Confidence; e.RiskFlags = riskJson; e.Narrative = rv.Narrative;
+                e.RefClose = b.Close;
+                e.BuyLow = plan.BuyLow; e.BuyHigh = plan.BuyHigh; e.StopLoss = plan.StopLoss;
+                e.TakeProfit = plan.TakeProfit; e.PlanBasis = plan.Basis;
+                updated++;
+            }
+            else
+            {
+                _db.TradeCandidate.Add(new TradeCandidateEntity
+                {
+                    TradingDate = date, Code = b.Code, Name = b.Name,
+                    Strategy = row.Strategy, StrategyName = row.StrategyName, SourceBatchId = row.Id,
+                    Recommendation = "buy", Confidence = rv.Confidence, RiskFlags = riskJson,
+                    Narrative = rv.Narrative, RefClose = b.Close,
+                    BuyLow = plan.BuyLow, BuyHigh = plan.BuyHigh, StopLoss = plan.StopLoss,
+                    TakeProfit = plan.TakeProfit, PlanBasis = plan.Basis, Status = 0,
+                });
+                added++;
+            }
+        }
+
+        await _db.SaveChangesAsync(ct);
+        _logger.LogInformation("交易候选池入池：批次 {Id} 策略[{Strategy}] 新增 {Added} 刷新 {Updated}",
+            row.Id, row.Strategy, added, updated);
     }
 
     /// <summary>⑤ 组合视角：把前 N 只的题材/行业/大盘环境整体丢给 LLM，得一段整体研判作上下文。</summary>
@@ -197,7 +253,11 @@ public class SelectionReviewService
         u.AppendLine("  \"riskFlags\": [\"...\"],                  // 风险/排雷标签，无则空数组");
         u.AppendLine("  \"intelligenceNote\": \"...\",            // 消息面是支持还是证伪，一句话；无情报则说明");
         u.AppendLine("  \"narrative\": \"...\",                   // 核心逻辑/看点，一两句");
-        u.AppendLine("  \"priceComment\": \"...\"                 // 仅 buy 时：对买入时机/价位的提示，可空");
+        u.AppendLine("  \"priceComment\": \"...\",                // 仅 buy 时：对买入时机/价位的提示，可空");
+        u.AppendLine($"  \"buyLow\": 0,   // 仅 buy 时：建议买入价区间下沿(元，参考当前价{s.Close:F2})");
+        u.AppendLine("  \"buyHigh\": 0,  // 仅 buy 时：建议买入价区间上沿(元，不追高)");
+        u.AppendLine("  \"stopLoss\": 0, // 仅 buy 时：止损价(元，须 < buyLow)");
+        u.AppendLine("  \"takeProfit\": 0 // 仅 buy 时：止盈价(元，须 > buyHigh，盈亏比建议≈2:1)");
         u.AppendLine("}");
 
         var content = await SendAsync(sys, u.ToString(), ct);
@@ -219,11 +279,12 @@ public class SelectionReviewService
             ReviewedAt = DateTime.Now,
         };
 
-        // 仅"建议买入"给买入计划：价位规则算，LLM 解释追加到 Basis
+        // 仅"建议买入"给买入计划：优先用 LLM 给出的价位；缺失/越界则回落规则算价兜底
         if (rec == ReviewRecommendation.Buy)
         {
-            var plan = PriceLevelCalculator.Compute(bars ?? new List<PriceLevelCalculator.PriceBar>(), s.Close);
             var comment = GetString(el, "priceComment");
+            var plan = BuildPlanFromLlm(el, s.Close)
+                       ?? PriceLevelCalculator.Compute(bars ?? new List<PriceLevelCalculator.PriceBar>(), s.Close);
             if (!string.IsNullOrWhiteSpace(comment))
                 plan.Basis = $"{plan.Basis}｜{comment.Trim()}";
             review.Plan = plan;
@@ -345,6 +406,48 @@ public class SelectionReviewService
             JsonValueKind.Number => p.TryGetInt32(out var v) ? v : (int)Math.Round(p.GetDouble()),
             JsonValueKind.String => int.TryParse(p.GetString(), out var v) ? v : 0,
             _ => 0,
+        };
+    }
+
+    private static decimal GetDecimal(JsonElement e, string name)
+    {
+        if (!e.TryGetProperty(name, out var p)) return 0;
+        return p.ValueKind switch
+        {
+            JsonValueKind.Number => p.TryGetDecimal(out var v) ? v : (decimal)p.GetDouble(),
+            JsonValueKind.String => decimal.TryParse(p.GetString(), out var v) ? v : 0,
+            _ => 0,
+        };
+    }
+
+    /// <summary>
+    /// 从 LLM 输出构造买入计划。四价齐全且满足 止损&lt;买入下沿≤买入上沿&lt;止盈、
+    /// 且都在基准价 ±30% 合理区间内才采纳；否则返回 null 交由规则算价兜底。
+    /// </summary>
+    private static TradePlan? BuildPlanFromLlm(JsonElement el, decimal baseClose)
+    {
+        if (baseClose <= 0) return null;
+        var buyLow = GetDecimal(el, "buyLow");
+        var buyHigh = GetDecimal(el, "buyHigh");
+        var stopLoss = GetDecimal(el, "stopLoss");
+        var takeProfit = GetDecimal(el, "takeProfit");
+
+        if (buyLow <= 0 || buyHigh <= 0 || stopLoss <= 0 || takeProfit <= 0) return null;
+        if (!(stopLoss < buyLow && buyLow <= buyHigh && buyHigh < takeProfit)) return null;
+
+        // 合理性边界：所有价位须落在基准价 ±30% 内，挡掉 LLM 离谱数值
+        var lo = baseClose * 0.7m; var hi = baseClose * 1.3m;
+        if (stopLoss < lo || takeProfit > hi || buyLow < lo || buyHigh > hi) return null;
+
+        decimal R(decimal v) => Math.Round(v, 2);
+        var risk = baseClose - stopLoss;
+        var reward = takeProfit - baseClose;
+        var rr = risk > 0 ? reward / risk : 0;
+        return new TradePlan
+        {
+            BuyLow = R(buyLow), BuyHigh = R(buyHigh), StopLoss = R(stopLoss), TakeProfit = R(takeProfit),
+            Basis = $"LLM 给价：区间{R(buyLow):F2}~{R(buyHigh):F2}，止损{R(stopLoss):F2}，止盈{R(takeProfit):F2}" +
+                    (rr > 0 ? $"（盈亏比≈{rr:F1}:1）" : ""),
         };
     }
 

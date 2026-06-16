@@ -87,6 +87,9 @@ builder.Services.AddSingleton<CapitalFlowSyncService>();
 builder.Services.AddSingleton<ConceptDigestService>();
 // 选股全家桶（每日选股留痕 + 绩效补算用；Scoped，任务内开作用域使用）
 builder.Services.AddSelectionServices();
+// 尾盘选股后自动 LLM 复评 → 入交易候选池所需的复评配置（开关 SelectionReview:Enabled）
+builder.Services.Configure<AIStock.Selection.Review.SelectionReviewOptions>(
+    builder.Configuration.GetSection(AIStock.Selection.Review.SelectionReviewOptions.SectionName));
 
 // 告警通知（任务失败推送企微/钉钉，未配 WebhookUrl 则仅写日志）。
 // 用 AddAlerting 而非 AddMonitorServices：Worker 不需要持仓监控，避免引入 Execution 依赖。
