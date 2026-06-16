@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { ConfigProvider, theme } from 'antd';
 import zhCN from 'antd/locale/zh_CN';
 import { ThemeProvider, useThemeMode } from './contexts/ThemeContext';
+import { BRAND_PRIMARY, UP_COLOR, DOWN_COLOR, FONT_MONO } from './theme/tokens';
 import ErrorBoundary from './components/ErrorBoundary';
 import MainLayout from './layouts/MainLayout';
 import Dashboard from './pages/Dashboard';
@@ -36,7 +37,22 @@ function AppShell() {
   return (
     <ConfigProvider
       locale={zhCN}
-      theme={{ algorithm: dark ? theme.darkAlgorithm : theme.defaultAlgorithm }}
+      theme={{
+        algorithm: dark ? theme.darkAlgorithm : theme.defaultAlgorithm,
+        token: {
+          // 品牌色
+          colorPrimary: BRAND_PRIMARY,
+          // A股涨跌色：红涨绿跌（已反直觉映射到 error/success）
+          colorError: UP_COLOR,
+          colorSuccess: DOWN_COLOR,
+          // 圆角
+          borderRadius: 6,
+          // 等宽数字字体
+          fontFamilyCode: FONT_MONO,
+          // 轻微降低默认字号，适配数据密集场景
+          fontSize: 14,
+        },
+      }}
     >
       <ErrorBoundary>
         <BrowserRouter>

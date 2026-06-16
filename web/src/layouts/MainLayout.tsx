@@ -11,6 +11,7 @@ import {
 import { useNavigate, useLocation, useOutlet } from 'react-router-dom';
 import { KeepAlive, useKeepAliveRef } from 'keepalive-for-react';
 import { useThemeMode } from '../contexts/ThemeContext';
+import { SIDER_DARK_BG } from '../theme/tokens';
 import { getTradingStatus } from '../api';
 
 const { Header, Sider, Content } = Layout;
@@ -231,7 +232,7 @@ const MainLayout: React.FC = () => {
           onClose={() => setDrawerOpen(false)}
           width={220}
           closable={false}
-          styles={{ body: { padding: 0, background: '#001529' }, header: { display: 'none' } }}
+          styles={{ body: { padding: 0, background: SIDER_DARK_BG }, header: { display: 'none' } }}
         >
           <div style={{ height: 48, margin: 12, color: '#fff', fontSize: 18, fontWeight: 'bold', textAlign: 'center', lineHeight: '48px' }}>
             AI-Stock

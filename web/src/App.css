@@ -1,1 +1,25 @@
-/* 全局应用样式（CRA 默认模板样式已移除，布局交由 antd Layout/主题 token 管理） */
+/* 全局应用样式（布局交由 antd Layout/主题 token 管理） */
+
+/* ---- 暗色模式滚动条 ---- */
+@media (prefers-color-scheme: dark) {
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: #1a1a2e;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #444;
+    border-radius: 3px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #666;
+  }
+}
+
+/* ---- 行情数字等宽字体全局兜底 ---- */
+[data-mono] {
+  font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+}
