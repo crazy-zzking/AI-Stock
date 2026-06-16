@@ -88,6 +88,7 @@ const Sector: React.FC = () => {
           pagination={false}
           dataSource={strongStocks}
           rowKey="code"
+          scroll={{ x: 560 }}
           columns={[
             { title: '代码', dataIndex: 'code', key: 'code' },
             { title: '名称', dataIndex: 'name', key: 'name' },

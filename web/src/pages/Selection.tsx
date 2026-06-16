@@ -89,9 +89,9 @@ const Selection: React.FC = () => {
 
   return (
     <div>
-      <h2 style={{ marginBottom: 12 }}>
-        明日可介入 — 短线弹性品种 TOP{topN}
-        <Space style={{ marginLeft: 16 }}>
+      <h2 style={{ marginBottom: 12, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8 }}>
+        <span>明日可介入 — 短线弹性品种 TOP{topN}</span>
+        <Space wrap>
           <Tooltip title={currentStrategy ? `${currentStrategy.description}（适用：${currentStrategy.preferredRegime}）` : '选择选股策略'}>
             <Select
               size="small"

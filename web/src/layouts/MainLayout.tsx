@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Layout, Menu, Tabs, Dropdown, Tag, Button, Tooltip, theme } from 'antd';
+import { Layout, Menu, Tabs, Dropdown, Tag, Button, Tooltip, theme, Grid, Drawer } from 'antd';
 import {
   DashboardOutlined, StockOutlined, RobotOutlined, SettingOutlined, ThunderboltOutlined,
   ApartmentOutlined, HistoryOutlined, ControlOutlined, NodeIndexOutlined, SearchOutlined,
@@ -83,8 +83,11 @@ const MainLayout: React.FC = () => {
   const path = location.pathname;
   const { token } = theme.useToken();
   const { dark, toggle } = useThemeMode();
+  const screens = Grid.useBreakpoint();
+  const isMobile = screens.md === false; // <768px：手机端外壳（抽屉菜单 + 隐藏标签栏）
 
   const [collapsed, setCollapsed] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const [openTabs, setOpenTabs] = useState<string[]>(loadTabs);
   const [openKeys, setOpenKeys] = useState<string[]>(() => {
     const g = groupOfPath(path);
@@ -177,6 +180,24 @@ const MainLayout: React.FC = () => {
     [openTabs],
   );
 
+  // 菜单元素（Sider 与移动端 Drawer 共用）；移动端点击后自动关闭抽屉
+  const menuEl = (
+    <Menu
+      theme="dark"
+      mode="inline"
+      selectedKeys={[path]}
+      openKeys={openKeys}
+      onOpenChange={(keys) => setOpenKeys(keys as string[])}
+      items={menuItems}
+      onClick={({ key }) => {
+        if (!key.startsWith('g-')) {
+          navigate(key);
+          if (isMobile) setDrawerOpen(false);
+        }
+      }}
+    />
+  );
+
   const modeTag = tradeStatus && (
     tradeStatus.mode === 'Live'
       ? <Tag color="red">实盘</Tag>
@@ -185,38 +206,47 @@ const MainLayout: React.FC = () => {
 
   return (
     <Layout style={{ height: '100vh' }}>
-      <Sider
-        theme="dark"
-        width={200}
-        collapsible
-        collapsed={collapsed}
-        trigger={null}
-        breakpoint="lg"
-        onBreakpoint={(broken) => setCollapsed(broken)}
-        style={{ overflow: 'auto' }}
-      >
-        <div style={{ height: 48, margin: 12, color: '#fff', fontSize: collapsed ? 14 : 18, fontWeight: 'bold', textAlign: 'center', lineHeight: '48px', whiteSpace: 'nowrap', overflow: 'hidden' }}>
-          {collapsed ? 'AI' : 'AI-Stock'}
-        </div>
-        <Menu
+      {!isMobile && (
+        <Sider
           theme="dark"
-          mode="inline"
-          selectedKeys={[path]}
-          openKeys={openKeys}
-          onOpenChange={(keys) => setOpenKeys(keys as string[])}
-          items={menuItems}
-          onClick={({ key }) => { if (!key.startsWith('g-')) navigate(key); }}
-        />
-      </Sider>
+          width={200}
+          collapsible
+          collapsed={collapsed}
+          trigger={null}
+          breakpoint="lg"
+          onBreakpoint={(broken) => setCollapsed(broken)}
+          style={{ overflow: 'auto' }}
+        >
+          <div style={{ height: 48, margin: 12, color: '#fff', fontSize: collapsed ? 14 : 18, fontWeight: 'bold', textAlign: 'center', lineHeight: '48px', whiteSpace: 'nowrap', overflow: 'hidden' }}>
+            {collapsed ? 'AI' : 'AI-Stock'}
+          </div>
+          {menuEl}
+        </Sider>
+      )}
+      {isMobile && (
+        <Drawer
+          placement="left"
+          open={drawerOpen}
+          onClose={() => setDrawerOpen(false)}
+          width={220}
+          closable={false}
+          styles={{ body: { padding: 0, background: '#001529' }, header: { display: 'none' } }}
+        >
+          <div style={{ height: 48, margin: 12, color: '#fff', fontSize: 18, fontWeight: 'bold', textAlign: 'center', lineHeight: '48px' }}>
+            AI-Stock
+          </div>
+          {menuEl}
+        </Drawer>
+      )}
       <Layout>
         <Header style={{ display: 'flex', alignItems: 'center', background: token.colorBgContainer, padding: '0 16px', borderBottom: `1px solid ${token.colorBorderSecondary}` }}>
           <Button
             type="text"
-            icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
-            onClick={() => setCollapsed((c) => !c)}
+            icon={isMobile ? <MenuUnfoldOutlined /> : (collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />)}
+            onClick={() => (isMobile ? setDrawerOpen(true) : setCollapsed((c) => !c))}
             style={{ fontSize: 16 }}
           />
-          <span style={{ fontSize: 16, fontWeight: 600, marginLeft: 8 }}>AI 自主交易系统</span>
+          <span style={{ fontSize: 16, fontWeight: 600, marginLeft: 8 }}>{isMobile ? 'AI 选股' : 'AI 自主交易系统'}</span>
           <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
             {modeTag}
             {tradeStatus?.halted && <Tag color="red">熔断</Tag>}
@@ -225,17 +255,19 @@ const MainLayout: React.FC = () => {
             </Tooltip>
           </div>
         </Header>
-        <Tabs
-          type="editable-card"
-          hideAdd
-          activeKey={path}
-          items={tabItems}
-          onChange={(key) => navigate(key)}
-          onEdit={(targetKey, action) => { if (action === 'remove') removeTab(targetKey as string); }}
-          style={{ flex: 'none', padding: '6px 12px 0', background: token.colorBgContainer, borderBottom: `1px solid ${token.colorBorderSecondary}` }}
-          tabBarStyle={{ marginBottom: 0 }}
-        />
-        <Content style={{ flex: 1, overflow: 'auto', margin: 16, padding: 20, background: token.colorBgContainer, borderRadius: 8 }}>
+        {!isMobile && (
+          <Tabs
+            type="editable-card"
+            hideAdd
+            activeKey={path}
+            items={tabItems}
+            onChange={(key) => navigate(key)}
+            onEdit={(targetKey, action) => { if (action === 'remove') removeTab(targetKey as string); }}
+            style={{ flex: 'none', padding: '6px 12px 0', background: token.colorBgContainer, borderBottom: `1px solid ${token.colorBorderSecondary}` }}
+            tabBarStyle={{ marginBottom: 0 }}
+          />
+        )}
+        <Content style={{ flex: 1, overflow: 'auto', margin: isMobile ? 8 : 16, padding: isMobile ? 12 : 20, background: token.colorBgContainer, borderRadius: 8 }}>
           <KeepAlive activeCacheKey={path} aliveRef={aliveRef} max={20}>
             {outlet}
           </KeepAlive>
