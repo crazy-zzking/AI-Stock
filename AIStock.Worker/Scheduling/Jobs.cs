@@ -301,31 +301,28 @@ public class SelectionDailyJob : IScheduledJob
             AIStock.Monitor.AlertLevel.Info, "尾盘选股报告",
             run.FormatReport($"📊 {DateTime.Today:MM-dd} 尾盘选股（14:50）")), ct);
 
-        // 尾盘批次自动 LLM 复评 → 建议买入的票自动入交易候选池（供人工次日手动下单）。
-        // 复评开关沿用 SelectionReview:Enabled；未启用则各批次仍为 skipped、候选池不进数据。
-        await AutoReviewNewBatchesAsync(scope, runStart, ct);
+        // 尾盘选股后：把本次批次去重后入交易候选池（纯规则，含核心逻辑+规则算价，供人工次日手动下单）
+        await PopulateCandidatePoolAsync(scope, runStart, ct);
     }
 
-    /// <summary>对本次刚落库的选股批次逐个跑 LLM 复评（复评内部会把建议买入的票写入候选池）。单批失败隔离。</summary>
-    private async Task AutoReviewNewBatchesAsync(IServiceScope scope, DateTime runStart, CancellationToken ct)
+    /// <summary>把本次刚落库的选股批次去重入交易候选池。失败隔离，不影响选股留痕。</summary>
+    private async Task PopulateCandidatePoolAsync(IServiceScope scope, DateTime runStart, CancellationToken ct)
     {
-        var review = scope.ServiceProvider.GetService<AIStock.Selection.Review.SelectionReviewService>();
-        if (review == null) return;
-        var db = scope.ServiceProvider.GetRequiredService<AIStock.Infrastructure.Database.Context.AIStockDbContext>();
-        var newIds = await db.SelectionResult
-            .Where(r => r.RunAt >= runStart)
-            .Select(r => r.Id)
-            .ToListAsync(ct);
-        if (newIds.Count == 0) return;
-
-        _logger.LogInformation("尾盘选股后自动复评 {Count} 个批次（建议买入将入候选池）", newIds.Count);
-        foreach (var id in newIds)
+        try
         {
-            ct.ThrowIfCancellationRequested();
-            try { await review.ReviewBatchAsync(id, ct); }
-            catch (OperationCanceledException) { throw; }
-            catch (Exception ex) { _logger.LogWarning(ex, "尾盘批次 {Id} 自动复评失败，跳过", id); }
+            var db = scope.ServiceProvider.GetRequiredService<AIStock.Infrastructure.Database.Context.AIStockDbContext>();
+            var newIds = await db.SelectionResult
+                .Where(r => r.RunAt >= runStart)
+                .Select(r => r.Id)
+                .ToListAsync(ct);
+            if (newIds.Count == 0) return;
+
+            var pool = scope.ServiceProvider.GetRequiredService<AIStock.Selection.TradeCandidateService>();
+            var n = await pool.PopulateFromBatchesAsync(newIds, ct);
+            _logger.LogInformation("尾盘选股后候选池入池完成：{Count} 条", n);
         }
+        catch (OperationCanceledException) { throw; }
+        catch (Exception ex) { _logger.LogWarning(ex, "候选池入池失败，跳过（不影响选股留痕）"); }
     }
 }
 

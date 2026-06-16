@@ -4,9 +4,9 @@ using System.ComponentModel.DataAnnotations.Schema;
 namespace AIStock.Infrastructure.Database.Entities;
 
 /// <summary>
-/// 交易候选池：每日选股经 LLM 复评后「建议买入(buy)」的票自动入池，
-/// 携带 AI 推荐理由 + 买入价/止损/止盈，供人工在交易页一键手动下单。
-/// 同 (交易日 + 策略 + 代码) 唯一，复评重跑时 upsert（不重复入池）。
+/// 交易候选池：每日尾盘选股后，把当日各策略选出的票按代码去重（保留最高分，记录被哪些策略命中）
+/// 落入本表，携带规则化推荐理由(核心逻辑) + 规则算出的买入价/止损/止盈，供人工在交易页一键手动下单。
+/// 不依赖 LLM。同 (交易日 + 代码) 唯一，重跑时 upsert（不重复入池）。
 /// </summary>
 [Table("trade_candidate")]
 public class TradeCandidateEntity
@@ -27,34 +27,41 @@ public class TradeCandidateEntity
     [StringLength(50)]
     public string Name { get; set; } = string.Empty;
 
-    /// <summary>来源策略键</summary>
-    [Column("strategy")]
+    /// <summary>综合评分（取命中策略中的最高分）</summary>
+    [Column("score")]
+    public decimal Score { get; set; }
+
+    /// <summary>星级评级（0-5）</summary>
+    [Column("rating_stars")]
+    public int RatingStars { get; set; }
+
+    /// <summary>命中题材标签（JSON 数组字符串）</summary>
+    [Column("tags")]
+    public string Tags { get; set; } = "[]";
+
+    /// <summary>最高分来源策略键</summary>
+    [Column("top_strategy")]
     [StringLength(50)]
-    public string Strategy { get; set; } = string.Empty;
+    public string TopStrategy { get; set; } = string.Empty;
 
-    /// <summary>来源策略显示名</summary>
-    [Column("strategy_name")]
+    /// <summary>最高分来源策略显示名</summary>
+    [Column("top_strategy_name")]
     [StringLength(80)]
-    public string StrategyName { get; set; } = string.Empty;
+    public string TopStrategyName { get; set; } = string.Empty;
 
-    /// <summary>来源选股批次 selection_result.id</summary>
+    /// <summary>命中的所有策略显示名（JSON 数组字符串；多策略命中＝信号更强）</summary>
+    [Column("hit_strategies")]
+    public string HitStrategies { get; set; } = "[]";
+
+    /// <summary>命中策略数</summary>
+    [Column("hit_count")]
+    public int HitCount { get; set; }
+
+    /// <summary>来源选股批次 selection_result.id（最高分那条）</summary>
     [Column("source_batch_id")]
     public long SourceBatchId { get; set; }
 
-    /// <summary>LLM 建议等级（入池恒为 buy，预留）</summary>
-    [Column("recommendation")]
-    [StringLength(20)]
-    public string Recommendation { get; set; } = "buy";
-
-    /// <summary>置信度 0-100</summary>
-    [Column("confidence")]
-    public int Confidence { get; set; }
-
-    /// <summary>风险/排雷标签（JSON 数组字符串）</summary>
-    [Column("risk_flags")]
-    public string RiskFlags { get; set; } = "[]";
-
-    /// <summary>AI 推荐理由（核心逻辑/看点）</summary>
+    /// <summary>推荐理由（规则核心逻辑）</summary>
     [Column("narrative")]
     [StringLength(1000)]
     public string Narrative { get; set; } = string.Empty;

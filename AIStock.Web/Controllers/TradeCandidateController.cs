@@ -51,11 +51,11 @@ public class TradeCandidateController : ControllerBase
             q = q.Where(c => c.TradingDate >= DateTime.Today.AddDays(-days));
 
         if (status >= 0) q = q.Where(c => c.Status == status);
-        if (!string.IsNullOrEmpty(strategy)) q = q.Where(c => c.Strategy == strategy);
+        if (!string.IsNullOrEmpty(strategy)) q = q.Where(c => c.TopStrategy == strategy);
 
         var rows = await q
             .OrderByDescending(c => c.TradingDate)
-            .ThenByDescending(c => c.Confidence)
+            .ThenByDescending(c => c.Score)
             .Take(500)
             .ToListAsync(ct);
 
@@ -87,7 +87,7 @@ public class TradeCandidateController : ControllerBase
             OrderType = OrderType.Limit,
             Price = price,
             Volume = volume,
-            StrategyName = $"{c.Strategy}-candidate",
+            StrategyName = $"{c.TopStrategy}-candidate",
             SignalId = $"candidate-{c.Id}",
         };
 
@@ -121,9 +121,12 @@ public class TradeCandidateController : ControllerBase
 
     private static object ToDto(TradeCandidateEntity c)
     {
-        List<string> riskFlags;
-        try { riskFlags = JsonSerializer.Deserialize<List<string>>(c.RiskFlags) ?? new(); }
-        catch { riskFlags = new(); }
+        List<string> tags;
+        try { tags = JsonSerializer.Deserialize<List<string>>(c.Tags) ?? new(); }
+        catch { tags = new(); }
+        List<string> hitStrategies;
+        try { hitStrategies = JsonSerializer.Deserialize<List<string>>(c.HitStrategies) ?? new(); }
+        catch { hitStrategies = new(); }
 
         decimal rr = 0;
         var risk = c.RefClose - c.StopLoss;
@@ -136,10 +139,13 @@ public class TradeCandidateController : ControllerBase
             tradingDate = c.TradingDate,
             code = c.Code,
             name = c.Name,
-            strategy = c.Strategy,
-            strategyName = c.StrategyName,
-            confidence = c.Confidence,
-            riskFlags,
+            score = c.Score,
+            ratingStars = c.RatingStars,
+            tags,
+            topStrategy = c.TopStrategy,
+            topStrategyName = c.TopStrategyName,
+            hitStrategies,
+            hitCount = c.HitCount,
             narrative = c.Narrative,
             refClose = c.RefClose,
             buyLow = c.BuyLow,

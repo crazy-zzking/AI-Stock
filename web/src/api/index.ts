@@ -57,10 +57,13 @@ export interface TradeCandidate {
   tradingDate: string;
   code: string;
   name: string;
-  strategy: string;
-  strategyName: string;
-  confidence: number;
-  riskFlags: string[];
+  score: number;
+  ratingStars: number;
+  tags: string[];
+  topStrategy: string;
+  topStrategyName: string;
+  hitStrategies: string[];
+  hitCount: number;
   narrative: string;
   refClose: number;
   buyLow: number;

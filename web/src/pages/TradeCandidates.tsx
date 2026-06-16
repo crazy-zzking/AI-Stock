@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   Card, Table, Tag, Button, Space, Segmented, message, Modal, InputNumber,
-  Tooltip, Typography, Popconfirm, Row, Col,
+  Tooltip, Typography, Popconfirm, Row, Col, Rate,
 } from 'antd';
 import { ReloadOutlined, ShoppingCartOutlined } from '@ant-design/icons';
 import { getTradeCandidates, orderTradeCandidate, ignoreTradeCandidate } from '../api';
@@ -92,19 +92,41 @@ const TradeCandidates: React.FC = () => {
         <span>{r.name} <Text type="secondary" style={{ fontSize: 12 }}>{r.code}</Text></span>
       ),
     },
-    { title: '策略', dataIndex: 'strategyName', width: 110, render: (v: string) => <Tag color="purple">{v}</Tag> },
-    { title: '置信度', dataIndex: 'confidence', width: 80, sorter: (a: TradeCandidate, b: TradeCandidate) => a.confidence - b.confidence, render: (v: number) => `${v}` },
     {
-      title: 'AI 推荐理由', dataIndex: 'narrative', width: 280,
-      render: (v: string) => (
-        <Tooltip title={v}><Paragraph ellipsis={{ rows: 2 }} style={{ marginBottom: 0, maxWidth: 280 }}>{v || '—'}</Paragraph></Tooltip>
+      title: '策略', key: 'strategy', width: 140,
+      render: (_: unknown, r: TradeCandidate) => (
+        <span>
+          <Tag color="purple">{r.topStrategyName}</Tag>
+          {r.hitCount > 1 && (
+            <Tooltip title={`命中策略：${r.hitStrategies.join('、')}`}>
+              <Tag color="red">{r.hitCount}策略共振</Tag>
+            </Tooltip>
+          )}
+        </span>
       ),
     },
     {
-      title: '风险', dataIndex: 'riskFlags', width: 140,
-      render: (flags: string[]) => flags?.length
-        ? flags.map((f) => <Tag color="orange" key={f}>{f}</Tag>)
+      title: '评分/评级', key: 'score', width: 130,
+      sorter: (a: TradeCandidate, b: TradeCandidate) => a.score - b.score,
+      defaultSortOrder: 'descend' as const,
+      render: (_: unknown, r: TradeCandidate) => (
+        <span>
+          {Math.round(r.score)}
+          <Rate disabled value={r.ratingStars} style={{ fontSize: 11, marginLeft: 6 }} />
+        </span>
+      ),
+    },
+    {
+      title: '题材标签', dataIndex: 'tags', width: 160,
+      render: (tags: string[]) => tags?.length
+        ? tags.map((t) => <Tag color="blue" key={t}>{t}</Tag>)
         : <Text type="secondary">—</Text>,
+    },
+    {
+      title: '推荐理由', dataIndex: 'narrative', width: 280,
+      render: (v: string) => (
+        <Tooltip title={v}><Paragraph ellipsis={{ rows: 2 }} style={{ marginBottom: 0, maxWidth: 280 }}>{v || '—'}</Paragraph></Tooltip>
+      ),
     },
     { title: '参考价', dataIndex: 'refClose', width: 75, render: price },
     {
@@ -175,7 +197,7 @@ const TradeCandidates: React.FC = () => {
           locale={{ emptyText: '暂无候选（每日选股 + LLM 复评后「建议买入」的票会自动入池）' }}
         />
         <div style={{ marginTop: 8, color: '#999', fontSize: 12 }}>
-          说明：候选由每日选股经 LLM 复评后自动生成，买入价/止损/止盈由 LLM 给出。下单经交易闸门（{mode === 'Live' ? '实盘' : '模拟下单，不实际发单'}）。
+          说明：候选由每日尾盘选股后自动生成（跨策略去重，多策略命中标「共振」）；推荐理由＝规则核心逻辑，买入价/止损/止盈＝规则算价（盈亏比≈2:1）。下单经交易闸门（{mode === 'Live' ? '实盘' : '模拟下单，不实际发单'}）。
         </div>
       </Card>
 
@@ -190,7 +212,7 @@ const TradeCandidates: React.FC = () => {
         {target && (
           <div style={{ lineHeight: 2 }}>
             <div>
-              AI 建议：买入 <Text strong style={{ color: '#1677ff' }}>{price(target.buyLow)}~{price(target.buyHigh)}</Text>，
+              建议：买入 <Text strong style={{ color: '#1677ff' }}>{price(target.buyLow)}~{price(target.buyHigh)}</Text>，
               止损 <Text style={{ color: '#3f8600' }}>{price(target.stopLoss)}</Text>，
               止盈 <Text style={{ color: '#cf1322' }}>{price(target.takeProfit)}</Text>
               {target.riskReward > 0 && <Text type="secondary">（盈亏比 {target.riskReward}:1）</Text>}

@@ -418,11 +418,11 @@ public class AIStockDbContext : DbContext
             entity.Property(e => e.Id).ValueGeneratedNever();
         });
 
-        // 交易候选池（同 交易日+策略+代码 唯一，upsert 不重复入池；按状态/交易日查）
+        // 交易候选池（同 交易日+代码 唯一，跨策略去重 upsert；按状态/交易日查）
         modelBuilder.Entity<TradeCandidateEntity>(entity =>
         {
             entity.HasKey(e => e.Id);
-            entity.HasIndex(e => new { e.TradingDate, e.Strategy, e.Code }).IsUnique();
+            entity.HasIndex(e => new { e.TradingDate, e.Code }).IsUnique();
             entity.HasIndex(e => e.Status);
             entity.HasIndex(e => e.TradingDate);
         });
