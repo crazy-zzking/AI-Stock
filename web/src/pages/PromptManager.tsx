@@ -202,7 +202,7 @@ const PromptManager: React.FC = () => {
         open={detailOpen}
         onCancel={() => setDetailOpen(false)}
         footer={null}
-        width={700}
+        width="min(700px, 94vw)"
         loading={detailLoading}
       >
         {detail && (
@@ -246,12 +246,12 @@ const PromptManager: React.FC = () => {
         open={editorOpen}
         onOk={handleSave}
         onCancel={() => setEditorOpen(false)}
-        width={750}
+        width="min(750px, 94vw)"
         confirmLoading={saving}
         destroyOnClose
       >
         <Form<PromptTemplate> form={editForm} layout="vertical" initialValues={defaultTemplate}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 16px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0 16px' }}>
             <Form.Item name="name" label="名称" rules={[{ required: true, message: '请输入名称' }]}>
               <Input placeholder="如 trend-analysis" disabled={editing} />
             </Form.Item>

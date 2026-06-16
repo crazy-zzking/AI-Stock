@@ -211,6 +211,7 @@ const StrategyManager: React.FC = () => {
           columns={columns as any}
           dataSource={rows}
           rowKey="key"
+          scroll={{ x: 'max-content' }}
           loading={loading}
           pagination={false}
           size="small"
@@ -225,7 +226,7 @@ const StrategyManager: React.FC = () => {
         confirmLoading={saving}
         okText="保存"
         cancelText="取消"
-        width={760}
+        width="min(760px, 94vw)"
         destroyOnClose
       >
         <Form form={form} layout="vertical" style={{ marginTop: 8 }}>
@@ -248,7 +249,7 @@ const StrategyManager: React.FC = () => {
 
           <div style={SEC_TITLE}>基本信息</div>
           <Row gutter={16}>
-            <Col span={8}>
+            <Col xs={24} sm={12} md={8}>
               <Form.Item
                 name="key" label="策略 Key（唯一）"
                 rules={[
@@ -259,12 +260,12 @@ const StrategyManager: React.FC = () => {
                 <Input placeholder="如 lowdip_v3" />
               </Form.Item>
             </Col>
-            <Col span={8}>
+            <Col xs={24} sm={12} md={8}>
               <Form.Item name="name" label="展示名" rules={[{ required: true, message: '必填' }]}>
                 <Input placeholder="如 低吸加强版" />
               </Form.Item>
             </Col>
-            <Col span={8}>
+            <Col xs={24} sm={12} md={8}>
               <Form.Item name="preferredRegime" label="适用大盘环境">
                 <Input placeholder="如 弱市 / 震荡市" />
               </Form.Item>
@@ -276,7 +277,7 @@ const StrategyManager: React.FC = () => {
 
           <div style={SEC_TITLE}>因子口径 / 惩罚</div>
           <Row gutter={16}>
-            <Col span={8}>
+            <Col xs={24} sm={12} md={8}>
               <Form.Item name={['factorKinds', 'technical']} label="技术因子口径" rules={[{ required: true }]}>
                 <Select
                   options={[
@@ -286,7 +287,7 @@ const StrategyManager: React.FC = () => {
                 />
               </Form.Item>
             </Col>
-            <Col span={8}>
+            <Col xs={24} sm={12} md={8}>
               <Form.Item name={['factorKinds', 'position']} label="位置因子口径" rules={[{ required: true }]}>
                 <Select
                   options={[
@@ -296,7 +297,7 @@ const StrategyManager: React.FC = () => {
                 />
               </Form.Item>
             </Col>
-            <Col span={8}>
+            <Col xs={24} sm={12} md={8}>
               <Form.Item name="penalty" label="惩罚口径" rules={[{ required: true }]}>
                 <Select
                   options={[
@@ -311,7 +312,7 @@ const StrategyManager: React.FC = () => {
           <div style={SEC_TITLE}>硬过滤开关</div>
           <Row gutter={16}>
             {FILTER_FIELDS.map((f) => (
-              <Col span={8} key={f.key}>
+              <Col xs={24} sm={12} md={8} key={f.key}>
                 <Form.Item
                   name={['filters', f.key]} label={<Tooltip title={f.tip}>{f.label}</Tooltip>}
                   valuePropName="checked"
@@ -320,7 +321,7 @@ const StrategyManager: React.FC = () => {
                 </Form.Item>
               </Col>
             ))}
-            <Col span={8}>
+            <Col xs={24} sm={12} md={8}>
               <Form.Item
                 name={['filters', 'extremeRise20d']}
                 label={<Tooltip title="20日涨幅极端硬顶(%)，留空不限；趋势用较大值如100只挡极端透支">极端追高硬顶(%)</Tooltip>}
@@ -332,7 +333,7 @@ const StrategyManager: React.FC = () => {
 
           <div style={SEC_TITLE}>K线形态过滤（可与上面的因子过滤组合）</div>
           <Row gutter={16}>
-            <Col span={12}>
+            <Col xs={24} sm={12}>
               <Form.Item
                 name={['filters', 'requirePatterns']}
                 label={<Tooltip title="要求命中的 K 线形态；留空=不做形态过滤。选了即对该策略启用形态硬过滤">要求命中的形态（留空=不启用）</Tooltip>}
@@ -346,7 +347,7 @@ const StrategyManager: React.FC = () => {
                 />
               </Form.Item>
             </Col>
-            <Col span={6}>
+            <Col xs={12} sm={6}>
               <Form.Item
                 name={['filters', 'requireAllPatterns']}
                 label={<Tooltip title="开=必须同时命中所选全部形态；关=命中任一即可">命中要求</Tooltip>}
@@ -355,7 +356,7 @@ const StrategyManager: React.FC = () => {
                 <Switch checkedChildren="全部命中" unCheckedChildren="命中任一" />
               </Form.Item>
             </Col>
-            <Col span={6}>
+            <Col xs={12} sm={6}>
               <Form.Item
                 name="scanFullUniverse"
                 label={<Tooltip title="开=跳过活跃度粗筛、扫描全市场（形态策略建议开，形态可能出现在非活跃股）">全市场扫描</Tooltip>}
@@ -368,12 +369,12 @@ const StrategyManager: React.FC = () => {
 
           <Divider style={{ margin: '4px 0 16px' }} />
           <Row gutter={16}>
-            <Col span={12}>
+            <Col xs={24} sm={12}>
               <Form.Item name="coreLogicTemplate" label="核心逻辑文案模板（留空用通用模板）">
                 <Input placeholder="如 低吸加强版：左侧埋伏，低位温和放量" />
               </Form.Item>
             </Col>
-            <Col span={12}>
+            <Col xs={24} sm={12}>
               <Form.Item name="enabled" label="启用（停用则不进策略池）" valuePropName="checked">
                 <Switch checkedChildren="启用" unCheckedChildren="停用" />
               </Form.Item>

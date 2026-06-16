@@ -98,7 +98,7 @@ const Review: React.FC = () => {
           {/* 领涨个股 + 涨因 */}
           <Card title="领涨个股 · 为什么涨" size="small" style={{ marginBottom: 16 }}>
             <Table
-              size="small" pagination={false} rowKey="code" dataSource={r.topStocks}
+              size="small" pagination={false} rowKey="code" dataSource={r.topStocks} scroll={{ x: 'max-content' }}
               columns={[
                 { title: '名称', key: 'name', render: (_: unknown, s: StockItem) => (
                   <span>{s.name} <Text type="secondary" style={{ fontSize: 12 }}>{s.code}</Text>{s.isLimitUp && <Tag color="red" style={{ marginLeft: 4 }}>涨停</Tag>}</span>
@@ -113,7 +113,7 @@ const Review: React.FC = () => {
           {/* 领涨板块 */}
           <Card title="领涨板块" size="small">
             <Table
-              size="small" pagination={false} rowKey="sectorName" dataSource={r.topSectors}
+              size="small" pagination={false} rowKey="sectorName" dataSource={r.topSectors} scroll={{ x: 'max-content' }}
               locale={{ emptyText: '板块数据不可用（东财接口/隧道代理）' }}
               columns={[
                 { title: '板块', dataIndex: 'sectorName' },

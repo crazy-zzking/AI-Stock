@@ -106,6 +106,7 @@ const Agents: React.FC = () => {
           dataSource={agents} 
           rowKey="agentId"
           loading={loading}
+          scroll={{ x: 'max-content' }}
           pagination={false}
         />
       </Card>
@@ -114,7 +115,7 @@ const Agents: React.FC = () => {
         open={modalVisible}
         onCancel={() => setModalVisible(false)}
         footer={null}
-        width={700}
+        width="min(700px, 94vw)"
       >
         <ResultPanel result={result} mode={resultMode} />
       </Modal>

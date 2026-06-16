@@ -128,7 +128,7 @@ const KnowledgeGraph: React.FC = () => {
 
       {/* 候选关系图谱 — graph_candidate_edge（情报推断，含未晋升线索） */}
       <Card title="候选关系图谱（情报推断 · graph_candidate_edge）" style={{ marginBottom: 16 }}>
-        <Space style={{ marginBottom: 12 }}>
+        <Space wrap style={{ marginBottom: 12 }}>
           <span style={{ fontWeight: 500 }}>边类型:</span>
           <Select
             value={candEdgeType}
@@ -183,11 +183,12 @@ const KnowledgeGraph: React.FC = () => {
 
       <Row gutter={16}>
         {/* 产业链公司列表 */}
-        <Col span={10}>
+        <Col xs={24} md={10}>
           <Card title={`${selectedChain || ''} — 公司列表`} style={{ marginBottom: 16 }}>
             <Table
               size="small"
               pagination={false}
+              scroll={{ x: 'max-content' }}
               dataSource={chainCompanies}
               rowKey="code"
               columns={[
@@ -207,7 +208,7 @@ const KnowledgeGraph: React.FC = () => {
         </Col>
 
         {/* 公司关系详情 */}
-        <Col span={14}>
+        <Col xs={24} md={14}>
           {selectedCompany ? (
             <Tabs
               items={[
@@ -230,6 +231,7 @@ const KnowledgeGraph: React.FC = () => {
                     <Table
                       size="small"
                       pagination={false}
+                      scroll={{ x: 'max-content' }}
                       dataSource={relations}
                       rowKey="relatedCode"
                       columns={[
@@ -249,6 +251,7 @@ const KnowledgeGraph: React.FC = () => {
                     <Table
                       size="small"
                       pagination={false}
+                      scroll={{ x: 'max-content' }}
                       dataSource={suppliers}
                       rowKey="code"
                       columns={[
@@ -267,6 +270,7 @@ const KnowledgeGraph: React.FC = () => {
                     <Table
                       size="small"
                       pagination={false}
+                      scroll={{ x: 'max-content' }}
                       dataSource={customers}
                       rowKey="code"
                       columns={[
@@ -290,7 +294,7 @@ const KnowledgeGraph: React.FC = () => {
 
       {/* 概念扩散推演 + 关系路径查找 */}
       <Row gutter={16} style={{ marginTop: 16 }}>
-        <Col span={12}>
+        <Col xs={24} sm={12}>
           <Card title="概念扩散推演" size="small">
             <Space direction="vertical" style={{ width: '100%' }}>
               <Input placeholder="核心事件（如：某政策利好半导体）" value={diffEvent} onChange={(e) => setDiffEvent(e.target.value)} />
@@ -312,7 +316,7 @@ const KnowledgeGraph: React.FC = () => {
             </Space>
           </Card>
         </Col>
-        <Col span={12}>
+        <Col xs={24} sm={12}>
           <Card title="关系路径查找" size="small">
             <Space direction="vertical" style={{ width: '100%' }}>
               <Input placeholder="起点公司代码" value={pathFrom} onChange={(e) => setPathFrom(e.target.value)} />

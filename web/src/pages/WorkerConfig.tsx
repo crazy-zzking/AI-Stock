@@ -299,9 +299,9 @@ const SectionForm: React.FC<{ section: string }> = ({ section }) => {
   const renderInput = (f: FieldDef) => {
     switch (f.type) {
       case 'bool': return <Switch />;
-      case 'number': return <InputNumber style={{ width: 200 }} />;
-      case 'tags': return <Select mode="tags" style={{ width: 480 }} tokenSeparators={[',']} placeholder="回车添加" />;
-      default: return <Input style={{ width: 480 }} />;
+      case 'number': return <InputNumber style={{ width: '100%', maxWidth: 200 }} />;
+      case 'tags': return <Select mode="tags" style={{ width: '100%' }} tokenSeparators={[',']} placeholder="回车添加" />;
+      default: return <Input style={{ width: '100%' }} />;
     }
   };
 

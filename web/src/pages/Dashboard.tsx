@@ -98,7 +98,7 @@ const Dashboard: React.FC = () => {
         )}
       </h2>
       <Row gutter={16}>
-        <Col span={6}>
+        <Col xs={12} sm={6}>
           <Card>
             <Statistic
               title="总资产"
@@ -108,7 +108,7 @@ const Dashboard: React.FC = () => {
             />
           </Card>
         </Col>
-        <Col span={6}>
+        <Col xs={12} sm={6}>
           <Card>
             <Statistic
               title="持仓市值"
@@ -118,7 +118,7 @@ const Dashboard: React.FC = () => {
             />
           </Card>
         </Col>
-        <Col span={6}>
+        <Col xs={12} sm={6}>
           <Card>
             <Statistic
               title="总盈亏"
@@ -130,7 +130,7 @@ const Dashboard: React.FC = () => {
             />
           </Card>
         </Col>
-        <Col span={6}>
+        <Col xs={12} sm={6}>
           <Card>
             <Statistic
               title="持仓数量"
@@ -142,7 +142,7 @@ const Dashboard: React.FC = () => {
       </Row>
 
       <Row gutter={16} style={{ marginTop: 16 }}>
-        <Col span={8}>
+        <Col xs={24} sm={12} md={8}>
           <Card title="市场状态" onClick={() => navigate('/auto-trading')} style={{ cursor: 'pointer' }}>
             <Statistic
               value={marketStateText}
@@ -150,7 +150,7 @@ const Dashboard: React.FC = () => {
             />
           </Card>
         </Col>
-        <Col span={8}>
+        <Col xs={24} sm={12} md={8}>
           <Card title="Agent状态">
             <Statistic
               value={agents.length}
@@ -159,17 +159,17 @@ const Dashboard: React.FC = () => {
             />
           </Card>
         </Col>
-        <Col span={8}>
+        <Col xs={24} sm={12} md={8}>
           <Card title="盈亏统计">
             <Row gutter={16}>
-              <Col span={12}>
+              <Col xs={12}>
                 <Statistic
                   title="盈利"
                   value={positionData?.profitCount || 0}
                   valueStyle={{ color: '#3f8600' }}
                 />
               </Col>
-              <Col span={12}>
+              <Col xs={12}>
                 <Statistic
                   title="亏损"
                   value={positionData?.lossCount || 0}

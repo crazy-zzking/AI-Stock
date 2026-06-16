@@ -183,7 +183,7 @@ const SelectionConfig: React.FC = () => {
   ];
 
   const numItem = (name: any, label: string, props: Record<string, unknown> = {}) => (
-    <Col span={6}>
+    <Col xs={12} sm={6}>
       <Form.Item name={name} label={label} rules={[{ required: true, message: '必填' }]}>
         <InputNumber style={{ width: '100%' }} {...props} />
       </Form.Item>
@@ -250,17 +250,17 @@ const SelectionConfig: React.FC = () => {
               formatter: (v: any) => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ','),
               parser: (v: any) => v.replace(/,/g, ''),
             })}
-            <Col span={6}>
+            <Col xs={12} sm={6}>
               <Form.Item name="requireDragonTiger" label="要求当日上龙虎榜" valuePropName="checked">
                 <Switch checkedChildren="是" unCheckedChildren="否" />
               </Form.Item>
             </Col>
-            <Col span={6}>
+            <Col xs={12} sm={6}>
               <Form.Item name="excludeTraditionalIndustry" label="排除传统大盘股" valuePropName="checked">
                 <Switch checkedChildren="是" unCheckedChildren="否" />
               </Form.Item>
             </Col>
-            <Col span={6}>
+            <Col xs={12} sm={6}>
               <Form.Item name="useLlmNarrative" label="LLM 生成核心逻辑" valuePropName="checked">
                 <Switch checkedChildren="是" unCheckedChildren="否" />
               </Form.Item>
@@ -278,7 +278,7 @@ const SelectionConfig: React.FC = () => {
           </div>
           <Row gutter={16}>
             {WEIGHT_FIELDS.map((f) => (
-              <Col span={6} key={f.key}>
+              <Col xs={12} sm={6} key={f.key}>
                 <Form.Item name={['weights', f.key]} label={f.label} rules={[{ required: true, message: '必填' }]}>
                   <InputNumber min={0} max={1} step={0.01} style={{ width: '100%' }} />
                 </Form.Item>
@@ -296,6 +296,7 @@ const SelectionConfig: React.FC = () => {
       <Card title="配置版本">
         <Table
           columns={columns}
+          scroll={{ x: 'max-content' }}
           dataSource={list}
           rowKey="id"
           loading={loading}

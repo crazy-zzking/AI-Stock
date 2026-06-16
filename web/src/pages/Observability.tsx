@@ -45,7 +45,7 @@ const Observability: React.FC = () => {
 
       {/* 概览统计 */}
       <Row gutter={16} style={{ marginBottom: 16 }}>
-        <Col span={6}>
+        <Col xs={12} sm={6}>
           <Card>
             <Statistic
               title="数据源"
@@ -55,7 +55,7 @@ const Observability: React.FC = () => {
             />
           </Card>
         </Col>
-        <Col span={6}>
+        <Col xs={12} sm={6}>
           <Card>
             <Statistic
               title="Agent"
@@ -65,7 +65,7 @@ const Observability: React.FC = () => {
             />
           </Card>
         </Col>
-        <Col span={6}>
+        <Col xs={12} sm={6}>
           <Card>
             <Statistic
               title="Redis"
@@ -74,7 +74,7 @@ const Observability: React.FC = () => {
             />
           </Card>
         </Col>
-        <Col span={6}>
+        <Col xs={12} sm={6}>
           <Card>
             <Statistic title="操作" valueRender={() => (
               <Button icon={<ReloadOutlined />} onClick={loadAll} size="small">
@@ -92,6 +92,7 @@ const Observability: React.FC = () => {
           pagination={false}
           dataSource={providers}
           rowKey="providerId"
+          scroll={{ x: 'max-content' }}
           columns={[
             { title: 'ID', dataIndex: 'providerId', key: 'providerId' },
             { title: '名称', dataIndex: 'providerName', key: 'providerName' },
@@ -118,7 +119,7 @@ const Observability: React.FC = () => {
       {/* Prometheus 链接 */}
       <Card title="监控工具">
         <Row gutter={16}>
-          <Col span={8}>
+          <Col xs={24} sm={12} md={8}>
             <Card size="small">
               <LinkOutlined style={{ marginRight: 8 }} />
               <a href="http://localhost:5000/metrics" target="_blank" rel="noreferrer">

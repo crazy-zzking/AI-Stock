@@ -123,20 +123,20 @@ const AutoTrading: React.FC = () => {
         <Card title={`${selectedStock?.code} ${selectedStock?.name || ''} 决策详情`}>
           {/* 概览统计 */}
           <Row gutter={16} style={{ marginBottom: 16 }}>
-            <Col span={6}>
+            <Col xs={12} sm={6}>
               <Statistic title="信号数" value={result.signals?.signals?.length || 0} />
             </Col>
-            <Col span={6}>
+            <Col xs={12} sm={6}>
               <Statistic
                 title="订单数"
                 value={result.orders?.length || 0}
                 valueStyle={{ color: result.orders?.length ? '#1677ff' : '#999' }}
               />
             </Col>
-            <Col span={6}>
+            <Col xs={12} sm={6}>
               <Statistic title="风控" value={result.riskCheck ? '已通过' : '失败'} />
             </Col>
-            <Col span={6}>
+            <Col xs={12} sm={6}>
               <Statistic title="耗时" value={result.executionTime} suffix="ms" />
             </Col>
           </Row>

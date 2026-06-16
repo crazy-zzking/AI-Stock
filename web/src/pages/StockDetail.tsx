@@ -108,7 +108,7 @@ const StockDetail: React.FC = () => {
         <Row gutter={16} align="middle">
           <Col>
             <span style={{ fontWeight: 500, marginRight: 8 }}>搜索:</span>
-            <StockSearch onSelect={setStock} style={{ width: 280 }} />
+            <StockSearch onSelect={setStock} style={{ width: '100%', maxWidth: 280 }} />
           </Col>
         </Row>
       </Card>
@@ -128,7 +128,7 @@ const StockDetail: React.FC = () => {
           {/* 行情概览 */}
           <Card style={{ marginBottom: 16 }}>
             <Row gutter={16}>
-              <Col span={6}>
+              <Col xs={12} sm={6}>
                 <Statistic
                   title={`${stock?.name} (${stock?.code})`}
                   value={quote.price}
@@ -140,7 +140,7 @@ const StockDetail: React.FC = () => {
                   prefix="¥"
                 />
               </Col>
-              <Col span={6}>
+              <Col xs={12} sm={6}>
                 <Statistic
                   title="涨跌幅"
                   value={quote.changePercent}
@@ -149,10 +149,10 @@ const StockDetail: React.FC = () => {
                   valueStyle={{ color: quote.changePercent >= 0 ? '#cf1322' : '#3f8600' }}
                 />
               </Col>
-              <Col span={6}>
+              <Col xs={12} sm={6}>
                 <Statistic title="成交量" value={quote.volume} />
               </Col>
-              <Col span={6}>
+              <Col xs={12} sm={6}>
                 <Statistic title="成交额" value={quote.amount} precision={2} prefix="¥" />
               </Col>
             </Row>

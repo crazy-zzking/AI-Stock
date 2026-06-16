@@ -134,7 +134,7 @@ const WorkflowEditor: React.FC = () => {
       <Card title={`步骤列表 (${nodes.length})`} style={{ marginBottom: 16 }}>
         <Row gutter={[16, 16]}>
           {nodes.map((node, idx) => (
-            <Col span={8} key={node.id}>
+            <Col xs={24} sm={12} md={8} key={node.id}>
               <Card
                 size="small"
                 title={`Step ${idx + 1}`}

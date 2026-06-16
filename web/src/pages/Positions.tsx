@@ -112,22 +112,22 @@ const Positions: React.FC = () => {
         )}
       </h2>
       <Row gutter={16} style={{ marginBottom: 16 }}>
-        <Col span={6}>
+        <Col xs={12} sm={6}>
           <Card>
             <Statistic title="总资产" value={data?.totalAssets || 0} prefix="¥" precision={2} />
           </Card>
         </Col>
-        <Col span={6}>
+        <Col xs={12} sm={6}>
           <Card>
             <Statistic title="可用资金" value={data?.availableBalance || 0} prefix="¥" precision={2} />
           </Card>
         </Col>
-        <Col span={6}>
+        <Col xs={12} sm={6}>
           <Card>
             <Statistic title="持仓市值" value={data?.positionValue || 0} prefix="¥" precision={2} />
           </Card>
         </Col>
-        <Col span={6}>
+        <Col xs={12} sm={6}>
           <Card>
             <Statistic 
               title="总盈亏" 
@@ -144,6 +144,7 @@ const Positions: React.FC = () => {
           columns={columns} 
           dataSource={data?.positions || []} 
           rowKey="code"
+          scroll={{ x: 'max-content' }}
           pagination={false}
         />
       </Card>

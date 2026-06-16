@@ -183,6 +183,7 @@ const StrategyScoreboard: React.FC = () => {
           rowKey={(r) => `${r.strategy}@${r.configVersion}`}
           size="small"
           columns={summaryColumns}
+          scroll={{ x: 'max-content' }}
           dataSource={summary}
           loading={loading}
           pagination={false}
@@ -206,6 +207,7 @@ const StrategyScoreboard: React.FC = () => {
           rowKey="id"
           size="small"
           columns={detailColumns}
+          scroll={{ x: 'max-content' }}
           dataSource={details}
           loading={loading}
           pagination={{ pageSize: 20, showSizeChanger: true }}

@@ -60,7 +60,7 @@ const Strategy: React.FC = () => {
 
       {result && (
         <Card title="回测结果" style={{ marginTop: 16 }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 16 }}>
             <div><strong>总收益率:</strong> {result.totalReturn?.toFixed(2)}%</div>
             <div><strong>年化收益:</strong> {result.annualizedReturn?.toFixed(2)}%</div>
             <div><strong>最大回撤:</strong> {result.maxDrawdown?.toFixed(2)}%</div>

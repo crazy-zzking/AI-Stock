@@ -331,12 +331,12 @@ const LLMManager: React.FC = () => {
 
       {/* 概览 */}
       <Row gutter={16} style={{ marginBottom: 16 }}>
-        <Col span={6}>
+        <Col xs={12} sm={6}>
           <Card>
             <Statistic title="模型总数" value={models.length} prefix={<RobotOutlined />} />
           </Card>
         </Col>
-        <Col span={6}>
+        <Col xs={12} sm={6}>
           <Card>
             <Statistic
               title="已启用"
@@ -346,7 +346,7 @@ const LLMManager: React.FC = () => {
             />
           </Card>
         </Col>
-        <Col span={6}>
+        <Col xs={12} sm={6}>
           <Card>
             <Statistic
               title="已禁用"
@@ -381,7 +381,7 @@ const LLMManager: React.FC = () => {
         title={editingModel ? '编辑模型' : '新建模型'}
         open={modalOpen}
         onCancel={() => setModalOpen(false)}
-        width={600}
+        width="min(600px, 94vw)"
         destroyOnClose
         footer={[
           <Button
@@ -412,12 +412,12 @@ const LLMManager: React.FC = () => {
             <Input placeholder="如: GPT-4 Turbo" />
           </Form.Item>
           <Row gutter={16}>
-            <Col span={12}>
+            <Col xs={24} sm={12}>
               <Form.Item name="baseUrl" label="API 地址" rules={[{ required: true, message: '请输入API地址' }]}>
                 <Input placeholder="https://api.openai.com/v1" />
               </Form.Item>
             </Col>
-            <Col span={12}>
+            <Col xs={24} sm={12}>
               <Form.Item name="model" label="模型标识" rules={[{ required: true, message: '请输入模型标识' }]}>
                 <Input placeholder="gpt-4-turbo" />
               </Form.Item>
@@ -427,29 +427,29 @@ const LLMManager: React.FC = () => {
             <Input.Password placeholder="sk-..." />
           </Form.Item>
           <Row gutter={16}>
-            <Col span={8}>
+            <Col xs={24} sm={12} md={8}>
               <Form.Item name="isEnabled" label="启用" valuePropName="checked">
                 <Switch checkedChildren="启用" unCheckedChildren="禁用" />
               </Form.Item>
             </Col>
-            <Col span={8}>
+            <Col xs={24} sm={12} md={8}>
               <Form.Item name="priority" label="优先级" rules={[{ required: true }]}>
                 <InputNumber min={0} max={100} style={{ width: '100%' }} />
               </Form.Item>
             </Col>
-            <Col span={8}>
+            <Col xs={24} sm={12} md={8}>
               <Form.Item name="timeoutSeconds" label="超时(秒)" rules={[{ required: true }]}>
                 <InputNumber min={5} max={300} style={{ width: '100%' }} />
               </Form.Item>
             </Col>
           </Row>
           <Row gutter={16}>
-            <Col span={12}>
+            <Col xs={24} sm={12}>
               <Form.Item name="maxTokens" label="最大 Token">
                 <InputNumber min={1} max={200000} style={{ width: '100%' }} placeholder="不限" />
               </Form.Item>
             </Col>
-            <Col span={12}>
+            <Col xs={24} sm={12}>
               <Form.Item name="temperature" label="温度">
                 <InputNumber min={0} max={2} step={0.1} style={{ width: '100%' }} />
               </Form.Item>
@@ -470,12 +470,12 @@ const LLMManager: React.FC = () => {
             <BulbOutlined /> 思考模式
           </Divider>
           <Row gutter={16}>
-            <Col span={8}>
+            <Col xs={24} sm={12} md={8}>
               <Form.Item name="enableThinking" label="开启思考" valuePropName="checked">
                 <Switch checkedChildren="开" unCheckedChildren="关" />
               </Form.Item>
             </Col>
-            <Col span={16}>
+            <Col xs={24} md={16}>
               <Form.Item
                 name="thinkingFormat"
                 label="参数格式"
@@ -532,7 +532,7 @@ const LLMManager: React.FC = () => {
         open={balanceState.open}
         onCancel={() => setBalanceState((s) => ({ ...s, open: false }))}
         footer={null}
-        width={480}
+        width="min(480px, 94vw)"
         destroyOnClose
       >
         {balanceState.loading ? (
@@ -578,7 +578,7 @@ const LLMManager: React.FC = () => {
         confirmLoading={testState.running}
         okText="发送测试"
         cancelText="关闭"
-        width={560}
+        width="min(560px, 94vw)"
         destroyOnClose
       >
         <Alert

@@ -239,6 +239,7 @@ const SelectionHistory: React.FC = () => {
                 </Row>
                 <Table
                   size="small" rowKey="code" pagination={false}
+                  scroll={{ x: 'max-content' }}
                   dataSource={perf?.items || []}
                   columns={columns}
                   expandable={{
