@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Card, Tabs, Tag, Pagination, Empty, Spin, Typography, Space, message } from 'antd';
+import { Card, Tabs, Tag, Pagination, Empty, Spin, Typography, Space, Tooltip, message, Grid } from 'antd';
 import {
-  ClockCircleOutlined, LinkOutlined, StockOutlined, TagsOutlined,
+  ClockCircleOutlined, LinkOutlined, StockOutlined, TagsOutlined, CopyOutlined,
 } from '@ant-design/icons';
 import { getEventsPaged } from '../api';
 import type { EventListItemDto } from '../api';
@@ -49,6 +49,53 @@ const typeTag = (type: string) => {
   return <Tag color={m.color}>{m.label}</Tag>;
 };
 
+/**
+ * 复制文本到剪贴板。生产是 HTTP（非安全上下文），navigator.clipboard 不可用，
+ * 回退 execCommand；其中 iOS Safari 需用 Range 选区 + setSelectionRange，普通 select() 无效。
+ */
+const fallbackCopy = (text: string): boolean => {
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.readOnly = true;
+  ta.contentEditable = 'true';
+  ta.style.position = 'fixed';
+  ta.style.left = '-9999px';
+  ta.style.top = '0';
+  ta.style.fontSize = '16px'; // 防止 iOS 聚焦时页面缩放
+  document.body.appendChild(ta);
+
+  const isIOS = /ipad|iphone|ipod/i.test(navigator.userAgent);
+  if (isIOS) {
+    const range = document.createRange();
+    range.selectNodeContents(ta);
+    const sel = window.getSelection();
+    sel?.removeAllRanges();
+    sel?.addRange(range);
+    ta.setSelectionRange(0, text.length);
+  } else {
+    ta.focus();
+    ta.select();
+  }
+
+  let ok = false;
+  try { ok = document.execCommand('copy'); } catch { ok = false; }
+  document.body.removeChild(ta);
+  return ok;
+};
+
+const copyText = async (text: string) => {
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+    } else if (!fallbackCopy(text)) {
+      throw new Error('execCommand copy failed');
+    }
+    message.success(`已复制 ${text}`);
+  } catch {
+    message.error('复制失败');
+  }
+};
+
 const PAGE_SIZE = 20;
 
 /** 情报事件 — event_record 按类型/时间分页展示，含关联个股与概念 */
@@ -58,6 +105,8 @@ const Intelligence: React.FC = () => {
   const [total, setTotal] = useState(0);
   const [items, setItems] = useState<EventListItemDto[]>([]);
   const [loading, setLoading] = useState(false);
+  const screens = Grid.useBreakpoint();
+  const isMobile = screens.md === false;
 
   const fetchData = useCallback((type: string, p: number) => {
     setLoading(true);
@@ -129,11 +178,21 @@ const Intelligence: React.FC = () => {
                     <Text type="secondary" style={{ marginRight: 8 }}>
                       <StockOutlined /> 关联个股：
                     </Text>
-                    {e.relatedStocks.map((s, i) => (
-                      <Tag key={`${s.code ?? s.name}-${i}`} color="blue" style={{ marginBottom: 4 }}>
-                        {s.name ?? s.code}{s.code && s.name ? ` ${s.code}` : ''}
-                      </Tag>
-                    ))}
+                    {e.relatedStocks.map((s, i) => {
+                      const copyVal = s.code ?? s.name ?? '';
+                      return (
+                        <Tooltip key={`${s.code ?? s.name}-${i}`} title={s.code ? '点击复制代码' : '点击复制'}>
+                          <Tag
+                            color="blue"
+                            icon={<CopyOutlined />}
+                            style={{ marginBottom: 4, cursor: 'pointer' }}
+                            onClick={() => copyVal && copyText(copyVal)}
+                          >
+                            {s.name ?? s.code}{s.code && s.name ? ` ${s.code}` : ''}
+                          </Tag>
+                        </Tooltip>
+                      );
+                    })}
                   </div>
                 )}
 
@@ -154,13 +213,14 @@ const Intelligence: React.FC = () => {
         )}
 
         {total > 0 && (
-          <div style={{ marginTop: 16, textAlign: 'right' }}>
+          <div style={{ marginTop: 16, textAlign: isMobile ? 'center' : 'right' }}>
             <Pagination
               current={page}
               pageSize={PAGE_SIZE}
               total={total}
+              simple={isMobile}
               showSizeChanger={false}
-              showTotal={(t) => `共 ${t} 条`}
+              showTotal={isMobile ? undefined : (t) => `共 ${t} 条`}
               onChange={setPage}
             />
           </div>
