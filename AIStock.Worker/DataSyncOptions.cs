@@ -16,8 +16,9 @@ public class DataSyncOptions
     /// <summary>交易日接口地址（range 查询，判断收盘后是否需同步）</summary>
     public string WorkdayUrl { get; set; } = "http://115.29.178.22:8080/api/workday/range";
 
-    /// <summary>收盘同步时刻（小时，24制）。交易日此时刻后同步当日K线</summary>
-    public int SyncHour { get; set; } = 16;
+    /// <summary>收盘同步时刻（小时，24制）。A股 15:00 收盘，此刻后当日才算"已收盘"。
+    /// 勿设大于 15：否则收盘后到该时刻前，GetLastClosedTradingDayAsync 会把目标交易日算成昨天。</summary>
+    public int SyncHour { get; set; } = 15;
 
     /// <summary>是否同步K线</summary>
     public bool SyncKlines { get; set; } = true;
