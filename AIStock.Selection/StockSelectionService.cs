@@ -73,10 +73,17 @@ public class StockSelectionService
         var hotConcepts = ComputeHotConcepts(latest, conceptsByCode);
 
         // 题材生命周期：近 10 日涨停家数判退潮，退潮题材从热门题材剔除（防"进场在退潮期"）
-        var fading = ConceptLifecycle.RemoveFading(hotConcepts,
-            ConceptLifecycle.ComputeStages(await LoadLimitUpHistoryAsync(ct), conceptsByCode));
+        // 三维判断：涨停家数回落 + 资金流出 + 龙头走弱 三者同时成立才算真退潮
+        // 概念资金流优先用东财 BK API 官方数据，个股汇总仅作 fallback（避免一股多概念时重复计数）
+        var stages = ConceptLifecycle.ComputeStages(await LoadLimitUpHistoryAsync(ct), conceptsByCode);
+        var conceptNetInflow = await GetConceptNetInflowAsync(ct)
+            ?? Backtest.SelectionContextBuilder.ComputeConceptNetInflow(latest, conceptsByCode);
+        var conceptLeaderPct = Backtest.SelectionContextBuilder.ComputeConceptLeaderPct(latest, conceptsByCode);
+        var (fading, rotationSaved) = ConceptLifecycle.RemoveFading(hotConcepts, stages, conceptNetInflow, conceptLeaderPct);
         if (fading.Count > 0)
-            _logger.LogInformation("题材退潮剔除：{Concepts}", string.Join("、", fading.Take(10)));
+            _logger.LogWarning("题材退潮剔除：{Concepts}", string.Join("、", fading.Take(10)));
+        if (rotationSaved.Count > 0)
+            _logger.LogInformation("题材轮动保留（涨停降温但资金/龙头仍强）：{Concepts}", string.Join("、", rotationSaved.Take(10)));
 
         var (industryByCode, industryStrength) = await ComputeSectorStrengthAsync(latest, ct);
 
@@ -229,6 +236,28 @@ public class StockSelectionService
     private static Dictionary<string, int> ComputeHotConcepts(
         List<DailyMarketSnapshotEntity> latest, IReadOnlyDictionary<string, List<string>> conceptsByCode)
         => Backtest.SelectionContextBuilder.ComputeHotConcepts(latest, conceptsByCode);
+
+    /// <summary>
+    /// 从东财 BK API 获取概念板块当日主力净流入（概念名→净流入元）。
+    /// 失败（网络异常/无数据源）返 null，调用方应 fallback 到个股汇总。
+    /// </summary>
+    private async Task<Dictionary<string, decimal>?> GetConceptNetInflowAsync(CancellationToken ct)
+    {
+        try
+        {
+            var eastmoney = _resolver.GetProviders(DataCapability.CapitalFlow)
+                .FirstOrDefault(p => p.ProviderId == "eastmoney") as EastmoneyProvider;
+            if (eastmoney == null) return null;
+
+            var result = await eastmoney.GetConceptBoardFlowAsync(ct);
+            return result.Count > 0 ? result : null;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "BK概念资金流获取失败，fallback到个股汇总");
+            return null;
+        }
+    }
 
     /// <summary>取今日全部股票的概念关联：代码→概念列表，以及 代码→(概念→炒作点digest)。</summary>
     private async Task<(Dictionary<string, List<string>> Concepts, Dictionary<string, Dictionary<string, string>> Digests)>

@@ -81,4 +81,41 @@ public static class ConceptLifecycle
         foreach (var c in removed) hotConcepts.Remove(c);
         return removed;
     }
+
+    /// <summary>
+    /// 升级版退潮剔除：三维判断（涨停家数回落 + 资金流出 + 龙头走弱），三者同时成立才算真退潮。
+    /// 资金仍在流入或龙头仍强 → 板块内轮动，记为 Rotation 日志级别（Warn），不剔除。
+    /// 返回 (被剔除的题材, Rotation但保留的题材)。
+    /// </summary>
+    public static (List<string> Removed, List<string> RotationSaved) RemoveFading(
+        Dictionary<string, int> hotConcepts,
+        IReadOnlyDictionary<string, ConceptStage> stages,
+        IReadOnlyDictionary<string, decimal> conceptNetInflow,
+        IReadOnlyDictionary<string, decimal> conceptLeaderPct)
+    {
+        var removed = new List<string>();
+        var saved = new List<string>();
+
+        foreach (var c in hotConcepts.Keys.ToList())
+        {
+            if (!stages.TryGetValue(c, out var st) || st != ConceptStage.Fading)
+                continue;
+
+            var hasInflow = conceptNetInflow.TryGetValue(c, out var inflow) && inflow > 0;
+            var leaderStrong = conceptLeaderPct.TryGetValue(c, out var pct) && pct > 0;
+
+            if (hasInflow || leaderStrong)
+            {
+                // 轮动而非退潮：涨停家数回落但板块内资金仍在 / 龙头继续涨
+                saved.Add(c);
+                continue;
+            }
+
+            // 三维全部成立：真退潮，剔除
+            removed.Add(c);
+            hotConcepts.Remove(c);
+        }
+
+        return (removed, saved);
+    }
 }

@@ -616,6 +616,48 @@ public class EastmoneyProvider : BaseProvider
     }
 
     /// <summary>
+    /// 获取全量概念板块当日主力净流入（东财板块资金流向 clist，fs=m:90+t:3）。
+    /// 返回概念名 → 主力净流入(元)。一次请求覆盖全部约500个概念板块。
+    /// 用于退潮判断——概念级别的官方资金流数据，比个股汇总更准确（避免同一只票在多个概念重复计数）。
+    /// </summary>
+    public async Task<Dictionary<string, decimal>> GetConceptBoardFlowAsync(CancellationToken ct = default)
+    {
+        var result = new Dictionary<string, decimal>();
+        const string fs = "m:90+t:3"; // 概念板块（行业=m:90+t:2，地域=m:90+t:1）
+        var url = SectorRankingUrl + "?" +
+                  $"fid=f62&po=1&pz=500&pn=1&np=1&fltt=2&invt=2&fs={fs}&fields=f12,f14,f62&" +
+                  "ut=8dec03ba335b81bf4ebdf7b29ec27d15";
+
+        try
+        {
+            var resp = await SendEastmoneyRequestAsync(url, ct);
+            if (resp == null) return result;
+
+            using var doc = JsonDocument.Parse(resp);
+            if (!doc.RootElement.TryGetProperty("data", out var data) || data.ValueKind == JsonValueKind.Null ||
+                !data.TryGetProperty("diff", out var diff) || diff.ValueKind != JsonValueKind.Array)
+                return result;
+
+            foreach (var item in diff.EnumerateArray())
+            {
+                var name = item.TryGetProperty("f14", out var n) && n.ValueKind == JsonValueKind.String ? n.GetString() : null;
+                if (string.IsNullOrEmpty(name)) continue;
+                var flow = item.TryGetProperty("f62", out var f) && f.ValueKind == JsonValueKind.Number ? f.GetDecimal() : 0;
+                result[name] = flow;
+            }
+
+            if (result.Count == 0)
+                Logger.LogWarning("概念板块资金流列表为空，请检查东财接口。");
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "获取概念板块资金流失败，退潮判断将退化为个股汇总");
+        }
+
+        return result;
+    }
+
+    /// <summary>
     /// 获取板块成分股
     /// </summary>
     public async Task<List<string>> GetSectorConstituentsAsync(string sectorCode, CancellationToken ct = default)

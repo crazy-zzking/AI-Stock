@@ -143,13 +143,17 @@ public class ReplayBacktestService
             }
 
             // 当日热门题材 + 题材生命周期退潮剔除（截至当日近 10 日，无前视，与实盘同口径）
+            // 升级为三维判断：涨停家数回落 + 资金流出 + 龙头走弱 三者同时成立才算真退潮
             var dayHot = SelectionContextBuilder.ComputeHotConcepts(dayShots, conceptsByCode);
             var trailing = limitUpByDate
                 .Where(x => x.Date <= day)
                 .TakeLast(ConceptLifecycle.WindowDays)
                 .Select(x => x.Codes)
                 .ToList();
-            ConceptLifecycle.RemoveFading(dayHot, ConceptLifecycle.ComputeStages(trailing, conceptsByCode));
+            var stages = ConceptLifecycle.ComputeStages(trailing, conceptsByCode);
+            var dayInflow = SelectionContextBuilder.ComputeConceptNetInflow(dayShots, conceptsByCode);
+            var dayLeader = SelectionContextBuilder.ComputeConceptLeaderPct(dayShots, conceptsByCode);
+            ConceptLifecycle.RemoveFading(dayHot, stages, dayInflow, dayLeader);
 
             var context = new SelectionContext
             {

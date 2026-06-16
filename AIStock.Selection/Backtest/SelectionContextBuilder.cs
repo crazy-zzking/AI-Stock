@@ -115,4 +115,42 @@ public static class SelectionContextBuilder
     /// <summary>无指数简化版（兼容旧调用）：等价于 BuildRegime(dayShots, 空指数)。</summary>
     public static MarketRegime BuildRegimeFromBreadth(IReadOnlyList<DailyMarketSnapshotEntity> dayShots)
         => BuildRegime(dayShots, Array.Empty<IndexQuote>());
+
+    /// <summary>
+    /// 计算各概念当日主力净流入（元），汇总概念内所有个股的 main_net_inflow。
+    /// 用于区分"退潮"和"板块内轮动"：资金仍在流入则只是轮动，不是真退潮。
+    /// </summary>
+    public static Dictionary<string, decimal> ComputeConceptNetInflow(
+        IReadOnlyList<DailyMarketSnapshotEntity> dayShots,
+        IReadOnlyDictionary<string, List<string>> conceptsByCode)
+    {
+        var inflowByCode = dayShots.ToDictionary(s => s.Code, s => s.MainNetInflow);
+        var result = new Dictionary<string, decimal>();
+        foreach (var (code, concepts) in conceptsByCode)
+        {
+            if (!inflowByCode.TryGetValue(code, out var inflow)) continue;
+            foreach (var c in concepts)
+                result[c] = result.GetValueOrDefault(c) + inflow;
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// 计算各概念当日领涨龙头的涨跌幅（%），取概念内个股 ChangePercent 最大值。
+    /// 龙头仍强（>0）则题材未必退潮，可能只是内部轮动。
+    /// </summary>
+    public static Dictionary<string, decimal> ComputeConceptLeaderPct(
+        IReadOnlyList<DailyMarketSnapshotEntity> dayShots,
+        IReadOnlyDictionary<string, List<string>> conceptsByCode)
+    {
+        var pctByCode = dayShots.ToDictionary(s => s.Code, s => s.ChangePercent);
+        var result = new Dictionary<string, decimal>();
+        foreach (var (code, concepts) in conceptsByCode)
+        {
+            if (!pctByCode.TryGetValue(code, out var pct)) continue;
+            foreach (var c in concepts)
+                result[c] = result.TryGetValue(c, out var cur) ? Math.Max(cur, pct) : pct;
+        }
+        return result;
+    }
 }
