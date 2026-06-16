@@ -3,6 +3,7 @@ using AIStock.Infrastructure.Database.Entities;
 using AIStock.Selection;
 using AIStock.Selection.Backtest;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 
 namespace AIStock.Web.Controllers;
 
@@ -118,6 +119,30 @@ public class SelectionController : ControllerBase
     [HttpPost("history/{id:long}/review")]
     public async Task<ActionResult> ReviewBatch(long id, CancellationToken ct)
         => await _selection.RequestReviewAsync(id, ct) ? Ok(new { queued = true }) : NotFound();
+
+    /// <summary>
+    /// 将指定选股批次的票入交易候选池（手动触发，等价于尾盘选股后的自动入池）。
+    /// 同一只股票多策略命中时取最高分，已处理(status≠0)的候选不覆盖。
+    /// </summary>
+    [HttpPost("history/{id:long}/enpool")]
+    public async Task<ActionResult> Enpool(long id, CancellationToken ct = default)
+    {
+        var db = HttpContext.RequestServices.GetRequiredService<AIStock.Infrastructure.Database.Context.AIStockDbContext>();
+        var entity = await db.SelectionResult.FirstOrDefaultAsync(r => r.Id == id, ct);
+        if (entity == null) return NotFound($"选股批次 {id} 不存在");
+
+        try
+        {
+            var svc = HttpContext.RequestServices.GetRequiredService<AIStock.Selection.TradeCandidateService>();
+            var n = await svc.PopulateFromBatchesAsync(new[] { id }, ct);
+            return Ok(new { success = true, added = n });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "入池失败 batch={Id}", id);
+            return StatusCode(500, new { success = false, message = ex.Message });
+        }
+    }
 
     // ============ 配置中心（版本化的选股条件 + 权重）============
 

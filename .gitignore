@@ -51,3 +51,4 @@ secrets/
 
 # docker compose 部署密钥（Basic Auth 密码等），不进库
 /.env
+/.workbuddy/memory

@@ -153,6 +153,7 @@ export const getSelectionById = (id: number) => api.get(`/selection/history/${id
 export const getSelectionPerformance = (id: number) => api.get(`/selection/history/${id}/performance`);
 // 手动（重新）触发某批选股的 LLM 复评（异步）
 export const reviewSelectionBatch = (id: number) => api.post(`/selection/history/${id}/review`);
+export const enpoolSelectionBatch = (id: number) => api.post(`/selection/history/${id}/enpool`);
 export const getActivityPool = () => api.get('/selection/activity');
 
 // ============ 策略记分板（选股信号前向绩效，Worker 每日补算） ============

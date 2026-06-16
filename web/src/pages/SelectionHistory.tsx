@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Card, Table, Tag, Row, Col, Spin, message, List, Statistic, Rate, Button, Pagination } from 'antd';
-import { getSelectionHistoryPage, getSelectionPerformance, getQuote, reviewSelectionBatch } from '../api';
+import { getSelectionHistoryPage, getSelectionPerformance, getQuote, reviewSelectionBatch, enpoolSelectionBatch } from '../api';
 import Delta from '../components/Delta';
 import ReviewPanel from '../components/ReviewPanel';
 import { pct, upDownColor } from '../utils/format';
@@ -43,6 +43,7 @@ const SelectionHistory: React.FC = () => {
   const [quotes, setQuotes] = useState<Record<string, QuoteData>>({});
   const [quoteLoading, setQuoteLoading] = useState<Record<string, boolean>>({});
   const [reviewing, setReviewing] = useState(false);
+  const [enpoolingId, setEnpoolingId] = useState<number | null>(null);
   const [expandedKeys, setExpandedKeys] = useState<React.Key[]>([]);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
@@ -115,6 +116,20 @@ const SelectionHistory: React.FC = () => {
     }
   };
 
+  // 将当前批次入交易候选池
+  const enpoolBatch = async (id: number) => {
+    setEnpoolingId(id);
+    try {
+      await enpoolSelectionBatch(id);
+      message.success('已入池，请前往交易候选池查看');
+      selectBatch(id, true);
+    } catch {
+      message.error('入池失败');
+    } finally {
+      setEnpoolingId(null);
+    }
+  };
+
   // 全部展开 / 全部收起
   const toggleExpandAll = () => {
     const items = perf?.items || [];
@@ -166,9 +181,20 @@ const SelectionHistory: React.FC = () => {
                 renderItem={(it) => (
                   <List.Item
                     onClick={() => selectBatch(it.id)}
+                    actions={[
+                      <Button
+                        key="enpool"
+                        type="link"
+                        size="small"
+                        loading={enpoolingId === it.id}
+                        onClick={(e) => { e.stopPropagation(); enpoolBatch(it.id); }}
+                      >
+                        入池
+                      </Button>,
+                    ]}
                     style={{ cursor: 'pointer', background: selectedId === it.id ? '#e6f4ff' : undefined, padding: '8px 12px' }}
                   >
-                    <div>
+                    <div style={{ flex: 1 }}>
                       <div>
                         {it.tradingDate?.slice(0, 10)}
                         {it.strategyName && <Tag color="purple" style={{ marginLeft: 6 }}>{it.strategyName}</Tag>}
