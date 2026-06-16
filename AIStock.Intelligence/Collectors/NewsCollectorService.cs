@@ -23,7 +23,12 @@ public class NewsCollectorService : INewsCollector
         _logger = logger;
     }
 
+    /// <summary>采集最新财经新闻（默认财经栏目）</summary>
     public async Task<List<NewsData>> CollectLatestNewsAsync(int count = 50, CancellationToken cancellationToken = default)
+        => await CollectNewsByCategoryAsync("财经", count, cancellationToken);
+
+    /// <summary>采集最新上市公司公告</summary>
+    public async Task<List<NewsData>> CollectLatestAnnouncementsAsync(int count = 50, CancellationToken cancellationToken = default)
     {
         var newsList = new List<NewsData>();
 
@@ -163,7 +168,9 @@ public class NewsCollectorService : INewsCollector
 
         try
         {
-            var url = $"https://np-listapi.eastmoney.com/comm/web/getNewsByColumns?client=web&columns={columns}&pageSize={count}&pageNo=1";
+            // 东财新闻列表接口需要 biz / req_trace / column 参数
+            var reqTrace = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds().ToString();
+            var url = $"https://np-listapi.eastmoney.com/comm/web/getNewsByColumns?client=web&biz=web_news_col&req_trace={reqTrace}&column={columns}&order=1&needInteractData=0&pageSize={count}&pageNo=1";
             var response = await _httpClient.GetStringAsync(url, cancellationToken);
 
             if (!string.IsNullOrWhiteSpace(response))
@@ -172,7 +179,6 @@ public class NewsCollectorService : INewsCollector
                 var root = jsonDoc.RootElement;
 
                 if (root.TryGetProperty("data", out var data) &&
-                    data.ValueKind != JsonValueKind.Null &&
                     data.ValueKind == JsonValueKind.Object)
                 {
                     if (data.TryGetProperty("list", out var list) &&
@@ -182,15 +188,19 @@ public class NewsCollectorService : INewsCollector
                         {
                             try
                             {
+                                var newsUrl = item.TryGetProperty("uniqueUrl", out var uu) && !string.IsNullOrEmpty(uu.GetString())
+                                    ? uu.GetString()!
+                                    : (item.TryGetProperty("url", out var urlEl) ? urlEl.GetString() ?? "" : "");
+
                                 var news = new NewsData
                                 {
-                                    Title = item.GetProperty("title").GetString() ?? "",
-                                    Source = item.TryGetProperty("source", out var source) ? source.GetString() ?? "东方财富" : "东方财富",
-                                    Url = item.TryGetProperty("url", out var urlEl) ? urlEl.GetString() ?? "" : "",
+                                    Title = item.TryGetProperty("title", out var t) ? t.GetString() ?? "" : "",
+                                    Source = item.TryGetProperty("mediaName", out var source) ? source.GetString() ?? "东方财富" : "东方财富",
+                                    Url = newsUrl,
                                     PublishTime = item.TryGetProperty("showTime", out var time)
                                         ? DateTime.Parse(time.GetString() ?? DateTime.UtcNow.ToString())
                                         : DateTime.UtcNow,
-                                    Summary = item.TryGetProperty("digest", out var digest) ? digest.GetString() : null,
+                                    Summary = item.TryGetProperty("summary", out var digest) ? digest.GetString() : null,
                                     Category = category
                                 };
 

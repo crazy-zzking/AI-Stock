@@ -13,9 +13,14 @@ public interface INewsCollector
     string CollectorId { get; }
 
     /// <summary>
-    /// 采集最新新闻
+    /// 采集最新新闻（财经新闻）
     /// </summary>
     Task<List<NewsData>> CollectLatestNewsAsync(int count = 50, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// 采集最新公告（上市公司公告）
+    /// </summary>
+    Task<List<NewsData>> CollectLatestAnnouncementsAsync(int count = 50, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// 采集指定股票的新闻

@@ -41,6 +41,7 @@ export const getProviderStatus = () =>
 
 // ============ 交易执行 ============
 export const getPositions = () => api.get<PositionSummary>('/execution/positions');
+export const refreshPositions = () => api.post<PositionSummary>('/execution/positions/refresh');
 export const getPosition = (code: string) =>
   api.get('/execution/positions/' + code);
 export const placeOrder = (order: OrderRequest) =>

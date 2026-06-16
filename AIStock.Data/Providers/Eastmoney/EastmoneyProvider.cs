@@ -162,7 +162,7 @@ public class EastmoneyProvider : BaseProvider
         {
             var secid = GetMarketCode(code);
             var klt = GetKlineInterval(interval);
-            var url = $"{KlineUrl}?fields1=f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,f11,f12,f13&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61&beg=0&end=20500101&ut={UserToken}&rtntype=6&secid={secid}&klt={klt}&fqt=1&lmt={count}";
+            var url = $"{KlineUrl}?fields1=f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,f11,f12,f13&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61&end=20500101&ut={UserToken}&rtntype=6&secid={secid}&klt={klt}&fqt=1&lmt={count}";
             var response = await SendEastmoneyRequestAsync(url);
 
             if (response == null)

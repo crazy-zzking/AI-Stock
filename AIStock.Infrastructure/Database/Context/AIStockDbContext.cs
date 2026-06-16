@@ -77,6 +77,16 @@ public class AIStockDbContext : DbContext
     /// </summary>
     public DbSet<AgentMemoryEntity> AgentMemory { get; set; }
 
+    /// <summary>
+    /// 股票-概念关联
+    /// </summary>
+    public DbSet<StockConceptRelationEntity> StockConceptRelation { get; set; }
+
+    /// <summary>
+    /// 知识图谱候选边（小作文/情报推断，隔离）
+    /// </summary>
+    public DbSet<GraphCandidateEdgeEntity> GraphCandidateEdge { get; set; }
+
     public override int SaveChanges()
     {
         UpdateTimestamps();
@@ -117,6 +127,20 @@ public class AIStockDbContext : DbContext
             entity.HasKey(e => e.Code);
             entity.HasIndex(e => e.Market);
             entity.HasIndex(e => e.Industry);
+        });
+
+        // 股票-概念关联
+        modelBuilder.Entity<StockConceptRelationEntity>(entity =>
+        {
+            entity.HasIndex(e => new { e.StockCode, e.ConceptName }).IsUnique();
+            entity.HasIndex(e => e.ConceptName);
+        });
+
+        // 知识图谱候选边
+        modelBuilder.Entity<GraphCandidateEdgeEntity>(entity =>
+        {
+            entity.HasIndex(e => new { e.FromEntity, e.ToEntity, e.EdgeType }).IsUnique();
+            entity.HasIndex(e => e.EdgeType);
         });
 
         // K线数据

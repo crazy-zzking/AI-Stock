@@ -1,6 +1,11 @@
 using AIStock.Core.Interfaces;
 using AIStock.Core.Models;
+using AIStock.Infrastructure.Database.Context;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using StackExchange.Redis;
+using System.Text.Json;
 
 namespace AIStock.Intelligence.Services;
 
@@ -12,17 +17,25 @@ public class EssayAnalyzerService : IEssayAnalyzer
     private readonly ILLMService _llmService;
     private readonly ISentimentAnalyzer _sentimentAnalyzer;
     private readonly ICredibilityAnalyzer _credibilityAnalyzer;
+    private readonly IServiceScopeFactory _scopeFactory;
+    private readonly IConnectionMultiplexer _redis;
     private readonly ILogger<EssayAnalyzerService> _logger;
+
+    private const string NameCodeCacheKey = "aistock:cache:stock_name_code";
 
     public EssayAnalyzerService(
         ILLMService llmService,
         ISentimentAnalyzer sentimentAnalyzer,
         ICredibilityAnalyzer credibilityAnalyzer,
+        IServiceScopeFactory scopeFactory,
+        IConnectionMultiplexer redis,
         ILogger<EssayAnalyzerService> logger)
     {
         _llmService = llmService;
         _sentimentAnalyzer = sentimentAnalyzer;
         _credibilityAnalyzer = credibilityAnalyzer;
+        _scopeFactory = scopeFactory;
+        _redis = redis;
         _logger = logger;
     }
 
@@ -58,7 +71,7 @@ public class EssayAnalyzerService : IEssayAnalyzer
                 EventType = "essay",
                 Title = text.Length > 100 ? text[..100] + "..." : text,
                 Content = text,
-                RelatedCompanies = result.RelatedCompanies.ToDictionary(c => c, c => ""),
+                RelatedCompanies = await MatchCompanyCodesAsync(result.RelatedCompanies),
                 RelatedConcepts = result.RelatedConcepts
             };
 
@@ -119,7 +132,7 @@ public class EssayAnalyzerService : IEssayAnalyzer
     {
         try
         {
-            var prompt = $@"请从以下文本中提取关联的公司和概念：
+            var prompt = $@"请从以下文本中提取关联A股的公司和概念：
 
 文本：{text}
 
@@ -128,7 +141,13 @@ public class EssayAnalyzerService : IEssayAnalyzer
 
             var request = new LLMRequest
             {
-                SystemPrompt = "你是一个专业的金融信息分析师，请从文本中提取关联的公司和概念。",
+                SystemPrompt = @"请根据输入文本，提取其中涉及的A股上市公司以及对应受益的概念标签。
+要求：
+1.仅提取A股上市公司，不要输出海外公司、未上市公司或私募企业。
+2.每家公司对应一个或多个概念。
+3.概念必须直接来源于文本内容，不要过度联想。
+4.如果文本提到产业方向但未明确对应A股公司，则不要输出。
+5.返回标准JSON格式，不要添加任何解释、Markdown或额外文字",
                 UserPrompt = prompt
             };
 
@@ -242,8 +261,129 @@ public class EssayAnalyzerService : IEssayAnalyzer
         return string.Join("，", conclusions);
     }
 
-    private string CleanJsonResponse(string response)
+    private static string CleanJsonResponse(string response)
     {
         return Common.LLMResponseParser.CleanJsonResponse(response);
+    }
+
+    /// <summary>
+    /// 根据公司名称从 stock_base 表匹配股票代码（Redis 缓存）
+    /// </summary>
+    /// <returns>Dictionary: 公司名称 → 股票代码</returns>
+    private async Task<Dictionary<string, string>> MatchCompanyCodesAsync(List<string> companyNames)
+    {
+        var result = new Dictionary<string, string>();
+        if (companyNames.Count == 0)
+            return result;
+
+        try
+        {
+            var nameToCode = await GetNameToCodeMapAsync();
+
+            foreach (var name in companyNames)
+            {
+                if (string.IsNullOrWhiteSpace(name)) continue;
+                var trimmed = name.Trim();
+
+                // 1. 精确匹配
+                if (nameToCode.TryGetValue(trimmed, out var code))
+                {
+                    result[trimmed] = code;
+                    continue;
+                }
+
+                // 2. LLM 可能返回带括号后缀（如"贵州茅台(600519)"）
+                var parenIdx = trimmed.IndexOf('(');
+                if (parenIdx > 0 && nameToCode.TryGetValue(trimmed[..parenIdx].Trim(), out code))
+                {
+                    result[trimmed[..parenIdx].Trim()] = code;
+                    continue;
+                }
+
+                // 3. 模糊匹配
+                var matched = nameToCode
+                    .Where(kv => kv.Key.Contains(trimmed, StringComparison.OrdinalIgnoreCase)
+                              || trimmed.Contains(kv.Key, StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+
+                if (matched.Count == 1)
+                {
+                    result[matched[0].Key] = matched[0].Value;
+                }
+                else if (matched.Count > 1)
+                {
+                    var best = matched.OrderBy(kv => kv.Key.Length).First();
+                    result[best.Key] = best.Value;
+                }
+                else
+                {
+                    result[trimmed] = string.Empty;
+                    _logger.LogDebug("Company name '{Name}' not found in stock_base", trimmed);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to match company names to stock codes");
+            foreach (var name in companyNames)
+            {
+                if (!string.IsNullOrWhiteSpace(name) && !result.ContainsKey(name.Trim()))
+                    result[name.Trim()] = string.Empty;
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// 获取名称→代码映射（Redis 缓存 1 小时）
+    /// </summary>
+    private async Task<Dictionary<string, string>> GetNameToCodeMapAsync()
+    {
+        var db = _redis.GetDatabase();
+
+        // 1. 从 Redis 读取
+        var cached = await db.StringGetAsync(NameCodeCacheKey);
+        if (!cached.IsNullOrEmpty)
+        {
+            try
+            {
+                return JsonSerializer.Deserialize<Dictionary<string, string>>(cached!)
+                       ?? await LoadFromDbAndCacheAsync();
+            }
+            catch
+            {
+                return await LoadFromDbAndCacheAsync();
+            }
+        }
+
+        // 2. 缓存未命中
+        return await LoadFromDbAndCacheAsync();
+    }
+
+    private async Task<Dictionary<string, string>> LoadFromDbAndCacheAsync()
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<AIStockDbContext>();
+
+        var allStocks = await dbContext.StockBase
+            .Where(s => !s.IsDelisted)
+            .Select(s => new { s.Code, s.Name })
+            .ToListAsync();
+
+        var nameToCode = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var s in allStocks)
+        {
+            if (!string.IsNullOrEmpty(s.Name) && !nameToCode.ContainsKey(s.Name))
+                nameToCode[s.Name] = s.Code;
+        }
+
+        // 写入 Redis，1 小时过期
+        var redisDb = _redis.GetDatabase();
+        var json = JsonSerializer.Serialize(nameToCode);
+        await redisDb.StringSetAsync(NameCodeCacheKey, json, TimeSpan.FromHours(1));
+        _logger.LogDebug("Stock name→code map cached to Redis ({Count} stocks)", nameToCode.Count);
+
+        return nameToCode;
     }
 }

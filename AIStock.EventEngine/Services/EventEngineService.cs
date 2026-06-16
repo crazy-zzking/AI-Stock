@@ -42,14 +42,27 @@ public class EventEngineService
     {
         try
         {
+            // 0. 去重：同 Url 已处理过则跳过
+            if (!string.IsNullOrEmpty(report.Url))
+            {
+                var existing = await _dbContext.EventRecord
+                    .FirstOrDefaultAsync(e => e.Url == report.Url, cancellationToken);
+                if (existing != null)
+                {
+                    _logger.LogDebug("跳过重复研报：{Title}", report.Title);
+                    return existing;
+                }
+            }
+
             // 1. 抽取事件
             var eventData = await _eventExtractor.ExtractFromReportAsync(report, cancellationToken);
 
-            // 2. 情绪分析
-            var sentiment = await _sentimentAnalyzer.AnalyzeEventAsync(eventData, cancellationToken);
-
-            // 3. 强度评分
-            var intensity = await _intensityScorer.ScoreAsync(eventData, cancellationToken);
+            // 2+3. 情绪分析与强度评分并行（均只依赖 eventData，彼此独立）
+            var sentimentTask = _sentimentAnalyzer.AnalyzeEventAsync(eventData, cancellationToken);
+            var intensityTask = _intensityScorer.ScoreAsync(eventData, cancellationToken);
+            await Task.WhenAll(sentimentTask, intensityTask);
+            var sentiment = sentimentTask.Result;
+            var intensity = intensityTask.Result;
 
             // 4. 保存事件记录
             var eventRecord = new EventRecordEntity
@@ -78,6 +91,10 @@ public class EventEngineService
 
             _dbContext.EventRecord.Add(eventRecord);
             await _dbContext.SaveChangesAsync(cancellationToken);
+
+            // 4b. 规范化关联（关联表，供精确查询）
+            await SaveEventRelationsAsync(eventRecord.Id, report.RelatedStocks,
+                eventData.RelatedConcepts, cancellationToken);
 
             // 5. 发布到消息总线
             await _messageBus.PublishAsync("events", new
@@ -108,14 +125,27 @@ public class EventEngineService
     {
         try
         {
+            // 0. 去重：同 Url 已处理过则跳过（避免重复采集重复入库 + 节省 LLM 调用）
+            if (!string.IsNullOrEmpty(news.Url))
+            {
+                var existing = await _dbContext.EventRecord
+                    .FirstOrDefaultAsync(e => e.Url == news.Url, cancellationToken);
+                if (existing != null)
+                {
+                    _logger.LogDebug("跳过重复新闻：{Title}", news.Title);
+                    return existing;
+                }
+            }
+
             // 1. 抽取事件
             var eventData = await _eventExtractor.ExtractFromNewsAsync(news, cancellationToken);
 
-            // 2. 情绪分析
-            var sentiment = await _sentimentAnalyzer.AnalyzeEventAsync(eventData, cancellationToken);
-
-            // 3. 强度评分
-            var intensity = await _intensityScorer.ScoreAsync(eventData, cancellationToken);
+            // 2+3. 情绪分析与强度评分并行（均只依赖 eventData，彼此独立）
+            var sentimentTask = _sentimentAnalyzer.AnalyzeEventAsync(eventData, cancellationToken);
+            var intensityTask = _intensityScorer.ScoreAsync(eventData, cancellationToken);
+            await Task.WhenAll(sentimentTask, intensityTask);
+            var sentiment = sentimentTask.Result;
+            var intensity = intensityTask.Result;
 
             // 4. 保存事件记录
             var eventRecord = new EventRecordEntity
@@ -144,6 +174,10 @@ public class EventEngineService
 
             _dbContext.EventRecord.Add(eventRecord);
             await _dbContext.SaveChangesAsync(cancellationToken);
+
+            // 4b. 规范化关联（关联表，供精确查询）
+            await SaveEventRelationsAsync(eventRecord.Id, news.RelatedStocks,
+                eventData.RelatedConcepts.Union(news.RelatedConcepts), cancellationToken);
 
             // 5. 发布到消息总线
             await _messageBus.PublishAsync("events", new
@@ -179,11 +213,12 @@ public class EventEngineService
             eventData.Title = title;
             eventData.Source = source;
 
-            // 2. 情绪分析
-            var sentiment = await _sentimentAnalyzer.AnalyzeEventAsync(eventData, cancellationToken);
-
-            // 3. 强度评分
-            var intensity = await _intensityScorer.ScoreAsync(eventData, cancellationToken);
+            // 2+3. 情绪分析与强度评分并行（均只依赖 eventData，彼此独立）
+            var sentimentTask = _sentimentAnalyzer.AnalyzeEventAsync(eventData, cancellationToken);
+            var intensityTask = _intensityScorer.ScoreAsync(eventData, cancellationToken);
+            await Task.WhenAll(sentimentTask, intensityTask);
+            var sentiment = sentimentTask.Result;
+            var intensity = intensityTask.Result;
 
             // 4. 保存事件记录
             var eventRecord = new EventRecordEntity
@@ -210,6 +245,10 @@ public class EventEngineService
 
             _dbContext.EventRecord.Add(eventRecord);
             await _dbContext.SaveChangesAsync(cancellationToken);
+
+            // 4b. 规范化关联（政策无关联股票，仅概念）
+            await SaveEventRelationsAsync(eventRecord.Id, Array.Empty<string>(),
+                eventData.RelatedConcepts, cancellationToken);
 
             // 5. 发布到消息总线
             await _messageBus.PublishAsync("events", new
@@ -262,6 +301,164 @@ public class EventEngineService
     /// <summary>
     /// 搜索事件
     /// </summary>
+    /// <summary>写入事件的股票/概念关联表（去重、忽略空值）</summary>
+    private async Task SaveEventRelationsAsync(long eventId, IEnumerable<string> stocks, IEnumerable<string> concepts, CancellationToken cancellationToken = default)
+    {
+        var added = false;
+        foreach (var code in stocks.Where(s => !string.IsNullOrWhiteSpace(s)).Distinct())
+        {
+            _dbContext.EventStockRelation.Add(new EventStockRelationEntity { EventId = eventId, StockCode = code.Trim() });
+            added = true;
+        }
+        foreach (var concept in concepts.Where(c => !string.IsNullOrWhiteSpace(c)).Distinct())
+        {
+            _dbContext.EventConceptRelation.Add(new EventConceptRelationEntity { EventId = eventId, ConceptName = concept.Trim() });
+            added = true;
+        }
+        if (added)
+            await _dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// 写入候选图谱边（隔离）：公司-概念归属 + 公司-公司共现。带可信度，多次提及累加。
+    /// 不写入权威图谱（CompanyRelation/IndustryChain），仅作线索。
+    /// </summary>
+    private async Task SaveCandidateEdgesAsync(
+        List<string> companies, List<string> concepts, int credibility, string? sourceUrl, CancellationToken ct)
+    {
+        var comps = companies.Where(c => !string.IsNullOrWhiteSpace(c)).Select(c => c.Trim()).Distinct().Take(6).ToList();
+        var cons = concepts.Where(c => !string.IsNullOrWhiteSpace(c)).Select(c => c.Trim()).Distinct().Take(8).ToList();
+        if (comps.Count == 0) return;
+
+        var edges = new List<(string From, string To, string Type)>();
+        // 公司 → 概念
+        foreach (var comp in comps)
+            foreach (var con in cons)
+                edges.Add((comp, con, "concept"));
+        // 公司 ↔ 公司共现（无向，按字典序定向去重）
+        for (int i = 0; i < comps.Count; i++)
+            for (int j = i + 1; j < comps.Count; j++)
+            {
+                var a = string.CompareOrdinal(comps[i], comps[j]) <= 0 ? comps[i] : comps[j];
+                var b = a == comps[i] ? comps[j] : comps[i];
+                edges.Add((a, b, "co-occur"));
+            }
+
+        foreach (var (from, to, type) in edges)
+        {
+            var existing = await _dbContext.GraphCandidateEdge
+                .FirstOrDefaultAsync(e => e.FromEntity == from && e.ToEntity == to && e.EdgeType == type, ct);
+            if (existing != null)
+            {
+                existing.MentionCount++;
+                existing.Credibility = Math.Max(existing.Credibility, credibility);
+                existing.LastSourceUrl = sourceUrl;
+                existing.UpdatedAt = DateTime.UtcNow;
+            }
+            else
+            {
+                _dbContext.GraphCandidateEdge.Add(new GraphCandidateEdgeEntity
+                {
+                    FromEntity = from,
+                    ToEntity = to,
+                    EdgeType = type,
+                    Credibility = credibility,
+                    MentionCount = 1,
+                    LastSourceUrl = sourceUrl,
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow
+                });
+            }
+        }
+        await _dbContext.SaveChangesAsync(ct);
+        _logger.LogInformation("候选边写入：{Edges} 条（公司{Comp}×概念{Con}）", edges.Count, comps.Count, cons.Count);
+    }
+
+    /// <summary>事件是否已存在（按 Url 去重，供采集前预判，避免无谓的 LLM 调用）</summary>
+    public async Task<bool> ExistsByUrlAsync(string url, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrEmpty(url)) return false;
+        return await _dbContext.EventRecord.AnyAsync(e => e.Url == url, cancellationToken);
+    }
+
+    /// <summary>
+    /// 保存知识星球内容事件（已由小作文分析器分析过的结果）。
+    /// </summary>
+    public async Task<EventRecordEntity?> SaveKnowledgeStarEventAsync(
+        KnowledgeStarContent content, EssayAnalysisResult essay, CancellationToken cancellationToken = default)
+    {
+        if (!string.IsNullOrEmpty(content.Url) && await ExistsByUrlAsync(content.Url, cancellationToken))
+            return null;
+
+        var stocks = content.RelatedStocks.Union(essay.RelatedCompanies).Distinct().ToList();
+        var concepts = content.RelatedConcepts.Union(essay.RelatedConcepts).Distinct().ToList();
+
+        var entity = new EventRecordEntity
+        {
+            EventType = "knowledge-star",
+            Title = content.Title,
+            Content = content.Content,
+            Source = "知识星球",
+            Url = content.Url,
+            Sentiment = essay.Sentiment,
+            SentimentScore = essay.SentimentScore,
+            Credibility = essay.CredibilityScore,
+            RelatedStocks = string.Join(",", stocks),
+            RelatedConcepts = string.Join(",", concepts),
+            LLMAnalysis = System.Text.Json.JsonSerializer.Serialize(new
+            {
+                essay.CredibilityScore,
+                essay.Summary,
+                essay.Conclusion,
+                essay.RiskWarnings,
+                content.Author
+            }),
+            EventTime = content.PublishTime
+        };
+
+        _dbContext.EventRecord.Add(entity);
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        await SaveEventRelationsAsync(entity.Id, stocks, concepts, cancellationToken);
+        // 候选边（隔离，带可信度），仅作线索
+        await SaveCandidateEdgesAsync(essay.RelatedCompanies, concepts, essay.CredibilityScore, content.Url, cancellationToken);
+
+        await _messageBus.PublishAsync("events", new
+        {
+            EventId = entity.Id,
+            EventType = "knowledge-star",
+            content.Title,
+            essay.Sentiment,
+            essay.CredibilityScore
+        });
+
+        _logger.LogInformation("知识星球事件入库：{Title}（可信度 {Cred}）", content.Title, essay.CredibilityScore);
+        return entity;
+    }
+
+    /// <summary>按股票精确查询关联事件（用关联表 JOIN，替代逗号字符串 LIKE）</summary>
+    public async Task<List<EventRecordEntity>> GetEventsByStockAsync(string stockCode, int count = 50, CancellationToken cancellationToken = default)
+    {
+        return await (from r in _dbContext.EventStockRelation
+                      where r.StockCode == stockCode
+                      join e in _dbContext.EventRecord on r.EventId equals e.Id
+                      orderby e.EventTime descending
+                      select e)
+                     .Take(count)
+                     .ToListAsync(cancellationToken);
+    }
+
+    /// <summary>按概念精确查询关联事件</summary>
+    public async Task<List<EventRecordEntity>> GetEventsByConceptAsync(string concept, int count = 50, CancellationToken cancellationToken = default)
+    {
+        return await (from r in _dbContext.EventConceptRelation
+                      where r.ConceptName == concept
+                      join e in _dbContext.EventRecord on r.EventId equals e.Id
+                      orderby e.EventTime descending
+                      select e)
+                     .Take(count)
+                     .ToListAsync(cancellationToken);
+    }
+
     public async Task<List<EventRecordEntity>> SearchEventsAsync(string keyword, int count = 50, CancellationToken cancellationToken = default)
     {
         return await _dbContext.EventRecord

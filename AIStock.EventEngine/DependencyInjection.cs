@@ -14,6 +14,7 @@ public static class DependencyInjection
     public static IServiceCollection AddEventEngineServices(this IServiceCollection services)
     {
         services.AddScoped<EventEngineService>();
+        services.AddSingleton<GraphPromotionService>();
         return services;
     }
 }

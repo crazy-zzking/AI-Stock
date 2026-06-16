@@ -158,27 +158,37 @@ public class BacktestEngineService : IBacktestEngine
                 return new List<KlineData>();
             }
 
-            var allKlines = new List<KlineData>();
-            var currentEndTime = endTime;
-            const int batchSize = 800;
+            // Provider 的 GetKlinesAsync 取的是「最近 N 条日线」（TdxProvider 内部已按 800 分页）。
+            // 因此请求条数需覆盖 startTime 至今的跨度，再按区间过滤。
+            // 估算：日历天数 → 交易日约 0.7 折算，外加缓冲。
+            const int maxKlines = 2000;
+            var calendarDays = (DateTime.Now.Date - startTime.Date).TotalDays;
+            var estimatedTradingDays = (int)Math.Ceiling(calendarDays * 0.72) + 80;
+            var count = Math.Clamp(estimatedTradingDays, 120, maxKlines);
 
-            // 分批获取K线数据（单次最多800条）
-            while (currentEndTime > startTime)
+            var klines = await provider.GetKlinesAsync(code, Core.Enums.KlineInterval.Daily, count);
+            if (klines == null || klines.Count == 0)
             {
-                var klines = await provider.GetKlinesAsync(code, Core.Enums.KlineInterval.Daily, batchSize);
-                if (klines == null || klines.Count == 0)
-                    break;
-
-                var filtered = klines.Where(k => k.DateTime >= startTime && k.DateTime <= currentEndTime).ToList();
-                allKlines.AddRange(filtered);
-
-                if (klines.Count < batchSize || klines.First().DateTime <= startTime)
-                    break;
-
-                currentEndTime = klines.First().DateTime.AddDays(-1);
+                _logger.LogWarning("Provider returned no klines for {Code}", code);
+                return new List<KlineData>();
             }
 
-            return allKlines.OrderBy(k => k.DateTime).DistinctBy(k => k.DateTime).ToList();
+            var inRange = klines
+                .Where(k => k.DateTime >= startTime && k.DateTime <= endTime)
+                .OrderBy(k => k.DateTime)
+                .DistinctBy(k => k.DateTime)
+                .ToList();
+
+            // 数据未能回溯到 startTime（受 provider 上限限制），提示区间未完整覆盖
+            var oldest = klines.Min(k => k.DateTime);
+            if (oldest > startTime.Date.AddDays(1))
+            {
+                _logger.LogWarning(
+                    "回测数据未完整覆盖区间 {Code}: 请求起始 {Start:yyyy-MM-dd}，实际最早 {Oldest:yyyy-MM-dd}（受数据源 {Count} 条上限限制）",
+                    code, startTime, oldest, count);
+            }
+
+            return inRange;
         }
         catch (Exception ex)
         {

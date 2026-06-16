@@ -11,7 +11,10 @@ public static class DependencyInjection
         services.AddScoped<MABreakoutStrategy>();
         services.AddScoped<GridTradingStrategy>();
         services.AddScoped<PairTradingStrategy>();
+        // 全部策略注册为 IStrategy，供 IEnumerable<IStrategy> 注入遍历
         services.AddScoped<IStrategy>(sp => sp.GetRequiredService<MABreakoutStrategy>());
+        services.AddScoped<IStrategy>(sp => sp.GetRequiredService<GridTradingStrategy>());
+        services.AddScoped<IStrategy>(sp => sp.GetRequiredService<PairTradingStrategy>());
         services.AddScoped<IBacktestEngine, BacktestEngineService>();
         services.AddScoped<IAlphaEngine, AlphaEngineService>();
         services.AddScoped<IPortfolioEngine, PortfolioEngineService>();

@@ -1,3 +1,4 @@
+using AIStock.Core.Enums;
 using AIStock.Core.Interfaces;
 using AIStock.Core.Models;
 using Microsoft.Extensions.Logging;
@@ -12,17 +13,20 @@ public class AutonomousDecisionSystem
     private readonly IAgentOrchestrator _orchestrator;
     private readonly IDataProviderResolver _dataProviderResolver;
     private readonly IOrderManager _orderManager;
+    private readonly IPositionSizer _positionSizer;
     private readonly ILogger<AutonomousDecisionSystem> _logger;
 
     public AutonomousDecisionSystem(
         IAgentOrchestrator orchestrator,
         IDataProviderResolver dataProviderResolver,
         IOrderManager orderManager,
+        IPositionSizer positionSizer,
         ILogger<AutonomousDecisionSystem> logger)
     {
         _orchestrator = orchestrator;
         _dataProviderResolver = dataProviderResolver;
         _orderManager = orderManager;
+        _positionSizer = positionSizer;
         _logger = logger;
     }
 
@@ -74,11 +78,11 @@ public class AutonomousDecisionSystem
                     // Step 4: 风控通过后自动下单
                     if (riskResult.Success && IsRiskPassed(riskResult))
                     {
-                        var orderResult = await PlaceOrderAsync(signal, request.TotalCapital);
+                        var orderResult = await PlaceOrderAsync(signal, request.TotalCapital, request.PositionSizeMode);
                         orders.Add(orderResult);
                         _logger.LogInformation(
-                            "Auto order placed for {Code}: {Side} {Volume}@{Price}, OrderId={OrderId}",
-                            signal.Code, signal.SignalType, signal.Volume > 0 ? signal.Volume : (long)(request.TotalCapital * 0.1m / signal.Price / 100) * 100, signal.Price, orderResult.OrderId);
+                            "Auto order placed for {Code}: {Side}@{Price}, OrderId={OrderId}, Success={Success}",
+                            signal.Code, signal.SignalType, signal.Price, orderResult.OrderId, orderResult.Success);
                     }
                 }
             }
@@ -177,17 +181,30 @@ public class AutonomousDecisionSystem
         return await agent.ExecuteAsync(task);
     }
 
-    private async Task<OrderResult> PlaceOrderAsync(TradeSignal signal, decimal totalCapital)
+    private async Task<OrderResult> PlaceOrderAsync(TradeSignal signal, decimal totalCapital, PositionSizeMode mode)
     {
-        // 计算下单量：默认单票仓位不超过总资金的10%
-        var maxPositionValue = totalCapital * 0.1m;
-        var volume = signal.Volume > 0
-            ? signal.Volume
-            : (long)(maxPositionValue / signal.Price / 100) * 100; // 按手取整
+        // 下单量：优先使用信号显式数量，否则由 PositionSizer 按所选模式（Kelly/波动率目标等）计算仓位金额
+        long volume;
+        if (signal.Volume > 0)
+        {
+            volume = signal.Volume;
+        }
+        else
+        {
+            if (signal.Price <= 0)
+            {
+                _logger.LogWarning("Signal price <= 0 for {Code}, skipping order", signal.Code);
+                return new OrderResult { Success = false, Message = "Invalid signal price, order skipped" };
+            }
+
+            var positionValue = _positionSizer.CalculatePositionSize(signal, totalCapital, mode);
+            volume = (long)(positionValue / signal.Price / 100) * 100; // 按手(100股)向下取整
+        }
 
         if (volume <= 0)
         {
-            _logger.LogWarning("Calculated volume is 0 for {Code} at price {Price}, skipping order", signal.Code, signal.Price);
+            _logger.LogWarning("Calculated volume is 0 for {Code} at price {Price} (mode {Mode}), skipping order",
+                signal.Code, signal.Price, mode);
             return new OrderResult
             {
                 Success = false,
@@ -195,10 +212,17 @@ public class AutonomousDecisionSystem
             };
         }
 
+        var side = ResolveSide(signal.SignalType);
+        if (side == null)
+        {
+            _logger.LogInformation("Signal type {Type} for {Code} is not actionable, skipping order", signal.SignalType, signal.Code);
+            return new OrderResult { Success = false, Message = $"Signal {signal.SignalType} not actionable, order skipped" };
+        }
+
         var orderRequest = new OrderRequest
         {
             Code = signal.Code,
-            Side = signal.SignalType.ToString().ToLower(),
+            Side = side,
             OrderType = Core.Enums.OrderType.Limit,
             Price = signal.Price,
             Volume = volume,
@@ -208,6 +232,16 @@ public class AutonomousDecisionSystem
 
         return await _orderManager.PlaceOrderAsync(orderRequest);
     }
+
+    /// <summary>
+    /// 将信号类型映射为下单方向。Buy/StrongBuy → buy，Sell/StrongSell → sell，Hold/未知 → null（不下单）。
+    /// </summary>
+    private static string? ResolveSide(SignalType signalType) => signalType switch
+    {
+        SignalType.Buy or SignalType.StrongBuy => "buy",
+        SignalType.Sell or SignalType.StrongSell => "sell",
+        _ => null
+    };
 
     private static List<TradeSignal> ExtractSignals(AgentResult signalResult)
     {
@@ -258,6 +292,11 @@ public class DecisionRequest
     /// 总资金
     /// </summary>
     public decimal TotalCapital { get; set; }
+
+    /// <summary>
+    /// 仓位计算模式，默认半 Kelly
+    /// </summary>
+    public PositionSizeMode PositionSizeMode { get; set; } = PositionSizeMode.Kelly;
 }
 
 /// <summary>

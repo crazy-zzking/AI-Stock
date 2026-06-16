@@ -6,8 +6,10 @@ import {
   FallOutlined,
   RobotOutlined,
   ReloadOutlined,
+  SyncOutlined,
+  ClockCircleOutlined,
 } from '@ant-design/icons';
-import { getPositions, getAgents, getMarketState } from '../api';
+import { getPositions, getAgents, getMarketState, refreshPositions } from '../api';
 import { useNavigate } from 'react-router-dom';
 import LoadingSkeleton from '../components/LoadingSkeleton';
 import type { PositionSummary, AgentStatus } from '../types/models';
@@ -17,6 +19,7 @@ const Dashboard: React.FC = () => {
   const [positionData, setPositionData] = useState<PositionSummary | null>(null);
   const [agents, setAgents] = useState<AgentStatus[]>([]);
   const [marketState, setMarketState] = useState<number>(0);
+  const [refreshing, setRefreshing] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -40,7 +43,27 @@ const Dashboard: React.FC = () => {
     }
   };
 
+  const handleRefreshPositions = async () => {
+    setRefreshing(true);
+    try {
+      await refreshPositions();
+      const posRes = await getPositions();
+      setPositionData(posRes.data);
+      message.success('持仓已刷新');
+    } catch {
+      message.error('刷新持仓失败');
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   const marketStateText = ['牛市', '熊市', '震荡', '极端', '未知'][marketState] || '未知';
+
+  const formatUpdatedAt = (iso: string | null | undefined) => {
+    if (!iso) return null;
+    const d = new Date(iso);
+    return d.toLocaleString('zh-CN', { hour12: false });
+  };
 
   if (loading) {
     return <LoadingSkeleton rows={3} cardCount={4} />;
@@ -58,6 +81,21 @@ const Dashboard: React.FC = () => {
         >
           刷新
         </Button>
+        <Button
+          icon={<SyncOutlined spin={refreshing} />}
+          size="small"
+          style={{ marginLeft: 8 }}
+          loading={refreshing}
+          onClick={handleRefreshPositions}
+        >
+          主动刷新持仓
+        </Button>
+        {formatUpdatedAt(positionData?.updatedAt) && (
+          <span style={{ marginLeft: 16, fontSize: 12, color: '#888' }}>
+            <ClockCircleOutlined style={{ marginRight: 4 }} />
+            缓存时间: {formatUpdatedAt(positionData?.updatedAt)}
+          </span>
+        )}
       </h2>
       <Row gutter={16}>
         <Col span={6}>

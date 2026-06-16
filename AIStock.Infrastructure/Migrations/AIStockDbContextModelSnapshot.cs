@@ -342,6 +342,68 @@ namespace AIStock.Infrastructure.Migrations
                     b.ToTable("event_stock_relation");
                 });
 
+            modelBuilder.Entity("AIStock.Infrastructure.Database.Entities.GraphCandidateEdgeEntity", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("created_at");
+
+                    b.Property<int>("Credibility")
+                        .HasColumnType("int")
+                        .HasColumnName("credibility");
+
+                    b.Property<string>("EdgeType")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("varchar(30)")
+                        .HasColumnName("edge_type");
+
+                    b.Property<string>("FromEntity")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)")
+                        .HasColumnName("from_entity");
+
+                    b.Property<string>("LastSourceUrl")
+                        .HasMaxLength(500)
+                        .HasColumnType("varchar(500)")
+                        .HasColumnName("last_source_url");
+
+                    b.Property<int>("MentionCount")
+                        .HasColumnType("int")
+                        .HasColumnName("mention_count");
+
+                    b.Property<bool>("Promoted")
+                        .HasColumnType("tinyint(1)")
+                        .HasColumnName("promoted");
+
+                    b.Property<string>("ToEntity")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)")
+                        .HasColumnName("to_entity");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EdgeType");
+
+                    b.HasIndex("FromEntity", "ToEntity", "EdgeType")
+                        .IsUnique();
+
+                    b.ToTable("graph_candidate_edge");
+                });
+
             modelBuilder.Entity("AIStock.Infrastructure.Database.Entities.IndustryChainEntity", b =>
                 {
                     b.Property<long>("Id")
@@ -678,9 +740,18 @@ namespace AIStock.Infrastructure.Migrations
                         .HasColumnType("varchar(20)")
                         .HasColumnName("code");
 
+                    b.Property<string>("CompanyName")
+                        .HasMaxLength(200)
+                        .HasColumnType("varchar(200)")
+                        .HasColumnName("company_name");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime(6)")
                         .HasColumnName("created_at");
+
+                    b.Property<int?>("EmployeeCount")
+                        .HasColumnType("int")
+                        .HasColumnName("employee_count");
 
                     b.Property<string>("Industry")
                         .HasMaxLength(100)
@@ -695,6 +766,10 @@ namespace AIStock.Infrastructure.Migrations
                         .HasColumnType("datetime(6)")
                         .HasColumnName("list_date");
 
+                    b.Property<string>("MainBusiness")
+                        .HasColumnType("text")
+                        .HasColumnName("main_business");
+
                     b.Property<string>("Market")
                         .IsRequired()
                         .HasMaxLength(10)
@@ -707,9 +782,32 @@ namespace AIStock.Infrastructure.Migrations
                         .HasColumnType("varchar(50)")
                         .HasColumnName("name");
 
+                    b.Property<string>("Profile")
+                        .HasColumnType("text")
+                        .HasColumnName("profile");
+
+                    b.Property<string>("Province")
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)")
+                        .HasColumnName("province");
+
+                    b.Property<decimal?>("RegCapital")
+                        .HasColumnType("decimal(65,30)")
+                        .HasColumnName("reg_capital");
+
+                    b.Property<string>("SubIndustry")
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)")
+                        .HasColumnName("sub_industry");
+
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("datetime(6)")
                         .HasColumnName("updated_at");
+
+                    b.Property<string>("Website")
+                        .HasMaxLength(200)
+                        .HasColumnType("varchar(200)")
+                        .HasColumnName("website");
 
                     b.HasKey("Code");
 
@@ -718,6 +816,54 @@ namespace AIStock.Infrastructure.Migrations
                     b.HasIndex("Market");
 
                     b.ToTable("stock_base");
+                });
+
+            modelBuilder.Entity("AIStock.Infrastructure.Database.Entities.StockConceptRelationEntity", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<int?>("ConceptId")
+                        .HasColumnType("int")
+                        .HasColumnName("concept_id");
+
+                    b.Property<string>("ConceptName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)")
+                        .HasColumnName("concept_name");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("QuoteCode")
+                        .HasMaxLength(50)
+                        .HasColumnType("varchar(50)")
+                        .HasColumnName("quote_code");
+
+                    b.Property<string>("StockCode")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("varchar(20)")
+                        .HasColumnName("stock_code");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ConceptName");
+
+                    b.HasIndex("StockCode", "ConceptName")
+                        .IsUnique();
+
+                    b.ToTable("stock_concept_relation");
                 });
 
             modelBuilder.Entity("AIStock.Infrastructure.Database.Entities.TradeRecordEntity", b =>

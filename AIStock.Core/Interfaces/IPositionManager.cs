@@ -16,6 +16,11 @@ public interface IPositionManager
     /// 获取指定股票持仓
     /// </summary>
     Task<PortfolioPosition?> GetPositionAsync(string code);
+
+    /// <summary>
+    /// 强制刷新持仓缓存（从 Provider 重新拉取并写入 Redis）
+    /// </summary>
+    Task<PositionSummary> RefreshAsync();
 }
 
 /// <summary>
@@ -62,6 +67,11 @@ public class PositionSummary
     /// 亏损数量
     /// </summary>
     public int LossCount { get; set; }
+
+    /// <summary>
+    /// 缓存更新时间（UTC），null 表示直连 Provider 未缓存
+    /// </summary>
+    public DateTime? UpdatedAt { get; set; }
 
     /// <summary>
     /// 持仓列表

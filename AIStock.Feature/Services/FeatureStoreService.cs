@@ -17,6 +17,8 @@ public class FeatureStoreService : IFeatureStore
     private const string KeyPrefix = "feature:";
     private const string HistoryKeyPrefix = "feature:history:";
     private const string IndexKeyPrefix = "feature:index:";
+    // 索引注册表：记录所有拥有特征索引的 code，清理时据此遍历，避免扫描整个 keyspace
+    private const string IndexRegistryKey = "feature:index:codes";
 
     public FeatureStoreService(IConnectionMultiplexer redis, ILogger<FeatureStoreService> logger)
     {
@@ -41,6 +43,7 @@ public class FeatureStoreService : IFeatureStore
             // 保存到Sorted Set索引（按时间戳排序，30d TTL）
             await db.SortedSetAddAsync(indexKey, json, timestamp);
             await db.KeyExpireAsync(indexKey, TimeSpan.FromDays(30));
+            await db.SetAddAsync(IndexRegistryKey, code);
 
             _logger.LogDebug("Saved features for {Code} at {DateTime}", code, dateTime);
         }
@@ -120,6 +123,7 @@ public class FeatureStoreService : IFeatureStore
                 tasks.Add(db.StringSetAsync(key, json, TimeSpan.FromHours(24)));
                 tasks.Add(db.SortedSetAddAsync(indexKey, json, timestamp));
                 tasks.Add(db.KeyExpireAsync(indexKey, TimeSpan.FromDays(30)));
+                tasks.Add(db.SetAddAsync(IndexRegistryKey, code));
             }
 
             await Task.WhenAll(tasks);
@@ -138,23 +142,25 @@ public class FeatureStoreService : IFeatureStore
         {
             var db = _redis.GetDatabase();
             var cutoffTicks = DateTime.UtcNow.Subtract(maxAge).Ticks;
-
-            // 通过Sorted Set的索引前缀查找所有索引key
-            var server = _redis.GetServer(_redis.GetEndPoints().First());
             var deletedCount = 0;
 
-            // 使用SCAN替代KEYS（更安全）
-            foreach (var key in server.Keys(pattern: $"{IndexKeyPrefix}*"))
+            // 仅遍历注册表中已知的 code，避免扫描整个 keyspace
+            var codes = await db.SetMembersAsync(IndexRegistryKey);
+            foreach (var codeValue in codes)
             {
-                // 使用ZREMRANGEBYSCORE按时间范围删除过期数据
-                var removed = await db.SortedSetRemoveRangeByScoreAsync(key, double.NegativeInfinity, cutoffTicks);
+                if (codeValue.IsNullOrEmpty) continue;
+                var indexKey = $"{IndexKeyPrefix}{codeValue}";
+
+                // ZREMRANGEBYSCORE 按时间范围删除过期数据
+                var removed = await db.SortedSetRemoveRangeByScoreAsync(indexKey, double.NegativeInfinity, cutoffTicks);
                 deletedCount += (int)removed;
 
-                // 如果Sorted Set为空，删除整个key
-                var length = await db.SortedSetLengthAsync(key);
+                // Sorted Set 已空（或索引已自然过期）：删除 key 并从注册表移除该 code
+                var length = await db.SortedSetLengthAsync(indexKey);
                 if (length == 0)
                 {
-                    await db.KeyDeleteAsync(key);
+                    await db.KeyDeleteAsync(indexKey);
+                    await db.SetRemoveAsync(IndexRegistryKey, codeValue);
                 }
             }
 

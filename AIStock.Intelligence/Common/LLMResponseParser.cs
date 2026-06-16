@@ -13,18 +13,35 @@ public static class LLMResponseParser
     public static string CleanJsonResponse(string response)
     {
         var jsonContent = response.Trim();
-        if (jsonContent.StartsWith("```json"))
+
+        // 去除Markdown代码块标记（```json / ``` / `` / ` 等各种变体）
+        // 1. 去除 ```json 或 ```JSON 前缀
+        if (jsonContent.StartsWith("```json", StringComparison.OrdinalIgnoreCase))
         {
             jsonContent = jsonContent[7..];
         }
-        if (jsonContent.StartsWith("```"))
+        else if (jsonContent.StartsWith("```"))
         {
             jsonContent = jsonContent[3..];
         }
+
+        // 2. 去除末尾的 ```
         if (jsonContent.EndsWith("```"))
         {
             jsonContent = jsonContent[..^3];
         }
+
+        // 3. 去除杂散的单个或双个反引号（LLM有时输出不完整的代码块标记）
+        jsonContent = jsonContent.Trim();
+        if (jsonContent.StartsWith("`") && !jsonContent.StartsWith("```"))
+        {
+            jsonContent = jsonContent.TrimStart('`');
+        }
+        if (jsonContent.EndsWith("`") && !jsonContent.EndsWith("```"))
+        {
+            jsonContent = jsonContent.TrimEnd('`');
+        }
+
         return jsonContent.Trim();
     }
 

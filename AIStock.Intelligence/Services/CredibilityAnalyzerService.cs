@@ -45,10 +45,11 @@ public class CredibilityAnalyzerService : ICredibilityAnalyzer
         result.LogicAnalysis = logicAnalysis.analysis;
         result.AddDataSource("llm", "LLM逻辑分析", "使用LLM分析事件逻辑合理性", 1);
 
-        // 3. 资金配合分析（简化版，实际需要接入行情数据）
+        // 3. 资金配合分析（接入真实K线：量价结合判断吸筹/出货）
         var capitalAnalysis = await AnalyzeCapitalAsync(eventData, cancellationToken);
         result.CapitalScore = capitalAnalysis.score;
         result.CapitalAnalysis = capitalAnalysis.analysis;
+        result.CapitalPattern = capitalAnalysis.pattern;
         result.AddDataSource("database", "K线数据", $"分析{eventData.RelatedCompanies.Count}只关联股票的资金流动", eventData.RelatedCompanies.Count);
 
         // 4. 计算综合可信度
@@ -132,47 +133,79 @@ public class CredibilityAnalyzerService : ICredibilityAnalyzer
         return (50, "逻辑分析失败");
     }
 
-    private async Task<(int score, string analysis)> AnalyzeCapitalAsync(EventData eventData, CancellationToken cancellationToken)
+    private async Task<(int score, string analysis, string pattern)> AnalyzeCapitalAsync(EventData eventData, CancellationToken cancellationToken)
     {
-        // 简化版资金分析，实际需要接入行情数据
-        var relatedStocks = eventData.RelatedCompanies.Keys.ToList();
+        // 关联公司字典为「公司名 -> 股票代码」，资金分析需用代码（Values）
+        var codes = eventData.RelatedCompanies.Values
+            .Where(c => !string.IsNullOrWhiteSpace(c))
+            .Distinct()
+            .ToList();
 
-        if (!relatedStocks.Any())
-        {
-            return (50, "无关联股票，无法分析资金配合");
-        }
+        if (codes.Count == 0)
+            return (50, "无关联股票代码，无法分析资金配合", "insufficient");
 
-        // 检查是否有异常资金流动
-        var hasCapitalFlow = false;
-        foreach (var stock in relatedStocks.Take(3))
+        const string interval = "Daily";
+        var eventDate = eventData.EventTime == default ? DateTime.Now.Date : eventData.EventTime.Date;
+
+        const int preWindowDays = 5;       // 发布前窗口
+        const double volThreshold = 1.8;   // 放量阈值（相对基线）
+        const double accumMaxRunUp = 12;   // 吸筹：累计涨幅上限(%)
+        const double distMinRunUp = 25;    // 高位利好落地：累计涨幅下限(%)
+
+        var accumulation = new List<string>(); // 提前放量但没大涨 → 吸筹
+        var distribution = new List<string>(); // 已大涨后放量 → 高位/利好落地
+        var spike = new List<string>();         // 当日放量
+        var analyzed = 0;
+
+        foreach (var code in codes.Take(5))
         {
-            var latestKline = await _dbContext.KlineData
-                .Where(k => k.Code == stock && k.Interval == "daily")
+            var klines = await _dbContext.KlineData
+                .Where(k => k.Code == code && k.Interval == interval && k.DateTime <= eventDate.AddDays(5))
                 .OrderByDescending(k => k.DateTime)
-                .FirstOrDefaultAsync(cancellationToken);
+                .Take(40)
+                .ToListAsync(cancellationToken);
 
-            if (latestKline != null && latestKline.Volume > 0)
-            {
-                // 检查是否有放量
-                var avgVolume = await _dbContext.KlineData
-                    .Where(k => k.Code == stock && k.Interval == "daily")
-                    .OrderByDescending(k => k.DateTime)
-                    .Take(20)
-                    .AverageAsync(k => k.Volume, cancellationToken);
+            if (klines.Count < 10) continue;
+            analyzed++;
 
-                if (latestKline.Volume > avgVolume * 2)
-                {
-                    hasCapitalFlow = true;
-                }
-            }
+            var post = klines.Where(k => k.DateTime.Date >= eventDate).OrderBy(k => k.DateTime).FirstOrDefault()
+                       ?? klines.First();
+            var preWindow = klines.Where(k => k.DateTime < post.DateTime).Take(preWindowDays).ToList();
+            var baseline = klines.Where(k => k.DateTime < post.DateTime).Skip(preWindowDays).Take(20).ToList();
+            if (baseline.Count < 5 || preWindow.Count < 2) continue;
+
+            var baseAvg = baseline.Average(k => (double)k.Volume);
+            if (baseAvg <= 0) continue;
+
+            // 累计涨幅：基线最早收盘价 → 发布日收盘价
+            var startClose = (double)baseline.OrderBy(k => k.DateTime).First().Close;
+            var runUpPct = startClose > 0 ? ((double)post.Close / startClose - 1) * 100 : 0;
+
+            var preAvg = preWindow.Average(k => (double)k.Volume);
+            var preAmplified = preAvg > baseAvg * volThreshold;
+
+            if (preAmplified && runUpPct < accumMaxRunUp)
+                // 提前放量但股价没大涨 → 像主力吸筹（消息更可信）
+                accumulation.Add($"{code}(发布前放量{preAvg / baseAvg:F1}倍且仅涨{runUpPct:F1}%)");
+            else if ((preAmplified || post.Volume > baseAvg * volThreshold) && runUpPct > distMinRunUp)
+                // 已放量大涨后才出利好 → 疑利好落地/高位出货
+                distribution.Add($"{code}(已涨{runUpPct:F1}%后放量)");
+            else if (post.Volume > baseAvg * 2)
+                spike.Add($"{code}(发布当日放量{post.Volume / baseAvg:F1}倍)");
         }
 
-        if (hasCapitalFlow)
-        {
-            return (70, "检测到异常资金流动，需警惕配合炒作");
-        }
+        if (analyzed == 0)
+            return (50, "关联股票无足够K线数据，无法验证资金配合", "insufficient");
 
-        return (60, "资金流动正常");
+        // 吸筹（量增价稳）最支持消息可信；高位利好落地反而要警惕出货
+        if (accumulation.Count > 0)
+            return (82, $"提前放量但股价未大涨（疑主力吸筹，消息可信度偏高）：{string.Join("、", accumulation)}", "accumulation");
+        if (distribution.Count > 0)
+            return (40, $"已放量大涨后才现利好（疑利好落地/高位出货）：{string.Join("、", distribution)}", "distribution");
+        if (spike.Count > 0)
+            return (68, $"消息发布当日放量：{string.Join("、", spike)}", "spike");
+
+        return (60, $"已核{analyzed}只关联股票，量价未见明显异动", "normal");
     }
 
     private int CalculateCredibilityScore(CredibilityResult result)
@@ -215,9 +248,17 @@ public class CredibilityAnalyzerService : ICredibilityAnalyzer
             reasons.Add("逻辑合理性存疑");
         }
 
-        if (result.CapitalScore > 70)
+        switch (result.CapitalPattern)
         {
-            reasons.Add("存在资金配合嫌疑");
+            case "accumulation":
+                reasons.Add("发布前量增价稳，疑主力吸筹（佐证消息可信）");
+                break;
+            case "distribution":
+                reasons.Add("已大涨后才现利好，疑利好落地/高位出货");
+                break;
+            case "spike":
+                reasons.Add("发布当日放量，存在资金配合迹象");
+                break;
         }
 
         if (!reasons.Any())
@@ -242,9 +283,13 @@ public class CredibilityAnalyzerService : ICredibilityAnalyzer
             warnings.Add("事件逻辑存在漏洞，谨慎对待");
         }
 
-        if (result.CapitalScore > 70)
+        if (result.CapitalPattern == "distribution")
         {
-            warnings.Add("可能存在资金配合，注意风险");
+            warnings.Add("高位利好落地，警惕兑现出货风险");
+        }
+        else if (result.CapitalPattern == "spike")
+        {
+            warnings.Add("发布当日放量，注意资金配合风险");
         }
 
         if (result.CredibilityScore < 50)

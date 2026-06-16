@@ -41,6 +41,11 @@ public class CredibilityResult : AnalysisResultBase
     public string? CapitalAnalysis { get; set; }
 
     /// <summary>
+    /// 资金形态：accumulation(吸筹) / distribution(高位利好落地) / spike(当日放量) / normal / insufficient
+    /// </summary>
+    public string? CapitalPattern { get; set; }
+
+    /// <summary>
     /// 综合判断
     /// </summary>
     public Enums.Verdict Verdict { get; set; } = Enums.Verdict.Uncertain;

@@ -1,6 +1,7 @@
 using System.Text.Json;
 using AIStock.Core.Interfaces;
 using AIStock.Core.Models;
+using AIStock.Intelligence.Common;
 using Microsoft.Extensions.Logging;
 
 namespace AIStock.Intelligence.Services;
@@ -76,7 +77,8 @@ public class SentimentAnalysisService : ISentimentAnalyzer
     {
         try
         {
-            var jsonDoc = JsonDocument.Parse(response);
+            var jsonContent = LLMResponseParser.CleanJsonResponse(response);
+            var jsonDoc = JsonDocument.Parse(jsonContent);
             var root = jsonDoc.RootElement;
 
             var result = new SentimentResult
