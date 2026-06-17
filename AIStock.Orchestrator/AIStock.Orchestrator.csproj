@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net9.0</TargetFramework>
@@ -16,6 +16,7 @@
     <ProjectReference Include="..\AIStock.Execution\AIStock.Execution.csproj" />
     <ProjectReference Include="..\AIStock.Memory\AIStock.Memory.csproj" />
     <ProjectReference Include="..\AIStock.GraphRAG\AIStock.GraphRAG.csproj" />
+    <ProjectReference Include="..\AIStock.Selection\AIStock.Selection.csproj" />
   </ItemGroup>
 
 </Project>

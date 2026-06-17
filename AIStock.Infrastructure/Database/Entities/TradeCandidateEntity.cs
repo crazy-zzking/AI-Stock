@@ -104,6 +104,15 @@ public class TradeCandidateEntity
     [Column("order_volume")]
     public long? OrderVolume { get; set; }
 
+    /// <summary>最近一次查单的订单状态文本（如"部分成交""全部成交"）</summary>
+    [Column("order_status_text")]
+    [StringLength(100)]
+    public string? OrderStatusText { get; set; }
+
+    /// <summary>最近一次查单的成交数量（股）</summary>
+    [Column("order_filled_volume")]
+    public long? OrderFilledVolume { get; set; }
+
     [Column("created_at")]
     public DateTime CreatedAt { get; set; } = DateTime.Now;
 

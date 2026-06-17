@@ -133,6 +133,8 @@ public record TradingOrderResult
     public bool IsCompleted { get; init; }
     public bool IsFailed { get; init; }
     public string Msg { get; init; } = string.Empty;
+    /// <summary>券商返回的详细拒绝原因（tip 字段）。</summary>
+    public string? BrokerTip { get; init; }
 }
 
 /// <summary>
@@ -141,10 +143,18 @@ public record TradingOrderResult
 public record TradingOrderStatus
 {
     public long OrderId { get; init; }
+    /// <summary>券商原始返回的 ret 码（100=订单接受, 101=正在处理, 200=券商接受, 201=券商拒绝, 210=正在委托, 211=部分成交, 212=全部成交, 213=已被撤单, 3XX=状态/逻辑错误, 4XX=其他错误）。</summary>
+    public int RetCode { get; init; }
     public bool IsPending { get; init; }
     public bool IsCompleted { get; init; }
     public bool IsFailed { get; init; }
+    /// <summary>是否被券商 OMS 拒绝 (ret=201)，可改单重试。</summary>
+    public bool IsBrokerRejected { get; init; }
     public string Status { get; init; } = string.Empty;
+    /// <summary>成交数量（股），仅 chadan 返回。0 表示无成交或未查询。</summary>
+    public long FilledVolume { get; init; }
+    /// <summary>券商返回的详细拒绝原因（jimairu/chadan 的 tip 字段）。</summary>
+    public string? BrokerTip { get; init; }
 }
 
 /// <summary>

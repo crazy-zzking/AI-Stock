@@ -4,6 +4,7 @@ using AIStock.Infrastructure.Database.Context;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace AIStock.Infrastructure.Migrations
 {
     [DbContext(typeof(AIStockDbContext))]
-    partial class AIStockDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260617040000_AddTradeCandidateOrderStatus")]
+    partial class AddTradeCandidateOrderStatus
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder

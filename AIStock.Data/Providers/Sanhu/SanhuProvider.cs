@@ -341,19 +341,9 @@ public class SanhuProvider : BaseProvider
             var jsonDoc = JsonDocument.Parse(response);
             var root = jsonDoc.RootElement;
 
-            return new SanhuOrderResult
-            {
-                Ret = root.GetProperty("ret").GetInt32(),
-                Msg = root.TryGetProperty("msg", out var msg) ? msg.GetString() ?? "" : "",
-                OrderId = root.TryGetProperty("orderid", out var oid) ? oid.GetInt64() : 0,
-                AgreeId = root.TryGetProperty("agreeid", out var aid) ? aid.GetInt64() : 0,
-                Time = root.TryGetProperty("time", out var time) ? time.GetString() : null,
-                Type = root.TryGetProperty("type", out var type) ? type.GetString() : null,
-                Code = root.TryGetProperty("code", out var c) ? c.GetString() : null,
-                Price = root.TryGetProperty("price", out var p) ? p.GetInt32() : 0,
-                Hands = root.TryGetProperty("hand", out var h) ? h.GetInt32() : 0,
-                Policy = root.TryGetProperty("policy", out var pol) ? pol.GetString() : null
-            };
+            var result = ParseSanhuOrderResult(root);
+            if (result.OrderId == 0) result.OrderId = root.TryGetProperty("orderid", out var oid) ? oid.GetInt64() : 0;
+            return result;
         }
         catch (Exception ex)
         {
@@ -381,19 +371,9 @@ public class SanhuProvider : BaseProvider
             var jsonDoc = JsonDocument.Parse(response);
             var root = jsonDoc.RootElement;
 
-            return new SanhuOrderResult
-            {
-                Ret = root.GetProperty("ret").GetInt32(),
-                Msg = root.TryGetProperty("msg", out var msg) ? msg.GetString() ?? "" : "",
-                OrderId = root.TryGetProperty("orderid", out var oid) ? oid.GetInt64() : 0,
-                AgreeId = root.TryGetProperty("agreeid", out var aid) ? aid.GetInt64() : 0,
-                Time = root.TryGetProperty("time", out var time) ? time.GetString() : null,
-                Type = root.TryGetProperty("type", out var type) ? type.GetString() : null,
-                Code = root.TryGetProperty("code", out var c) ? c.GetString() : null,
-                Price = root.TryGetProperty("price", out var p) ? p.GetInt32() : 0,
-                Hands = root.TryGetProperty("hand", out var h) ? h.GetInt32() : 0,
-                Policy = root.TryGetProperty("policy", out var pol) ? pol.GetString() : null
-            };
+            var result = ParseSanhuOrderResult(root);
+            if (result.OrderId == 0) result.OrderId = root.TryGetProperty("orderid", out var oid) ? oid.GetInt64() : 0;
+            return result;
         }
         catch (Exception ex)
         {
@@ -403,7 +383,7 @@ public class SanhuProvider : BaseProvider
     }
 
     /// <summary>
-    /// 查询订单状态
+    /// 查询订单状态 (jycx_chadan)
     /// </summary>
     public async Task<SanhuOrderResult?> QueryOrderSanhuAsync(long orderId)
     {
@@ -418,24 +398,75 @@ public class SanhuProvider : BaseProvider
             var jsonDoc = JsonDocument.Parse(response);
             var root = jsonDoc.RootElement;
 
-            return new SanhuOrderResult
-            {
-                Ret = root.GetProperty("ret").GetInt32(),
-                OrderId = orderId,
-                AgreeId = root.TryGetProperty("agreeid", out var aid) ? aid.GetInt64() : 0,
-                Time = root.TryGetProperty("time", out var time) ? time.GetString() : null,
-                Type = root.TryGetProperty("type", out var type) ? type.GetString() : null,
-                Code = root.TryGetProperty("code", out var c) ? c.GetString() : null,
-                Price = root.TryGetProperty("price", out var p) ? p.GetInt32() : 0,
-                Hands = root.TryGetProperty("hand", out var h) ? h.GetInt32() : 0,
-                Policy = root.TryGetProperty("policy", out var pol) ? pol.GetString() : null
-            };
+            var result = ParseSanhuOrderResult(root);
+            // chadan 可能返回不同的 orderid 字段名
+            if (result.OrderId == 0) result.OrderId = root.TryGetProperty("orderid", out var oid) ? oid.GetInt64() : orderId;
+            return result;
         }
         catch (Exception ex)
         {
             Logger.LogError(ex, "Failed to query order {OrderId}", orderId);
             return null;
         }
+    }
+
+    /// <summary>
+    /// 统一解析 Sanhu 下单/查单的 JSON 响应。
+    /// 优先从 root 取值；若 root 无 code/price/hand 等字段，则回退到 user 对象内取值。
+    /// </summary>
+    private static SanhuOrderResult ParseSanhuOrderResult(JsonElement root)
+    {
+        var ret = root.TryGetProperty("ret", out var r) ? r.GetInt32() : -1;
+        var msg = root.TryGetProperty("msg", out var m) ? m.GetString() ?? "" : "";
+        var tip = root.TryGetProperty("tip", out var tp) ? tp.GetString() : null;
+        var orderId = root.TryGetProperty("orderid", out var oid) ? oid.GetInt64() : 0L;
+        var agreeId = root.TryGetProperty("agreeid", out var aid) ? aid.GetInt64() : 0L;
+
+        // 优先从 root 取值；若缺失则从 user 嵌套对象取值（jimairu/jimaichu 失败时字段在 user 里）
+        string? type = null, code = null, time = null, policy = null;
+        int price = 0, hands = 0;
+        long filledVolume = 0;
+
+        bool HasField(string name) => root.TryGetProperty(name, out var p) && p.ValueKind != JsonValueKind.Null;
+
+        if (HasField("code")) code = root.GetProperty("code").GetString();
+        if (HasField("type")) type = root.GetProperty("type").GetString();
+        if (HasField("time")) time = root.GetProperty("time").GetString();
+        if (HasField("policy")) policy = root.GetProperty("policy").GetString();
+        if (HasField("price")) price = root.GetProperty("price").GetInt32();
+        if (HasField("hand")) hands = root.GetProperty("hand").GetInt32();
+        // chadan 成交数量字段：cjsl / cjnum / filled
+        if (HasField("cjsl")) filledVolume = root.GetProperty("cjsl").GetInt64();
+        else if (HasField("cjnum")) filledVolume = root.GetProperty("cjnum").GetInt64();
+        else if (HasField("filled")) filledVolume = root.GetProperty("filled").GetInt64();
+
+        // 回退到 user 嵌套对象
+        if (root.TryGetProperty("user", out var user) && user.ValueKind == JsonValueKind.Object)
+        {
+            if (code == null && user.TryGetProperty("code", out var uc)) code = uc.GetString();
+            if (type == null && user.TryGetProperty("type", out var ut)) type = ut.GetString();
+            if (time == null && user.TryGetProperty("time", out var utm)) time = utm.GetString();
+            if (policy == null && user.TryGetProperty("policy", out var up)) policy = up.GetString();
+            if (price == 0 && user.TryGetProperty("price", out var upr) && upr.ValueKind == JsonValueKind.Number) price = upr.GetInt32();
+            if (hands == 0 && user.TryGetProperty("hand", out var uh) && uh.ValueKind == JsonValueKind.Number) hands = uh.GetInt32();
+            // user 里可能没有 msg/tip，保留 root 级别的
+        }
+
+        return new SanhuOrderResult
+        {
+            Ret = ret,
+            Msg = msg,
+            Tip = tip,
+            OrderId = orderId,
+            AgreeId = agreeId,
+            Time = time,
+            Type = type,
+            Code = code,
+            Price = price,
+            Hands = hands,
+            Policy = policy,
+            FilledVolume = filledVolume,
+        };
     }
 
     /// <summary>
@@ -574,7 +605,8 @@ public class SanhuProvider : BaseProvider
             IsAccepted = result.IsAccepted,
             IsCompleted = result.IsCompleted,
             IsFailed = result.IsFailed,
-            Msg = result.Msg
+            Msg = result.Msg,
+            BrokerTip = result.Tip,
         };
     }
 
@@ -589,7 +621,8 @@ public class SanhuProvider : BaseProvider
             IsAccepted = result.IsAccepted,
             IsCompleted = result.IsCompleted,
             IsFailed = result.IsFailed,
-            Msg = result.Msg
+            Msg = result.Msg,
+            BrokerTip = result.Tip,
         };
     }
 
@@ -600,9 +633,14 @@ public class SanhuProvider : BaseProvider
         return new TradingOrderStatus
         {
             OrderId = result.OrderId,
-            IsPending = result.IsAccepted,
+            RetCode = result.Ret,
+            IsPending = result.IsPending,
             IsCompleted = result.IsCompleted,
-            IsFailed = result.IsFailed
+            IsFailed = result.IsFailed,
+            IsBrokerRejected = result.IsBrokerRejected,
+            Status = result.StatusText,
+            BrokerTip = result.Tip,
+            FilledVolume = result.FilledVolume,
         };
     }
 
@@ -627,6 +665,7 @@ public class SanhuOrderResult
 {
     public int Ret { get; set; }
     public string Msg { get; set; } = "";
+    public string? Tip { get; set; }
     public long OrderId { get; set; }
     public long AgreeId { get; set; }
     public string? Time { get; set; }
@@ -635,11 +674,38 @@ public class SanhuOrderResult
     public int Price { get; set; }
     public int Hands { get; set; }
     public string? Policy { get; set; }
+    /// <summary>成交数量（股），仅 chadan 返回。0 表示无成交或未查询。</summary>
+    public long FilledVolume { get; set; }
 
     public bool IsAccepted => Ret == 100;
+    /// <summary>券商已收到委托（ret=200）。</summary>
+    public bool IsSentToBroker => Ret == 200;
+    /// <summary>正在向交易所委托（ret=210）。</summary>
+    public bool IsSubmitting => Ret == 210;
+    /// <summary>部分成交（ret=211）。</summary>
+    public bool IsPartiallyFilled => Ret == 211;
     public bool IsCompleted => Ret == 212;
+    /// <summary>失败：券商拒绝(201) / 已撤单(213) / 3XX/4XX 错误。</summary>
     public bool IsFailed => Ret >= 300 || Ret == 201 || Ret == 213;
-    public bool IsPending => Ret is >= 100 and < 200;
+    /// <summary>尚未完成：100 订单接受 / 101 正在处理 / 200 券商接受 / 210 正在委托。</summary>
+    public bool IsPending => Ret is 100 or 101 or 200 or 210;
+    /// <summary>是否被券商 OMS 拒绝（可尝试改价/改单重试）。</summary>
+    public bool IsBrokerRejected => Ret == 201;
+
+    public string StatusText => Ret switch
+    {
+        100 => "订单接受",
+        101 => "正在处理",
+        200 => "券商接受",
+        201 => "券商拒绝",
+        210 => "正在委托",
+        211 => "部分成交",
+        212 => "全部成交",
+        213 => "已被撤单",
+        >= 300 and < 400 => $"状态/逻辑错误({Ret})",
+        >= 400 => $"其他错误({Ret})",
+        _ => $"未知状态({Ret})",
+    };
 }
 
 /// <summary>

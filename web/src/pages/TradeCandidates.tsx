@@ -3,8 +3,8 @@ import {
   Card, Table, Tag, Button, Space, Segmented, message, Modal, InputNumber,
   Tooltip, Typography, Popconfirm, Row, Col, Rate,
 } from 'antd';
-import { ReloadOutlined, ShoppingCartOutlined } from '@ant-design/icons';
-import { getTradeCandidates, orderTradeCandidate, ignoreTradeCandidate } from '../api';
+import { ReloadOutlined, ShoppingCartOutlined, SearchOutlined } from '@ant-design/icons';
+import { getTradeCandidates, orderTradeCandidate, ignoreTradeCandidate, checkOrderTradeCandidate } from '../api';
 import type { TradeCandidate } from '../api';
 
 const { Paragraph, Text } = Typography;
@@ -65,6 +65,10 @@ const TradeCandidates: React.FC = () => {
         message.success(`下单成功（${mode === 'Live' ? '实盘' : '模拟'}）：${res.data.message || ''}`);
         setOrderOpen(false);
         load(status);
+      } else if (res.data?.brokerRejected) {
+        message.warning(`券商拒单：${res.data.brokerTip || res.data.message || '未知原因'}。订单已记录（orderId: ${res.data.orderId}），可查单后重试。`);
+        setOrderOpen(false);
+        load(status);
       } else {
         message.error(`下单未成交：${res.data?.message || res.data?.status || '未知'}`);
       }
@@ -82,6 +86,28 @@ const TradeCandidates: React.FC = () => {
       load(status);
     } catch {
       message.error('操作失败');
+    }
+  };
+
+  const doCheckOrder = async (c: TradeCandidate) => {
+    try {
+      const res = await checkOrderTradeCandidate(c.id);
+      const d = res.data;
+      if (!d.found) {
+        message.warning(`查单失败：${d.message || '无结果'}`);
+        return;
+      }
+      if (d.brokerRejected) {
+        message.warning(`券商拒单：${d.brokerTip || d.message || '未知原因'}，候选已重置可重新下单`);
+        load(status);
+      } else {
+        const vol = d.filledVolume != null && d.filledVolume > 0
+          ? `成交${d.filledVolume}股 ` : '';
+        message.success(`订单 ${d.orderId}：${d.orderStatusText || d.status} ${vol}— ${d.message || ''}`);
+        load(status);
+      }
+    } catch {
+      message.error('查单请求失败');
     }
   };
 
@@ -139,7 +165,27 @@ const TradeCandidates: React.FC = () => {
     {
       title: '操作', key: 'action', fixed: 'right' as const, width: 160,
       render: (_: unknown, r: TradeCandidate) => {
-        if (r.status === 1) return <Text type="success">已下单 {r.orderVolume}股@{price(r.orderPrice)}</Text>;
+        if (r.status === 1) return (
+          <Space direction="vertical" size={0} style={{ alignItems: 'flex-start' }}>
+            <span>
+              <Text type="success" strong>
+                {r.orderStatusText || '已下单'}
+              </Text>
+              {r.orderFilledVolume != null && r.orderFilledVolume > 0 && (
+                <Text type="secondary" style={{ fontSize: 12 }}>
+                  {' '}成交{r.orderFilledVolume}/{r.orderVolume || 0}股
+                  {r.orderVolume != null && r.orderFilledVolume === r.orderVolume && ' (完)'}
+                </Text>
+              )}
+            </span>
+            <Text type="secondary" style={{ fontSize: 12 }}>
+              委托 {r.orderVolume}股 @ {price(r.orderPrice)}
+            </Text>
+            <Button size="small" icon={<SearchOutlined />} onClick={() => doCheckOrder(r)}>
+              查单
+            </Button>
+          </Space>
+        );
         if (r.status === 2) return <Text type="secondary">已忽略</Text>;
         return (
           <Space>

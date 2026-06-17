@@ -55,9 +55,41 @@ public class BacktestService
         var bars = await LoadBarsAsync(signals.Select(s => s.Code).Distinct().ToList(),
             signals.Min(s => s.Date).Date, ct);
 
-        var report = BacktestEngine.Run(signals, bars, config);
+        // 尝试加载基准 (沪深300)
+        var benchmarkBars = await LoadBenchmarkBarsAsync(signals.Min(s => s.Date).Date,
+            signals.Max(s => s.Date).Date, ct);
+
+        var engine = new BacktestEngine();
+        var report = engine.Run(signals, bars, config, benchmarkBars);
         _logger.LogInformation("回测完成：信号 {Sig} 笔，成交 {Exe}，胜率 {Win}%，平均收益 {Avg}%，盈亏比 {Pf}",
             report.TotalSignals, report.ExecutedTrades, report.WinRatePct, report.AvgReturnPct, report.ProfitFactor);
+
+        // ★ 持久化回测结果
+        try
+        {
+            var configJson = System.Text.Json.JsonSerializer.Serialize(config);
+            var reportJson = report.ToSummaryJson(); // 精简：不落 Trades/EquityCurve
+            _db.BacktestResult.Add(new AIStock.Infrastructure.Database.Entities.BacktestResultEntity
+            {
+                RunAt = DateTime.UtcNow,
+                BacktestType = "selection",
+                ConfigJson = configJson,
+                ReportJson = reportJson,
+                ExecutedTrades = report.ExecutedTrades,
+                WinRatePct = (decimal)report.WinRatePct,
+                AvgReturnPct = (decimal)report.AvgReturnPct,
+                SharpeRatio = report.SharpeRatio,
+                MaxDrawdownPct = (decimal)report.MaxDrawdownPct,
+                AlphaPct = report.Alpha,
+                Beta = report.Beta,
+            });
+            await _db.SaveChangesAsync(ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning("回测结果持久化失败（非致命）：{Msg}", ex.Message);
+        }
+
         return report;
     }
 
@@ -67,7 +99,7 @@ public class BacktestService
         const string interval = nameof(KlineInterval.Daily);
         var raw = await _db.KlineData
             .Where(k => k.Interval == interval && codes.Contains(k.Code) && k.DateTime >= minDate)
-            .Select(k => new { k.Code, k.DateTime, k.Open, k.High, k.Low, k.Close })
+            .Select(k => new { k.Code, k.DateTime, k.Open, k.High, k.Low, k.Close, k.Volume })
             .ToListAsync(ct);
 
         return raw
@@ -75,8 +107,47 @@ public class BacktestService
             .ToDictionary(
                 g => g.Key,
                 g => g.OrderBy(k => k.DateTime)
-                      .Select(k => new BacktestBar { Date = k.DateTime, Open = k.Open, High = k.High, Low = k.Low, Close = k.Close })
+                      .Select(k => new BacktestBar
+                      {
+                          Date = k.DateTime,
+                          Open = k.Open,
+                          High = k.High,
+                          Low = k.Low,
+                          Close = k.Close,
+                          Volume = k.Volume,
+                      })
                       .ToList());
+    }
+
+    /// <summary>加载沪深300基准日K（secid: 000300）。</summary>
+    private async Task<List<BacktestBar>?> LoadBenchmarkBarsAsync(
+        DateTime minDate, DateTime maxDate, CancellationToken ct)
+    {
+        try
+        {
+            const string interval = nameof(KlineInterval.Daily);
+            const string hs300 = "000300";
+            var rows = await _db.KlineData
+                .Where(k => k.Interval == interval && k.Code == hs300
+                    && k.DateTime >= minDate.AddDays(-5) && k.DateTime <= maxDate.AddDays(1))
+                .OrderBy(k => k.DateTime)
+                .Select(k => new { k.DateTime, k.Open, k.High, k.Low, k.Close, k.Volume })
+                .ToListAsync(ct);
+            if (rows.Count == 0) return null;
+            return rows.Select(k => new BacktestBar
+            {
+                Date = k.DateTime,
+                Open = k.Open,
+                High = k.High,
+                Low = k.Low,
+                Close = k.Close,
+                Volume = k.Volume,
+            }).ToList();
+        }
+        catch
+        {
+            return null; // 基准不可用时优雅降级
+        }
     }
 
     private static List<StockSelectionResult> Deserialize(string json)

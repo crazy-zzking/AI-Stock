@@ -67,13 +67,23 @@ public class TradeCandidateController : ControllerBase
         });
     }
 
-    /// <summary>对某候选下买单。price 不传则用买入价上沿；volume 必填（股，须为100整数倍）。</summary>
+    /// <summary>对某候选下买单。price 不传则用买入价上沿；volume 必填（股，须为100整数倍）。
+    /// 若之前已下单但被券商拒绝，允许重新下单。</summary>
     [HttpPost("{id:long}/order")]
     public async Task<ActionResult> Order(long id, [FromBody] CandidateOrderRequest req, CancellationToken ct = default)
     {
         var c = await _db.TradeCandidate.FirstOrDefaultAsync(x => x.Id == id, ct);
         if (c == null) return NotFound($"候选 {id} 不存在");
-        if (c.Status == 1) return BadRequest("该候选已下单");
+
+        // 如果已有订单号，先查单确认状态；上一单失败（被拒/已撤单/查不到）则重置以便重新下单
+        if (c.Status == 1 && !string.IsNullOrEmpty(c.OrderId))
+        {
+            var lastDetail = await _orderManager.GetOrderDetailAsync(c.OrderId);
+            if (lastDetail == null || !lastDetail.Success)
+                ResetCandidateForRetry(c, lastDetail, lastDetail?.OrderStatusText);
+        }
+
+        if (c.Status == 1) return BadRequest("该候选已下单（订单仍在处理中），请先通过 check-order 确认状态");
 
         var price = req.Price is > 0 ? req.Price.Value : (c.BuyHigh > 0 ? c.BuyHigh : c.RefClose);
         if (price <= 0) return BadRequest("无有效价格，请显式传 price");
@@ -92,8 +102,8 @@ public class TradeCandidateController : ControllerBase
         };
 
         var res = await _orderManager.PlaceOrderAsync(order);
-        _logger.LogInformation("候选池下单 {Code} {Name} 量={Vol}@{Price} → success={OK} status={Status} msg={Msg}",
-            c.Code, c.Name, volume, price, res.Success, res.Status, res.Message);
+        _logger.LogInformation("候选池下单 {Code} {Name} 量={Vol}@{Price} → success={OK} status={Status} msg={Msg} brokerRejected={Br}",
+            c.Code, c.Name, volume, price, res.Success, res.Status, res.Message, res.IsBrokerRejected);
 
         if (res.Success)
         {
@@ -103,8 +113,79 @@ public class TradeCandidateController : ControllerBase
             c.OrderVolume = volume;
             await _db.SaveChangesAsync(ct);
         }
+        else if (res.IsBrokerRejected)
+        {
+            // 券商拒绝：仍记录 orderId 供后续查询，但状态保持 0 以便重试
+            c.OrderId = res.OrderId;
+            c.OrderPrice = price;
+            c.OrderVolume = volume;
+            await _db.SaveChangesAsync(ct);
+        }
 
-        return Ok(new { success = res.Success, status = res.Status.ToString(), message = res.Message, orderId = res.OrderId });
+        return Ok(new
+        {
+            success = res.Success,
+            status = res.Status.ToString(),
+            message = res.Message,
+            brokerTip = res.BrokerTip,
+            brokerRejected = res.IsBrokerRejected,
+            orderId = res.OrderId,
+        });
+    }
+
+    /// <summary>
+    /// 查询候选已下订单的状态（调用 jycx_chadan）。
+    /// 若券商已拒绝该订单，自动将候选重置为可重新下单（status=0）。
+    /// </summary>
+    [HttpPost("{id:long}/check-order")]
+    public async Task<ActionResult> CheckOrder(long id, CancellationToken ct = default)
+    {
+        var c = await _db.TradeCandidate.FirstOrDefaultAsync(x => x.Id == id, ct);
+        if (c == null) return NotFound($"候选 {id} 不存在");
+        if (string.IsNullOrEmpty(c.OrderId)) return BadRequest("该候选尚未下单，无订单可查");
+
+        var detail = await _orderManager.GetOrderDetailAsync(c.OrderId);
+
+        if (detail == null)
+        {
+            return Ok(new
+            {
+                found = false,
+                orderId = c.OrderId,
+                message = "订单查询失败（订单可能已过期或Provider不可用）",
+            });
+        }
+
+        // 若订单失败（券商拒绝/已撤单/状态错误等），重置候选状态以允许重新下单
+        if (!detail.Success && c.Status == 1)
+        {
+            var reason = detail.IsBrokerRejected
+                ? $"券商拒绝：{detail.BrokerTip ?? detail.OrderStatusText}"
+                : detail.OrderStatusText;
+            ResetCandidateForRetry(c, detail, reason);
+            await _db.SaveChangesAsync(ct);
+        }
+        else
+        {
+            // 缓存最新查单结果
+            c.OrderStatusText = detail.OrderStatusText;
+            c.OrderFilledVolume = detail.FilledVolume;
+            await _db.SaveChangesAsync(ct);
+        }
+
+        return Ok(new
+        {
+            found = true,
+            orderId = detail.OrderId,
+            status = detail.Status.ToString(),
+            success = detail.Success,
+            message = detail.Message,
+            brokerTip = detail.BrokerTip,
+            brokerRejected = detail.IsBrokerRejected,
+            candidateStatus = detail.Success ? c.Status : 0,
+            filledVolume = detail.FilledVolume,
+            orderStatusText = detail.OrderStatusText,
+        });
     }
 
     /// <summary>忽略某候选（status=2），从待处理列表移除。</summary>
@@ -117,6 +198,20 @@ public class TradeCandidateController : ControllerBase
         c.Status = 2;
         await _db.SaveChangesAsync(ct);
         return Ok(new { success = true });
+    }
+
+    /// <summary>把候选重置为「待处理」(status=0) 以便重新下单：上一单失败/被拒/查不到时调用。
+    /// 不在此处 SaveChanges，由调用方决定何时落库。</summary>
+    private void ResetCandidateForRetry(TradeCandidateEntity c, OrderResult? detail, string? statusText)
+    {
+        _logger.LogInformation("候选 {Id} 上次订单 {OrderId} 失败（{Status}）→ 重置为待处理",
+            c.Id, c.OrderId, statusText ?? detail?.Status.ToString());
+        c.Status = 0;
+        c.OrderId = null;
+        c.OrderPrice = null;
+        c.OrderVolume = null;
+        c.OrderStatusText = statusText ?? detail?.OrderStatusText;
+        c.OrderFilledVolume = detail?.FilledVolume ?? 0;
     }
 
     private static object ToDto(TradeCandidateEntity c)
@@ -158,6 +253,8 @@ public class TradeCandidateController : ControllerBase
             orderId = c.OrderId,
             orderPrice = c.OrderPrice,
             orderVolume = c.OrderVolume,
+            orderStatusText = c.OrderStatusText,
+            orderFilledVolume = c.OrderFilledVolume,
         };
     }
 }

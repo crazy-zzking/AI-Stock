@@ -118,15 +118,17 @@ public class OrderManagerService : IOrderManager
                          OrderStatus.Pending;
 
             _logger.LogInformation(
-                "Order Live code={Code} side={Side} volume={Volume} price={Price} value={Value:N0} orderId={OrderId} status={Status} msg={Msg}",
-                request.Code, request.Side, request.Volume, request.Price, orderValue, orderId, status, result.Msg);
+                "Order Live code={Code} side={Side} volume={Volume} price={Price} value={Value:N0} orderId={OrderId} status={Status} msg={Msg} brokerRejected={BrokerRejected}",
+                request.Code, request.Side, request.Volume, request.Price, orderValue, orderId, status, result.Msg, result.IsFailed);
 
             var orderResult = new OrderResult
             {
                 OrderId = orderId,
                 Success = !result.IsFailed,
                 Message = result.Msg,
-                Status = status
+                BrokerTip = result.BrokerTip,
+                Status = status,
+                IsBrokerRejected = result.IsFailed && !result.IsCompleted,
             };
 
             // 记录成功/失败，驱动连续失败熔断
@@ -208,29 +210,62 @@ public class OrderManagerService : IOrderManager
 
     public async Task<OrderStatus> GetOrderStatusAsync(string orderId)
     {
+        var detail = await GetOrderDetailAsync(orderId);
+        return detail?.Status ?? OrderStatus.Failed;
+    }
+
+    public async Task<OrderResult?> GetOrderDetailAsync(string orderId)
+    {
         try
         {
             if (!long.TryParse(orderId, out var orderIdLong))
-                return OrderStatus.Failed;
+                return null;
 
             var provider = GetTradingProvider();
             if (provider == null)
-                return OrderStatus.Failed;
+                return null;
 
             var result = await provider.QueryOrderAsync(orderIdLong);
             if (result == null)
-                return OrderStatus.Failed;
+                return null;
 
-            if (result.IsCompleted) return OrderStatus.Filled;
-            if (result.IsFailed) return OrderStatus.Failed;
-            if (result.IsPending) return OrderStatus.Submitted;
-            return OrderStatus.Pending;
+            return new OrderResult
+            {
+                OrderId = result.OrderId.ToString(),
+                Success = !result.IsFailed,
+                Status = MapToOrderStatus(result),
+                Message = result.Status,
+                BrokerTip = result.BrokerTip,
+                IsBrokerRejected = result.IsBrokerRejected,
+                FilledVolume = result.FilledVolume,
+                OrderStatusText = result.Status,
+            };
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to get order status for {OrderId}", orderId);
-            return OrderStatus.Failed;
+            _logger.LogError(ex, "Failed to get order detail for {OrderId}", orderId);
+            return null;
         }
+    }
+
+    /// <summary>
+    /// 将 Sanhu ret 码映射为统一 OrderStatus。
+    /// 100=订单接受 / 101=正在处理 / 200=券商接受 / 201=券商拒绝
+    /// 210=正在委托 / 211=部分成交 / 212=全部成交 / 213=已被撤单 / 3XX/4XX=错误
+    /// </summary>
+    private static OrderStatus MapToOrderStatus(TradingOrderStatus s)
+    {
+        return s.RetCode switch
+        {
+            100 or 200 => OrderStatus.Submitted,
+            101 or 210 => OrderStatus.Pending,
+            211 => OrderStatus.PartialFilled,
+            212 => OrderStatus.Filled,
+            213 => OrderStatus.Cancelled,
+            201 => OrderStatus.Rejected,
+            >= 300 => OrderStatus.Failed,
+            _ => s.IsPending ? OrderStatus.Submitted : s.IsFailed ? OrderStatus.Failed : OrderStatus.Pending,
+        };
     }
 
     public async Task<List<OrderInfo>> GetOrdersAsync(DateTime startTime, DateTime endTime)

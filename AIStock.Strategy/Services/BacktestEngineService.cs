@@ -6,7 +6,14 @@ using Microsoft.Extensions.Logging;
 namespace AIStock.Strategy.Services;
 
 /// <summary>
-/// 回测引擎实现
+/// 回测引擎实现 — Strategy 引擎（多股票策略回测）。
+/// 
+/// v1.1 修复：
+/// - [FIX] capital 不再在 foreach(code) 内重置（#3）
+/// - [FIX] Sharpe 从"逐笔收益×√252"改为"逐日净值→日收益率→mean/std×√252"（#4）
+/// - [FIX] MaxDrawdown 改为逐日 Mark-to-Market 计算（#5）
+/// - [PERF] 历史前缀随日期只追加，去掉逐日全历史 Where+OrderBy+ToList 重排
+/// - [NOTE] GenerateSignalAsync 可能非确定性，建议回测走纯规则信号（#6）
 /// </summary>
 public class BacktestEngineService : IBacktestEngine
 {
@@ -24,7 +31,9 @@ public class BacktestEngineService : IBacktestEngine
         _logger = logger;
     }
 
-    public async Task<BacktestResult> RunBacktestAsync(BacktestConfig config, IStrategy strategy, List<string> codes, DateTime startTime, DateTime endTime)
+    public async Task<BacktestResult> RunBacktestAsync(
+        BacktestConfig config, IStrategy strategy, List<string> codes,
+        DateTime startTime, DateTime endTime)
     {
         var result = new BacktestResult
         {
@@ -34,99 +43,206 @@ public class BacktestEngineService : IBacktestEngine
             InitialCapital = config.InitialCapital
         };
 
+        // ★ FIX #3: capital 移到 foreach 外层，所有股票共享同一资金
         var capital = config.InitialCapital;
         var positions = new Dictionary<string, BacktestTrade>();
         var trades = new List<BacktestTrade>();
-        var dailyNavs = new List<DailyNav>();
+        var allDailyNavs = new List<DailyNav>();
 
+        // 先加载所有股票的 K 线，构建全量时间线
+        var allKlines = new Dictionary<string, List<KlineData>>();
         foreach (var code in codes)
         {
             try
             {
                 var klines = await GetKlinesAsync(code, startTime, endTime);
-                if (klines == null || klines.Count < 60)
-                    continue;
-
-                for (int i = 60; i < klines.Count; i++)
-                {
-                    var currentKline = klines[i];
-                    var historyKlines = klines.Take(i + 1).ToList();
-                    var indicators = _featureCalculator.CalculateAll(code, historyKlines);
-
-                    var signal = await strategy.GenerateSignalAsync(code, historyKlines, indicators);
-                    if (signal == null) continue;
-
-                    if (signal.SignalType == SignalType.Buy && !positions.ContainsKey(code))
-                    {
-                        var maxAmount = capital * config.MaxPositionPercent / 100;
-                        var volume = (long)(maxAmount / currentKline.Close / 100) * 100;
-                        if (volume <= 0) continue;
-
-                        var cost = volume * currentKline.Close;
-                        var commission = cost * config.CommissionRate / 100;
-                        var slippage = cost * config.Slippage / 100;
-                        var impact = cost * config.ImpactCost / 100;
-                        var totalCost = cost + commission + slippage + impact;
-
-                        if (totalCost > capital) continue;
-
-                        capital -= totalCost;
-
-                        positions[code] = new BacktestTrade
-                        {
-                            Code = code,
-                            BuyTime = currentKline.DateTime,
-                            BuyPrice = currentKline.Close,
-                            Volume = volume,
-                            Commission = commission + slippage + impact
-                        };
-                    }
-                    else if (signal.SignalType == SignalType.Sell && positions.ContainsKey(code))
-                    {
-                        var position = positions[code];
-                        var sellPrice = currentKline.Close;
-                        var sellAmount = position.Volume * sellPrice;
-                        var commission = sellAmount * config.CommissionRate / 100;
-                        var stampTax = sellAmount * config.StampTaxRate / 100;
-                        var slippage = sellAmount * config.Slippage / 100;
-                        var impact = sellAmount * config.ImpactCost / 100;
-
-                        var netAmount = sellAmount - commission - stampTax - slippage - impact;
-                        capital += netAmount;
-
-                        position.SellTime = currentKline.DateTime;
-                        position.SellPrice = sellPrice;
-                        position.Profit = netAmount - position.Volume * position.BuyPrice;
-                        position.ProfitRate = position.Profit / (position.Volume * position.BuyPrice) * 100;
-                        position.Commission += commission + stampTax + slippage + impact;
-
-                        trades.Add(position);
-                        positions.Remove(code);
-                    }
-                }
-
-                foreach (var position in positions.Values)
-                {
-                    var lastKline = klines.Last();
-                    position.SellTime = lastKline.DateTime;
-                    position.SellPrice = lastKline.Close;
-                    position.Profit = position.Volume * (lastKline.Close - position.BuyPrice);
-                    position.ProfitRate = position.Profit / (position.Volume * position.BuyPrice) * 100;
-                    trades.Add(position);
-                }
-                positions.Clear();
+                if (klines != null && klines.Count >= 60)
+                    allKlines[code] = klines;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error backtesting {Code}", code);
+                _logger.LogError(ex, "Error loading klines for {Code}", code);
             }
         }
+
+        if (allKlines.Count == 0) return result;
+
+        // 构建统一时间线（所有股票的交易日期并集）
+        var allDates = allKlines.Values
+            .SelectMany(k => k.Select(x => x.DateTime.Date))
+            .Distinct()
+            .OrderBy(d => d)
+            .ToList();
+
+        // 为每个股票建立日期→K线索引（用于取当日成交价 / MTM）
+        var klineByCodeAndDate = new Dictionary<string, Dictionary<DateTime, KlineData>>();
+        foreach (var (code, klines) in allKlines)
+        {
+            var dict = new Dictionary<DateTime, KlineData>(klines.Count);
+            foreach (var k in klines)
+                dict[k.DateTime.Date] = k;
+            klineByCodeAndDate[code] = dict;
+        }
+
+        // 按日期归集当日有K线的 (code, kline)，供逐日把K线追加进各股"历史前缀"。
+        // 避免每个交易日对全历史做 Where+OrderBy+ToList（原 O(天²) 重排，现 O(1) 追加）。
+        var klinesByDate = new Dictionary<DateTime, List<(string Code, KlineData Kline)>>();
+        foreach (var (code, klines) in allKlines)
+            foreach (var k in klines)
+            {
+                var d = k.DateTime.Date;
+                if (!klinesByDate.TryGetValue(d, out var list))
+                    klinesByDate[d] = list = new List<(string, KlineData)>();
+                list.Add((code, k));
+            }
+
+        // 各股"截至当日"的历史前缀（升序）：随 date 推进只追加，不重排不复制。
+        var historyByCode = new Dictionary<string, List<KlineData>>(allKlines.Count);
+        foreach (var (code, klines) in allKlines)
+            historyByCode[code] = new List<KlineData>(klines.Count);
+
+        // ★ 逐日模拟（修复 #5：逐日 Mark-to-Market）
+        foreach (var date in allDates)
+        {
+            // 把当日K线追加进各股历史前缀（升序保证：allDates 升序 + 每股K线升序）
+            if (klinesByDate.TryGetValue(date, out var todayKlines))
+                foreach (var (code, k) in todayKlines)
+                    historyByCode[code].Add(k);
+
+            // 1. 先执行今日卖出信号（从 pending_sells 或今日信号）
+            var codesToSell = new List<string>();
+            foreach (var (code, pos) in positions)
+            {
+                if (!klineByCodeAndDate.TryGetValue(code, out var dateMap)
+                    || !dateMap.ContainsKey(date))
+                    continue;
+
+                var historyKlines = historyByCode[code];
+                if (historyKlines.Count < 60) continue;
+
+                var indicators = _featureCalculator.CalculateAll(code, historyKlines);
+                var signal = await strategy.GenerateSignalAsync(code, historyKlines, indicators);
+
+                if (signal is { SignalType: SignalType.Sell or SignalType.StopLoss })
+                {
+                    codesToSell.Add(code);
+                }
+            }
+
+            foreach (var code in codesToSell)
+            {
+                if (!positions.TryGetValue(code, out var position)) continue;
+                if (!klineByCodeAndDate.TryGetValue(code, out var dateMap)
+                    || !dateMap.TryGetValue(date, out var currentKline))
+                    continue;
+
+                var sellPrice = currentKline.Close;
+                var sellAmount = position.Volume * sellPrice;
+                var commission = sellAmount * config.CommissionRate / 100;
+                var stampTax = sellAmount * config.StampTaxRate / 100;
+                var slippage = sellAmount * config.Slippage / 100;
+                var impact = sellAmount * config.ImpactCost / 100;
+                var netAmount = sellAmount - commission - stampTax - slippage - impact;
+
+                capital += netAmount;
+
+                position.SellTime = currentKline.DateTime;
+                position.SellPrice = sellPrice;
+                position.Profit = netAmount - position.Volume * position.BuyPrice;
+                position.ProfitRate = position.Profit / (position.Volume * position.BuyPrice) * 100;
+                position.Commission += commission + stampTax + slippage + impact;
+
+                trades.Add(position);
+                positions.Remove(code);
+            }
+
+            // 2. 再执行今日买入信号
+            foreach (var code in allKlines.Keys)
+            {
+                if (positions.ContainsKey(code)) continue; // 已持仓
+                if (positions.Count >= config.MaxPositions) break; // 已达持仓上限
+
+                if (!klineByCodeAndDate.TryGetValue(code, out var dateMap)
+                    || !dateMap.TryGetValue(date, out var currentKline))
+                    continue;
+
+                var historyKlines = historyByCode[code];
+                if (historyKlines.Count < 60) continue;
+
+                var indicators = _featureCalculator.CalculateAll(code, historyKlines);
+                var signal = await strategy.GenerateSignalAsync(code, historyKlines, indicators);
+
+                if (signal is not { SignalType: SignalType.Buy }) continue;
+
+                var maxAmount = capital * config.MaxPositionPercent / 100;
+                var volume = (long)(maxAmount / currentKline.Close / 100) * 100;
+                if (volume <= 0) continue;
+
+                var cost = volume * currentKline.Close;
+                var commission = cost * config.CommissionRate / 100;
+                var slippage = cost * config.Slippage / 100;
+                var impact = cost * config.ImpactCost / 100;
+                var totalCost = cost + commission + slippage + impact;
+
+                if (totalCost > capital) continue;
+
+                capital -= totalCost;
+
+                positions[code] = new BacktestTrade
+                {
+                    Code = code,
+                    BuyTime = currentKline.DateTime,
+                    BuyPrice = currentKline.Close,
+                    Volume = volume,
+                    Commission = commission + slippage + impact
+                };
+            }
+
+            // 3. ★ 记录今日权益（MTM，含持仓市值）— 修复 #5
+            var positionsValue = positions.Values.Sum(p =>
+            {
+                if (!klineByCodeAndDate.TryGetValue(p.Code, out var dm) || !dm.TryGetValue(date, out var k))
+                    return p.Volume * p.BuyPrice; // fallback to cost
+                return p.Volume * k.Close;
+            });
+            var totalEquity = capital + positionsValue;
+
+            allDailyNavs.Add(new DailyNav
+            {
+                Date = date,
+                Nav = totalEquity,
+                Return = allDailyNavs.Count > 0 && allDailyNavs[^1].Nav > 0
+                    ? (totalEquity - allDailyNavs[^1].Nav) / allDailyNavs[^1].Nav * 100
+                    : 0,
+            });
+        }
+
+        // 强制平仓：末日期末清仓
+        foreach (var position in positions.Values)
+        {
+            if (klineByCodeAndDate.TryGetValue(position.Code, out var dm)
+                && dm.TryGetValue(allDates[^1], out var lastKline))
+            {
+                position.SellTime = lastKline.DateTime;
+                position.SellPrice = lastKline.Close;
+            }
+            else
+            {
+                position.SellTime = endTime;
+                position.SellPrice = position.BuyPrice;
+            }
+            position.Profit = position.Volume * (position.SellPrice!.Value - position.BuyPrice);
+            position.ProfitRate = position.Profit / (position.Volume * position.BuyPrice) * 100;
+            trades.Add(position);
+        }
+        positions.Clear();
 
         result.FinalCapital = capital;
         result.TotalReturn = (capital - config.InitialCapital) / config.InitialCapital * 100;
         result.AnnualizedReturn = CalculateAnnualizedReturn(result.TotalReturn, startTime, endTime);
         result.Trades = trades;
         result.TradeCount = trades.Count;
+        result.DailyNavs = allDailyNavs;
 
         if (trades.Count > 0)
         {
@@ -136,16 +252,23 @@ public class BacktestEngineService : IBacktestEngine
             result.ProfitLossRatio = avgLoss > 0 ? avgProfit / avgLoss : 0;
         }
 
-        result.MaxDrawdown = CalculateMaxDrawdown(trades, config.InitialCapital);
-        result.SharpeRatio = CalculateSharpeRatio(trades, config.InitialCapital);
+        // ★ FIX #5: 逐日 MTM 最大回撤
+        result.MaxDrawdown = CalculateMaxDrawdownFromNav(allDailyNavs);
+
+        // ★ FIX #4: 逐日净值 Sharpe
+        result.SharpeRatio = CalculateSharpeRatioFromNav(allDailyNavs);
 
         return result;
     }
 
-    public async Task<BacktestResult> RunSingleStockBacktestAsync(BacktestConfig config, IStrategy strategy, string code, DateTime startTime, DateTime endTime)
+    public async Task<BacktestResult> RunSingleStockBacktestAsync(
+        BacktestConfig config, IStrategy strategy, string code,
+        DateTime startTime, DateTime endTime)
     {
         return await RunBacktestAsync(config, strategy, new List<string> { code }, startTime, endTime);
     }
+
+    // ========== 数据加载 ==========
 
     private async Task<List<KlineData>> GetKlinesAsync(string code, DateTime startTime, DateTime endTime)
     {
@@ -158,9 +281,6 @@ public class BacktestEngineService : IBacktestEngine
                 return new List<KlineData>();
             }
 
-            // Provider 的 GetKlinesAsync 取的是「最近 N 条日线」（TdxProvider 内部已按 800 分页）。
-            // 因此请求条数需覆盖 startTime 至今的跨度，再按区间过滤。
-            // 估算：日历天数 → 交易日约 0.7 折算，外加缓冲。
             const int maxKlines = 2000;
             var calendarDays = (DateTime.Now.Date - startTime.Date).TotalDays;
             var estimatedTradingDays = (int)Math.Ceiling(calendarDays * 0.72) + 80;
@@ -179,7 +299,6 @@ public class BacktestEngineService : IBacktestEngine
                 .DistinctBy(k => k.DateTime)
                 .ToList();
 
-            // 数据未能回溯到 startTime（受 provider 上限限制），提示区间未完整覆盖
             var oldest = klines.Min(k => k.DateTime);
             if (oldest > startTime.Date.AddDays(1))
             {
@@ -197,6 +316,8 @@ public class BacktestEngineService : IBacktestEngine
         }
     }
 
+    // ========== 计算工具 ==========
+
     private decimal CalculateAnnualizedReturn(decimal totalReturn, DateTime startTime, DateTime endTime)
     {
         var years = (endTime - startTime).TotalDays / 365;
@@ -204,39 +325,41 @@ public class BacktestEngineService : IBacktestEngine
         return (decimal)(Math.Pow((double)(1 + totalReturn / 100), 1 / years) - 1) * 100;
     }
 
-    private decimal CalculateMaxDrawdown(List<BacktestTrade> trades, decimal initialCapital)
+    /// <summary>★ FIX #5: 基于逐日净值的最大回撤计算。</summary>
+    private static decimal CalculateMaxDrawdownFromNav(List<DailyNav> navs)
     {
-        if (trades.Count == 0) return 0;
+        if (navs.Count < 2) return 0;
 
-        var capital = initialCapital;
-        var peak = capital;
+        var peak = navs[0].Nav;
         var maxDrawdown = 0m;
-
-        foreach (var trade in trades.OrderBy(t => t.SellTime))
+        foreach (var nav in navs)
         {
-            capital += trade.Profit;
-            if (capital > peak)
-            {
-                peak = capital;
-            }
-            var drawdown = (peak - capital) / peak * 100;
-            if (drawdown > maxDrawdown)
-            {
-                maxDrawdown = drawdown;
-            }
+            if (nav.Nav > peak) peak = nav.Nav;
+            var dd = (peak - nav.Nav) / peak * 100;
+            if (dd > maxDrawdown) maxDrawdown = dd;
         }
-
         return maxDrawdown;
     }
 
-    private decimal CalculateSharpeRatio(List<BacktestTrade> trades, decimal initialCapital)
+    /// <summary>★ FIX #4: 基于逐日净值日收益率的 Sharpe Ratio。</summary>
+    private static decimal CalculateSharpeRatioFromNav(List<DailyNav> navs)
     {
-        if (trades.Count < 2) return 0;
+        if (navs.Count < 3) return 0;
 
-        var returns = trades.Select(t => t.ProfitRate).ToList();
-        var avgReturn = returns.Average();
-        var stdDev = (decimal)Math.Sqrt((double)returns.Select(r => (r - avgReturn) * (r - avgReturn)).Average());
+        var dailyReturns = new List<decimal>();
+        for (int i = 1; i < navs.Count; i++)
+        {
+            if (navs[i - 1].Nav > 0)
+                dailyReturns.Add((navs[i].Nav - navs[i - 1].Nav) / navs[i - 1].Nav * 100);
+        }
 
+        if (dailyReturns.Count < 2) return 0;
+
+        var avgReturn = dailyReturns.Average();
+        var variance = dailyReturns.Sum(r => (r - avgReturn) * (r - avgReturn)) / (dailyReturns.Count - 1);
+        var stdDev = (decimal)Math.Sqrt((double)Math.Max(0, (double)variance));
+
+        // 年化：日收益率 × √252
         return stdDev > 0 ? avgReturn / stdDev * (decimal)Math.Sqrt(252) : 0;
     }
 }

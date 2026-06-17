@@ -4,9 +4,9 @@ using Microsoft.Extensions.Options;
 namespace AIStock.Web.Services;
 
 /// <summary>
-/// 尾盘自动下单后台服务：每 30 秒轮询，交易日到达 DecisionTime(默认14:55)窗口当天首次触发：
+/// 尾盘选股入池后台服务：每 30 秒轮询，交易日到达 DecisionTime(默认14:55)窗口当天首次触发：
 /// 1. TailSellService.RunAsync() — 到期(hold-expired)平仓
-/// 2. TailMarketBuyService.RunAsync() — 新选股买入
+/// 2. TailMarketBuyService.RunAsync() — 新选股入候选池（不入自动下单，需人工在候选池手动确认）
 /// 注：止损由独立的 TailStopLossService 盘中实时监控，不在此处处理。
 /// </summary>
 public class TailMarketBuyHostedService : BackgroundService
@@ -28,7 +28,7 @@ public class TailMarketBuyHostedService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        _logger.LogInformation("尾盘自动下单后台服务启动 (Enabled={Enabled}, DecisionTime={Time}, DryRunOnly={Dry})",
+        _logger.LogInformation("尾盘选股入池后台服务启动 (Enabled={Enabled}, DecisionTime={Time}, DryRunOnly={Dry})",
             _options.Enabled, _options.DecisionTime, _options.DryRunOnly);
 
         DateOnly? lastRun = null;

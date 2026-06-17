@@ -28,5 +28,15 @@ public enum SignalType
     /// <summary>
     /// 强力卖出
     /// </summary>
-    StrongSell
+    StrongSell,
+
+    /// <summary>
+    /// 止损卖出
+    /// </summary>
+    StopLoss,
+
+    /// <summary>
+    /// 止盈卖出
+    /// </summary>
+    TakeProfit,
 }

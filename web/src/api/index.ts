@@ -76,13 +76,32 @@ export interface TradeCandidate {
   orderId?: string;
   orderPrice?: number;
   orderVolume?: number;
+  orderStatusText?: string;
+  orderFilledVolume?: number;
 }
 export const getTradeCandidates = (params?: { days?: number; status?: number; strategy?: string; date?: string }) =>
   api.get<{ mode: string; halted: boolean; items: TradeCandidate[] }>('/trade-candidate', { params });
 export const orderTradeCandidate = (id: number, body: { price?: number; volume: number }) =>
-  api.post<{ success: boolean; status: string; message: string; orderId: string }>(`/trade-candidate/${id}/order`, body);
+  api.post<{ success: boolean; status: string; message: string; orderId: string;
+    brokerTip?: string; brokerRejected?: boolean; }>(`/trade-candidate/${id}/order`, body);
 export const ignoreTradeCandidate = (id: number) =>
   api.post<{ success: boolean }>(`/trade-candidate/${id}/ignore`);
+
+// 查单 (check-order)
+export interface CheckOrderResult {
+  found: boolean;
+  orderId?: string;
+  status?: string;
+  success?: boolean;
+  message?: string;
+  brokerTip?: string;
+  brokerRejected?: boolean;
+  candidateStatus?: number;
+  filledVolume?: number;
+  orderStatusText?: string;
+}
+export const checkOrderTradeCandidate = (id: number) =>
+  api.post<CheckOrderResult>(`/trade-candidate/${id}/check-order`);
 
 // ============ 特征工程 ============
 export const getMarketState = () => api.get<number>('/feature/market/state');
@@ -119,27 +138,50 @@ export interface BacktestTradeDto {
   returnPct: number; exitDeferred: boolean; exitReason: string;
   maxRisePct: number; maxDropPct: number; win: boolean;
 }
+export interface EquityPointDto {
+  date: string;
+  nav: number;
+  benchmarkNav?: number;
+}
 export interface BacktestReportDto {
   holdDays: number; entry: string;
   totalSignals: number; executedTrades: number; skippedNoData: number;
-  skippedUntradable: number; deferredExits: number; frictionPct: number;
+  skippedUntradable: number; skippedBreakdown?: number; deferredExits: number; frictionPct: number;
   winRatePct: number; avgReturnPct: number; medianReturnPct: number;
   profitFactor: number | null; stdDevPct: number; maxDrawdownPct: number;
   avgMaxRisePct: number; avgMaxDropPct: number; bestReturnPct: number; worstReturnPct: number;
   trades: BacktestTradeDto[];
+  // ---- Phase 4-6 新增字段 ----
+  sharpeRatio?: number;
+  alpha?: number;
+  beta?: number;
+  informationRatio?: number;
+  benchmarkReturn?: number;
+  equityCurve?: EquityPointDto[];
+  warnings?: string[];
+  pValue?: number;
+  confidenceInterval?: [number, number];
+  sampleSize?: number;
 }
 export const getBacktest = (
   holdDays = 5, entry = 'NextOpen', from?: string, to?: string,
   tradability = true, friction = 0.3, stopLoss = 0, takeProfit = 0,
+  exitPreset?: string, exitRules?: string,
+  rejectBreakdown = false, ma5SlopePct = 1,
 ) =>
   api.get<BacktestReportDto>('/selection/backtest', {
-    params: { holdDays, entry, from, to, tradability, friction, stopLoss, takeProfit },
+    params: { holdDays, entry, from, to, tradability, friction, stopLoss, takeProfit,
+              rejectBreakdown, ma5SlopePct,
+              ...(exitPreset ? { exitPreset } : {}),
+              ...(exitRules ? { exitRules } : {}) },
   });
 // 回放回测：用当前代码+生效配置在历史快照上逐日重跑指定策略（调参验证）
 // 全市场扫描策略跨数月可达 1~2 分钟，单独放宽超时到 5 分钟（全局默认 30s 会中止请求）
 export const replayBacktest = (params: {
   strategy?: string; from?: string; to?: string; holdDays?: number; entry?: string;
   tradability?: boolean; friction?: number; stopLoss?: number; takeProfit?: number;
+  exitPreset?: string; exitRules?: string;
+  rejectBreakdown?: boolean; ma5SlopePct?: number;
 }) => api.post<BacktestReportDto>('/selection/backtest/replay', null, { params, timeout: 300000 });
 // 选股历史记录列表（元信息，按选股时间倒序）
 export const getSelectionHistory = (take = 30) =>

@@ -30,6 +30,10 @@ public class SelectionCriteria
 
     /// <summary>排除"传统大盘股"的市值阈值（元）：仅当个股属传统行业 且 市值超过此值时才排除。0 = 不限。默认 500 亿</summary>
     public decimal MaxTotalMarketCap { get; set; } = 50_000_000_000m;
+    /// <summary>最小市值筛选（元），0 = 不限</summary>
+    public decimal MinMarketCap { get; set; } = 0m;
+    /// <summary>最大市值筛选（元），0 = 不限</summary>
+    public decimal MaxMarketCap { get; set; } = 0m;
     /// <summary>是否排除"传统低弹性行业 且 大市值"的票（两条件同时满足才剔除）</summary>
     public bool ExcludeTraditionalIndustry { get; set; } = true;
     /// <summary>传统行业关键字：个股所属行业(stock_base.Industry)命中任一才算"传统行业"</summary>

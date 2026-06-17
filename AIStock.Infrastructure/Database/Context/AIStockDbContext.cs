@@ -162,6 +162,11 @@ public class AIStockDbContext : DbContext
     /// </summary>
     public DbSet<TradeCandidateEntity> TradeCandidate { get; set; }
 
+    /// <summary>
+    /// 回测结果历史（每次回测保存一条，含参数与结果，支持回溯对比）
+    /// </summary>
+    public DbSet<BacktestResultEntity> BacktestResult { get; set; }
+
     public override int SaveChanges()
     {
         UpdateTimestamps();
@@ -425,6 +430,15 @@ public class AIStockDbContext : DbContext
             entity.HasIndex(e => new { e.TradingDate, e.Code }).IsUnique();
             entity.HasIndex(e => e.Status);
             entity.HasIndex(e => e.TradingDate);
+        });
+
+        // 回测结果历史（按 run_at 查最新，按策略/类型筛选）
+        modelBuilder.Entity<BacktestResultEntity>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => e.RunAt);
+            entity.HasIndex(e => new { e.BacktestType, e.StrategyKey });
+            entity.HasIndex(e => e.CreatedAt);
         });
     }
 }

@@ -142,90 +142,43 @@ public class StrategyController : ControllerBase
 /// </summary>
 public class BacktestRequest
 {
-    /// <summary>
-    /// 策略名称
-    /// </summary>
     [Required(ErrorMessage = "策略名称不能为空")]
     public string StrategyName { get; set; } = "MABreakout";
 
-    /// <summary>
-    /// 股票代码列表
-    /// </summary>
     [Required(ErrorMessage = "股票代码列表不能为空")]
     [MinLength(1, ErrorMessage = "至少需要一个股票代码")]
     public List<string> Codes { get; set; } = new();
 
-    /// <summary>
-    /// 开始时间
-    /// </summary>
     [Required(ErrorMessage = "开始时间不能为空")]
     public DateTime StartTime { get; set; }
 
-    /// <summary>
-    /// 结束时间
-    /// </summary>
     [Required(ErrorMessage = "结束时间不能为空")]
     public DateTime EndTime { get; set; }
 
-    /// <summary>
-    /// 初始资金
-    /// </summary>
     [Range(1, double.MaxValue, ErrorMessage = "初始资金必须大于0")]
     public decimal InitialCapital { get; set; } = 1000000;
 
-    /// <summary>
-    /// 手续费率（%）
-    /// </summary>
     [Range(0, 100, ErrorMessage = "手续费率必须在0-100之间")]
     public decimal CommissionRate { get; set; } = 0.03m;
 
-    /// <summary>
-    /// 滑点（%）
-    /// </summary>
     [Range(0, 100, ErrorMessage = "滑点必须在0-100之间")]
     public decimal Slippage { get; set; } = 0.1m;
 
-    /// <summary>
-    /// 单笔最大仓位比例（%）
-    /// </summary>
     [Range(0.01, 100, ErrorMessage = "最大仓位比例必须在0.01-100之间")]
     public decimal MaxPositionPercent { get; set; } = 10;
 
-    /// <summary>
-    /// 最大持仓数量
-    /// </summary>
     [Range(1, 1000, ErrorMessage = "最大持仓数量必须在1-1000之间")]
     public int MaxPositions { get; set; } = 10;
 }
 
-/// <summary>
-/// 组合请求
-/// </summary>
 public class PortfolioRequest
 {
-    /// <summary>
-    /// 交易信号列表
-    /// </summary>
     public List<TradeSignal> Signals { get; set; } = new();
-
-    /// <summary>
-    /// 总资金
-    /// </summary>
     public decimal TotalCapital { get; set; }
 }
 
-/// <summary>
-/// 再平衡请求
-/// </summary>
 public class RebalanceRequest
 {
-    /// <summary>
-    /// 当前持仓
-    /// </summary>
     public List<PortfolioPosition> CurrentPositions { get; set; } = new();
-
-    /// <summary>
-    /// 目标持仓
-    /// </summary>
     public List<PortfolioPosition> TargetPositions { get; set; } = new();
 }

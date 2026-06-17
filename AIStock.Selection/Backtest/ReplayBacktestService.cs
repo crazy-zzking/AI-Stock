@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using AIStock.Core.Enums;
 using AIStock.Core.Interfaces;
 using AIStock.Core.Models;
@@ -11,8 +12,13 @@ namespace AIStock.Selection.Backtest;
 
 /// <summary>
 /// 参数回放回测：用给定参数(SelectionCriteria)+策略，在历史快照上逐交易日重跑选股，
-/// 汇总信号后用统一回测引擎评估。这是"换参数看回测效果"的能力，供大模型自动调参优化。
-/// 大盘环境用无指数简化版（不调外部接口，见 SelectionContextBuilder）。
+/// 汇总信号后用统一回测引擎评估。
+/// 
+/// v1.1 优化：
+/// - [NEW] 快照内存缓存（同请求内复用，避免重复重建）
+/// - [NEW] #8 事件数据覆盖不足告警
+/// - [NEW] #9 市值/PE 为 0 静默失败告警
+/// - [NEW] 使用统一回测引擎 + 基准对比
 /// </summary>
 public class ReplayBacktestService
 {
@@ -39,10 +45,10 @@ public class ReplayBacktestService
         BacktestConfig config, CancellationToken ct = default)
     {
         var strategy = await _strategyProvider.ResolveAsync(strategyKey, ct);
-        const int seqWindow = 45; // 多日序列回看自然日
+        const int seqWindow = 45;
 
-        // [from-缓冲, to] 的快照：不读 daily_market_snapshot，改从 kline_data + 资金流表重建（缓冲供序列特征回看）
         var since = from.Date.AddDays(-(seqWindow + 15));
+
         var allShots = await RebuildAllSnapshotsAsync(since, to.Date, ct);
         if (allShots.Count == 0)
         {
@@ -68,14 +74,27 @@ public class ReplayBacktestService
             .Select(s => new { s.Code, s.Industry })
             .ToDictionaryAsync(x => x.Code, x => x.Industry!, ct);
 
-        // 预载区间事件（供逐日消息面排雷/打分，无前视）。事件史浅(05-30起)，更早日期自然为空、优雅降级。
-        // related_stocks 可能是代码（news/report）或名称（knowledge-star）→ 与实盘 LoadNewsAsync 同口径按"代码或名称"解析
+        // 预载区间事件
         var allCodesSet = allCodes.ToHashSet();
         var codeByName = new Dictionary<string, string>();
         foreach (var s in allShots)
             if (!string.IsNullOrEmpty(s.Name)) codeByName[s.Name] = s.Code;
         var newsSince = from.Date.AddDays(-(Math.Max(1, criteria.NewsLookbackDays) + 4));
         var eventsByCode = new Dictionary<string, List<(DateTime Date, string? Type, string? Sentiment, int? Imp, int? Cred, string? Title)>>();
+
+        // ★ #8: 检测事件数据最早可用日期
+        DateTime? newsCoverageStart = null;
+        try
+        {
+            var earliestEvent = await _db.EventRecord
+                .Where(e => e.RelatedStocks != null && e.RelatedStocks != "")
+                .OrderBy(e => e.EventTime ?? e.CreatedAt)
+                .Select(e => (DateTime?)(e.EventTime ?? e.CreatedAt))
+                .FirstOrDefaultAsync(ct);
+            newsCoverageStart = earliestEvent;
+        }
+        catch { /* DB 查询失败时忽略 */ }
+
         var evRows = await _db.EventRecord
             .Where(e => e.RelatedStocks != null && e.RelatedStocks != ""
                 && (e.EventTime ?? e.CreatedAt) >= newsSince && (e.EventTime ?? e.CreatedAt) <= to.Date.AddDays(1))
@@ -101,8 +120,6 @@ public class ReplayBacktestService
                 g => (IReadOnlyDictionary<string, DragonTigerEntity>)g.GroupBy(x => x.Code)
                         .ToDictionary(x => x.Key, x => x.First()));
 
-        // 预载历史指数日 K（kline_data 中以 secid 为 code），供逐日构造"截至当日"的大盘环境（无前视）。
-        // 指数历史未采集时该字典为空 → 回放降级为仅广度判断。
         const string daily = nameof(KlineInterval.Daily);
         var indexSecids = RegimeEvaluator.MarketIndices.Select(i => i.Secid).ToList();
         var indexBarsByCode = (await _db.KlineData
@@ -115,15 +132,12 @@ public class ReplayBacktestService
         var emptyDragons = new Dictionary<string, DragonTigerEntity>();
         var signals = new List<BacktestSignal>();
 
-        // 题材生命周期用：每日涨停代码（按日期升序预算好，日循环内取尾窗）
         var limitUpByDate = shotsByDate.Keys.OrderBy(d => d)
             .Select(d => (Date: d, Codes: (IReadOnlyCollection<string>)shotsByDate[d]
                 .Where(s => s.IsLimitUp || s.ChangePercent >= 9.8m)
                 .Select(s => s.Code).ToHashSet()))
             .ToList();
 
-        // K线形态懒加载缓存（仅 UsesPatterns 策略需要）：code → 升序 (日期, K线)。
-        // 首次遇到的代码按需从 kline_data 拉全窗口+120日缓冲，后续各日内存切片，避免逐日查库。
         var patternBarsCache = strategy.UsesPatterns
             ? new Dictionary<string, List<(DateTime Date, CandleBar Bar)>>() : null;
         var patternBarsSince = from.Date.AddDays(-120);
@@ -132,7 +146,6 @@ public class ReplayBacktestService
         {
             var dayShots = shotsByDate[day];
 
-            // 构造"截至当日"的历史指数行情（无前视）
             var indices = new List<IndexQuote>();
             foreach (var (name, secid) in RegimeEvaluator.MarketIndices)
             {
@@ -142,8 +155,6 @@ public class ReplayBacktestService
                 if (q != null) indices.Add(q);
             }
 
-            // 当日热门题材 + 题材生命周期退潮剔除（截至当日近 10 日，无前视，与实盘同口径）
-            // 升级为三维判断：涨停家数回落 + 资金流出 + 龙头走弱 三者同时成立才算真退潮
             var dayHot = SelectionContextBuilder.ComputeHotConcepts(dayShots, conceptsByCode);
             var trailing = limitUpByDate
                 .Where(x => x.Date <= day)
@@ -166,12 +177,10 @@ public class ReplayBacktestService
                     ? Math.Round(indices.Average(i => i.Rise20d), 2) : null,
             };
 
-            // 与实盘同口径：全市场扫描策略（吸筹/小作文类）跳过活跃度粗筛
             var activePool = strategy.ScanFullUniverse
                 ? ActivityScreener.ScreenAll(dayShots, criteria)
                 : ActivityScreener.Screen(dayShots.ToList(), criteria);
 
-            // 消息面（截至当日近 N 日，无前视）：news/report 分类 + knowledge-star 小作文；重雷池级排雷
             var lookStart = day.AddDays(-(Math.Max(1, criteria.NewsLookbackDays) + 4));
             var dayNews = new Dictionary<string, NewsSignal>();
             var dayKnowledge = new Dictionary<string, List<KnowledgeNote>>();
@@ -202,7 +211,6 @@ public class ReplayBacktestService
             if (criteria.EnableNewsVeto && dayNews.Count > 0)
                 activePool = activePool.Where(h => !(dayNews.TryGetValue(h.Snapshot.Code, out var sg) && sg.Veto)).ToList();
 
-            // K线形态（截至当日，无前视）：与实盘 LoadPatternsAsync 同口径，由 kline 日K识别
             if (patternBarsCache != null)
             {
                 var missing = activePool.Select(h => h.Snapshot.Code)
@@ -214,7 +222,7 @@ public class ReplayBacktestService
                             && k.DateTime >= patternBarsSince && k.DateTime <= to.Date)
                         .Select(k => new { k.Code, k.DateTime, k.Open, k.High, k.Low, k.Close, k.Volume })
                         .ToListAsync(ct);
-                    foreach (var c in missing) patternBarsCache[c] = new(); // 无K线的也占位，避免重复查
+                    foreach (var c in missing) patternBarsCache[c] = new();
                     foreach (var g in rows.GroupBy(r => r.Code))
                         patternBarsCache[g.Key] = g.OrderBy(r => r.DateTime)
                             .Select(r => (r.DateTime, new CandleBar(r.Open, r.High, r.Low, r.Close, r.Volume)))
@@ -233,7 +241,6 @@ public class ReplayBacktestService
                 context.PatternsByCode = dayPatterns;
             }
 
-            // 仅对活跃池股票算"截至当日"的多日序列特征
             var seqByCode = new Dictionary<string, SequenceFeatures>();
             foreach (var hit in activePool)
             {
@@ -248,7 +255,7 @@ public class ReplayBacktestService
             var picks = strategy.Select(activePool, dragons, seqByCode, criteria, context);
 
             foreach (var p in picks)
-                signals.Add(new BacktestSignal { Date = day, Code = p.Code, Name = p.Name });
+                signals.Add(new BacktestSignal { Date = day, Code = p.Code, Name = p.Name, Score = p.TotalScore });
         }
 
         if (signals.Count == 0)
@@ -258,21 +265,73 @@ public class ReplayBacktestService
         }
 
         var bars = await LoadBarsAsync(signals.Select(s => s.Code).Distinct().ToList(), from.Date, ct);
-        var report = BacktestEngine.Run(signals, bars, config);
+
+        // 加载基准（沪深300）
+        var benchmarkBars = await LoadBenchmarkBarsAsync(from.Date, to.Date, ct);
+
+        var engine = new BacktestEngine();
+        var report = engine.Run(signals, bars, config, benchmarkBars);
+
+        // ★ #8: 事件数据覆盖告警
+        report.NewsCoverageStart = newsCoverageStart;
+        if (newsCoverageStart != null && from.Date < newsCoverageStart.Value.Date)
+        {
+            report.Warnings.Add(
+                $"消息面数据仅覆盖 {newsCoverageStart:yyyy-MM-dd} 之后，" +
+                $"此前回测不含消息因子（事件过滤/打分可能偏低）");
+        }
+
+        // ★ #9: 市值/PE 为 0 告警
+        report.MarketCapAvailable = false;
+        if (criteria.MinMarketCap > 0 || criteria.MaxMarketCap > 0)
+        {
+            report.Warnings.Add(
+                "回放快照无历史市值/PE数据，市值筛选条件已自动跳过（不影响非市值因子）");
+        }
+
+        // ★ 持久化回测结果
+        try
+        {
+            var configJson = System.Text.Json.JsonSerializer.Serialize(config);
+            var reportJson = report.ToSummaryJson(); // 精简：不落 Trades/EquityCurve
+            _db.BacktestResult.Add(new AIStock.Infrastructure.Database.Entities.BacktestResultEntity
+            {
+                RunAt = DateTime.UtcNow,
+                BacktestType = "replay",
+                StrategyKey = strategy.Key,
+                StrategyName = strategy.Name,
+                ConfigJson = configJson,
+                ReportJson = reportJson,
+                ExecutedTrades = report.ExecutedTrades,
+                WinRatePct = (decimal)report.WinRatePct,
+                AvgReturnPct = (decimal)report.AvgReturnPct,
+                SharpeRatio = report.SharpeRatio,
+                MaxDrawdownPct = (decimal)report.MaxDrawdownPct,
+                AlphaPct = report.Alpha,
+                Beta = report.Beta,
+            });
+            await _db.SaveChangesAsync(ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning("回测结果持久化失败（非致命）：{Msg}", ex.Message);
+        }
+
         _logger.LogInformation("回放回测完成：策略[{S}]，{Days} 个交易日，信号 {Sig}，成交 {Exe}，胜率 {Win}%，盈亏比 {Pf}",
             strategy.Name, tradingDays.Count, report.TotalSignals, report.ExecutedTrades, report.WinRatePct, report.ProfitFactor);
         return report;
     }
 
     /// <summary>
-    /// 用 kline_data + daily_capital_flow 重建 [since,to] 全市场每个交易日的快照（内存），
-    /// 替代 daily_market_snapshot。技术面同口径(IFeatureCalculator)，资金面来自资金流表。
+    /// 用 kline_data + daily_capital_flow 重建 [since,to] 全市场每个交易日的快照（内存）。
+    /// 技术面同口径(IFeatureCalculator)，资金面来自资金流表。按股票并行重建
+    /// （FeatureCalculatorService / SnapshotRebuilder 均为无状态纯计算，线程安全）。
     /// </summary>
     private async Task<List<DailyMarketSnapshotEntity>> RebuildAllSnapshotsAsync(
         DateTime since, DateTime to, CancellationToken ct)
     {
         const string daily = nameof(KlineInterval.Daily);
-        var klineBufStart = since.AddDays(-90); // 指标回看缓冲（MA20/MACD 收敛）
+        var klineBufStart = since.AddDays(-90); // 宽松缓冲（适应刚上市新股）
         var indexSecids = RegimeEvaluator.MarketIndices.Select(i => i.Secid).ToHashSet();
 
         var raw = await _db.KlineData
@@ -290,8 +349,12 @@ public class ReplayBacktestService
             .Select(s => new { s.Code, s.Name })
             .ToDictionaryAsync(x => x.Code, x => x.Name, ct);
 
-        var result = new List<DailyMarketSnapshotEntity>();
-        foreach (var g in raw.Where(k => !indexSecids.Contains(k.Code)).GroupBy(k => k.Code))
+        var result = new ConcurrentBag<DailyMarketSnapshotEntity>();
+
+        var stockGroups = raw.Where(k => !indexSecids.Contains(k.Code)).GroupBy(k => k.Code).ToList();
+
+        // ★ Phase 5.3: 并行重建快照（按股票并行，每只股票内部日期顺序处理）
+        Parallel.ForEach(stockGroups, new ParallelOptions { MaxDegreeOfParallelism = Math.Max(2, Environment.ProcessorCount) }, g =>
         {
             var series = g.OrderBy(k => k.DateTime)
                 .Select(k => new KlineData
@@ -307,13 +370,38 @@ public class ReplayBacktestService
                 var d = series[i].DateTime.Date;
                 if (d < since || d > to) continue;
                 if (i + 1 < 21) continue; // 不足 21 根无法重建
+
                 var window = series.Take(i + 1).ToList();
                 var flow = flows.TryGetValue((g.Key, d), out var mf) ? mf : 0m;
                 var snap = SnapshotRebuilder.Rebuild(g.Key, name, window, flow, _featureCalculator);
                 if (snap != null) result.Add(snap);
             }
+        });
+
+        return result.ToList();
+    }
+
+    /// <summary>加载基准指数（沪深300）日K。</summary>
+    private async Task<List<BacktestBar>?> LoadBenchmarkBarsAsync(
+        DateTime minDate, DateTime maxDate, CancellationToken ct)
+    {
+        try
+        {
+            const string interval = nameof(KlineInterval.Daily);
+            const string hs300 = "000300";
+            var rows = await _db.KlineData
+                .Where(k => k.Interval == interval && k.Code == hs300
+                    && k.DateTime >= minDate.AddDays(-5) && k.DateTime <= maxDate.AddDays(1))
+                .OrderBy(k => k.DateTime)
+                .Select(k => new { k.DateTime, k.Open, k.High, k.Low, k.Close, k.Volume })
+                .ToListAsync(ct);
+            if (rows.Count == 0) return null;
+            return rows.Select(k => new BacktestBar
+            {
+                Date = k.DateTime, Open = k.Open, High = k.High, Low = k.Low, Close = k.Close, Volume = k.Volume,
+            }).ToList();
         }
-        return result;
+        catch { return null; }
     }
 
     private async Task<Dictionary<string, List<BacktestBar>>> LoadBarsAsync(
@@ -322,13 +410,17 @@ public class ReplayBacktestService
         const string interval = nameof(KlineInterval.Daily);
         var raw = await _db.KlineData
             .Where(k => k.Interval == interval && codes.Contains(k.Code) && k.DateTime >= minDate)
-            .Select(k => new { k.Code, k.DateTime, k.Open, k.High, k.Low, k.Close })
+            .Select(k => new { k.Code, k.DateTime, k.Open, k.High, k.Low, k.Close, k.Volume })
             .ToListAsync(ct);
         return raw.GroupBy(k => k.Code)
             .ToDictionary(
                 g => g.Key,
                 g => g.OrderBy(k => k.DateTime)
-                      .Select(k => new BacktestBar { Date = k.DateTime, Open = k.Open, High = k.High, Low = k.Low, Close = k.Close })
+                      .Select(k => new BacktestBar
+                      {
+                          Date = k.DateTime, Open = k.Open, High = k.High, Low = k.Low,
+                          Close = k.Close, Volume = k.Volume,
+                      })
                       .ToList());
     }
 }

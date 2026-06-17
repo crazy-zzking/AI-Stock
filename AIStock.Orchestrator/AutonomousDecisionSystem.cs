@@ -1,12 +1,19 @@
+using System.Text.Json;
 using AIStock.Core.Enums;
 using AIStock.Core.Interfaces;
 using AIStock.Core.Models;
+using AIStock.Infrastructure.Database.Context;
+using AIStock.Infrastructure.Database.Entities;
+using AIStock.Selection.Review;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
 namespace AIStock.Orchestrator;
 
 /// <summary>
-/// 自主决策系统 - 自动分析市场并生成交易决策，风控通过后自动下单
+/// 自主决策系统 — 自动分析市场并生成交易决策，风控通过后：
+///   - Buy/StrongBuy → 入交易候选池（不入自动下单，需人工确认）
+///   - Sell/StrongSell → 自动下单卖出
 /// </summary>
 public class AutonomousDecisionSystem
 {
@@ -14,6 +21,7 @@ public class AutonomousDecisionSystem
     private readonly IDataProviderResolver _dataProviderResolver;
     private readonly IOrderManager _orderManager;
     private readonly IPositionSizer _positionSizer;
+    private readonly AIStockDbContext _db;
     private readonly ILogger<AutonomousDecisionSystem> _logger;
 
     public AutonomousDecisionSystem(
@@ -21,12 +29,14 @@ public class AutonomousDecisionSystem
         IDataProviderResolver dataProviderResolver,
         IOrderManager orderManager,
         IPositionSizer positionSizer,
+        AIStockDbContext db,
         ILogger<AutonomousDecisionSystem> logger)
     {
         _orchestrator = orchestrator;
         _dataProviderResolver = dataProviderResolver;
         _orderManager = orderManager;
         _positionSizer = positionSizer;
+        _db = db;
         _logger = logger;
     }
 
@@ -81,6 +91,7 @@ public class AutonomousDecisionSystem
 
             var riskResults = new List<object>();
             var orders = new List<OrderResult>();
+            var candidatesAdded = 0;
 
             foreach (var signal in signals)
             {
@@ -97,17 +108,38 @@ public class AutonomousDecisionSystem
 
                     riskResults.Add(riskResult.Output);
 
-                    // Step 4: 风控通过后自动下单
+                    // Step 4: 风控通过后 买入→入候选池 / 卖出→自动下单
                     if (riskResult.Success && passed)
                     {
                         sw.Restart();
-                        var orderResult = await PlaceOrderAsync(signal, request.TotalCapital, request.PositionSizeMode);
+                        var side = ResolveSide(signal.SignalType);
+                        if (side == "buy")
+                        {
+                            // 买入信号 → 入交易候选池，不自动下单
+                            var added = await AddToCandidatePoolAsync(signal, request.TotalCapital, request.PositionSizeMode);
+                            candidatesAdded += added;
+                            orders.Add(new OrderResult
+                            {
+                                Success = added > 0,
+                                Message = added > 0
+                                    ? $"已加入候选池 (orderId=candidate-{signal.Code})"
+                                    : "入候选池失败",
+                            });
+                            _logger.LogInformation(
+                                "Step4/CandidatePool {Code} signal={SignalType} price={Price} added={Added} in {ElapsedMs}ms",
+                                signal.Code, signal.SignalType, signal.Price, added, sw.ElapsedMilliseconds);
+                        }
+                        else
+                        {
+                            // 卖出信号 → 自动下单
+                            var orderResult = await PlaceOrderAsync(signal, request.TotalCapital, request.PositionSizeMode);
+                            orders.Add(orderResult);
+                            _logger.LogInformation(
+                                "Step4/Order {Code} side={Side} price={Price} volume={Volume} orderId={OrderId} success={Success} in {ElapsedMs}ms",
+                                signal.Code, signal.SignalType, signal.Price, signal.Volume,
+                                orderResult.OrderId, orderResult.Success, sw.ElapsedMilliseconds);
+                        }
                         sw.Stop();
-                        orders.Add(orderResult);
-                        _logger.LogInformation(
-                            "Step4/Order {Code} side={Side} price={Price} volume={Volume} orderId={OrderId} success={Success} in {ElapsedMs}ms",
-                            signal.Code, signal.SignalType, signal.Price, signal.Volume,
-                            orderResult.OrderId, orderResult.Success, sw.ElapsedMilliseconds);
                     }
                     else if (riskResult.Success && !passed)
                     {
@@ -121,8 +153,9 @@ public class AutonomousDecisionSystem
                 ? new Dictionary<string, object> { ["checks"] = riskResults }
                 : null;
             result.Orders = orders;
+            result.CandidatesAdded = candidatesAdded;
             result.Message = signals.Count > 0
-                ? $"Decision completed: {signals.Count} signals, {orders.Count} orders placed"
+                ? $"Decision completed: {signals.Count} signals, {orders.Count} orders, {candidatesAdded} candidates added to pool"
                 : "Decision completed: no actionable signals";
         }
         catch (Exception ex)
@@ -134,8 +167,8 @@ public class AutonomousDecisionSystem
 
         result.ExecutionTime = (long)(DateTime.Now - startTime).TotalMilliseconds;
         _logger.LogInformation(
-            "Decision finished {Code} success={Success} orders={OrderCount} totalMs={ElapsedMs}",
-            request.Code, result.Success, result.Orders.Count, result.ExecutionTime);
+            "Decision finished {Code} success={Success} orders={OrderCount} candidates={CandidateCount} totalMs={ElapsedMs}",
+            request.Code, result.Success, result.Orders.Count, result.CandidatesAdded, result.ExecutionTime);
         return result;
     }
 
@@ -156,6 +189,95 @@ public class AutonomousDecisionSystem
 
         var results = await Task.WhenAll(tasks);
         return results.ToList();
+    }
+
+    /// <summary>
+    /// 买入信号 → 入交易候选池（upsert）。
+    /// 已处理(status!=0)的候选不覆盖；返回 1=新增 1=刷新 0=跳过。
+    /// </summary>
+    private async Task<int> AddToCandidatePoolAsync(TradeSignal signal, decimal totalCapital, PositionSizeMode mode)
+    {
+        try
+        {
+            if (signal.Price <= 0)
+            {
+                _logger.LogWarning("Candidate pool skip {Code}: price <= 0", signal.Code);
+                return 0;
+            }
+
+            var today = DateTime.Today;
+
+            // 仓位量计算
+            long volume;
+            if (signal.Volume > 0)
+                volume = signal.Volume;
+            else
+            {
+                var positionValue = _positionSizer.CalculatePositionSize(signal, totalCapital, mode);
+                volume = (long)(positionValue / signal.Price / 100) * 100;
+            }
+            if (volume < 100) volume = 100;
+
+            // 加载 K 线用于价位计算
+            var since = today.AddDays(-30);
+            var bars = await _db.KlineData
+                .Where(k => k.Interval == nameof(KlineInterval.Daily) && k.Code == signal.Code
+                            && k.DateTime >= since && k.DateTime <= today)
+                .OrderBy(k => k.DateTime)
+                .Select(k => new PriceLevelCalculator.PriceBar(k.High, k.Low, k.Close))
+                .ToListAsync();
+
+            var plan = PriceLevelCalculator.Compute(bars, signal.Price);
+
+            // 查找当日已有候选
+            var existing = await _db.TradeCandidate
+                .FirstOrDefaultAsync(c => c.TradingDate == today && c.Code == signal.Code);
+
+            if (existing != null)
+            {
+                if (existing.Status != 0) return 0; // 用户已处理，不覆盖
+                existing.Score = signal.Strength;
+                existing.Narrative = signal.Reason ?? string.Empty;
+                existing.RefClose = signal.Price;
+                existing.BuyLow = plan.BuyLow;
+                existing.BuyHigh = plan.BuyHigh;
+                existing.StopLoss = plan.StopLoss;
+                existing.TakeProfit = plan.TakeProfit;
+                existing.PlanBasis = plan.Basis;
+                existing.UpdatedAt = DateTime.Now;
+            }
+            else
+            {
+                _db.TradeCandidate.Add(new TradeCandidateEntity
+                {
+                    TradingDate = today,
+                    Code = signal.Code,
+                    Name = signal.Code, // 后续由其他服务补名称
+                    Score = signal.Strength,
+                    TopStrategy = signal.StrategyName ?? "autonomous",
+                    TopStrategyName = signal.StrategyName ?? "自主决策",
+                    HitStrategies = JsonSerializer.Serialize(
+                        new[] { signal.StrategyName ?? "autonomous" }, Core.Json.AppJson.Default),
+                    HitCount = 1,
+                    Narrative = signal.Reason ?? string.Empty,
+                    RefClose = signal.Price,
+                    BuyLow = plan.BuyLow,
+                    BuyHigh = plan.BuyHigh,
+                    StopLoss = plan.StopLoss,
+                    TakeProfit = plan.TakeProfit,
+                    PlanBasis = plan.Basis,
+                    Status = 0,
+                });
+            }
+
+            await _db.SaveChangesAsync();
+            return 1;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to add {Code} to candidate pool", signal.Code);
+            return 0;
+        }
     }
 
     private async Task<AgentResult> ExecuteAnalysisAsync(string code)
@@ -213,6 +335,9 @@ public class AutonomousDecisionSystem
         return await agent.ExecuteAsync(task);
     }
 
+    /// <summary>
+    /// 卖出信号 → 自动下单（保留实盘卖出能力）。
+    /// </summary>
     private async Task<OrderResult> PlaceOrderAsync(TradeSignal signal, decimal totalCapital, PositionSizeMode mode)
     {
         // 下单量：优先使用信号显式数量，否则由 PositionSizer 按所选模式（Kelly/波动率目标等）计算仓位金额
@@ -362,9 +487,14 @@ public class DecisionResult
     public Dictionary<string, object>? RiskCheck { get; set; }
 
     /// <summary>
-    /// 订单结果列表
+    /// 订单结果列表（仅卖出订单；买入已入候选池）
     /// </summary>
     public List<OrderResult> Orders { get; set; } = new();
+
+    /// <summary>
+    /// 入候选池条数
+    /// </summary>
+    public int CandidatesAdded { get; set; }
 
     /// <summary>
     /// 消息

@@ -4,6 +4,7 @@ using AIStock.Infrastructure.Database.Context;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace AIStock.Infrastructure.Migrations
 {
     [DbContext(typeof(AIStockDbContext))]
-    partial class AIStockDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260617000124_AddBacktestResult")]
+    partial class AddBacktestResult
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1798,10 +1801,6 @@ namespace AIStock.Infrastructure.Migrations
                         .HasColumnType("varchar(1000)")
                         .HasColumnName("narrative");
 
-                    b.Property<long?>("OrderFilledVolume")
-                        .HasColumnType("bigint")
-                        .HasColumnName("order_filled_volume");
-
                     b.Property<string>("OrderId")
                         .HasMaxLength(100)
                         .HasColumnType("varchar(100)")
@@ -1810,11 +1809,6 @@ namespace AIStock.Infrastructure.Migrations
                     b.Property<decimal?>("OrderPrice")
                         .HasColumnType("decimal(65,30)")
                         .HasColumnName("order_price");
-
-                    b.Property<string>("OrderStatusText")
-                        .HasMaxLength(100)
-                        .HasColumnType("varchar(100)")
-                        .HasColumnName("order_status_text");
 
                     b.Property<long?>("OrderVolume")
                         .HasColumnType("bigint")

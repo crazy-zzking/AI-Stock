@@ -4,7 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace AIStock.Web.Controllers;
 
 /// <summary>
-/// 尾盘自动下单 — 手动触发接口（验证/应急用）。定时触发见 TailMarketBuyHostedService。
+/// 尾盘选股入池 — 手动触发接口（验证/应急用）。定时触发见 TailMarketBuyHostedService。
 /// </summary>
 [ApiController]
 [Route("api/[controller]")]
@@ -23,7 +23,7 @@ public class TailBuyController : ControllerBase
     public async Task<ActionResult> Run([FromQuery] bool force = true, CancellationToken ct = default)
     {
         var sold = await _sell.RunAsync(ct);
-        var orders = await _buy.RunAsync(ct, force);
-        return Ok(new { sold, orders = orders.Select(r => new { r.OrderId, r.Success, r.Status, r.Message }) });
+        var candidatesAdded = await _buy.RunAsync(ct, force);
+        return Ok(new { sold, candidatesAdded });
     }
 }

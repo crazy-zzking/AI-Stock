@@ -1,3 +1,4 @@
+using System.Text.Json;
 using AIStock.Core.Models;
 using AIStock.Infrastructure.Database.Entities;
 using AIStock.Selection;
@@ -44,7 +45,7 @@ public class SelectionController : ControllerBase
     public ActionResult Patterns()
         => Ok(CandlePatternAnalyzer.PatternKeys.Select(k => new { key = k, name = CandlePatternAnalyzer.DisplayName(k) }));
 
-    /// <summary>按自定义条件实时选股（不落库，调试/试参用）。strategy 选策略(默认 lowdip)；body 为空则用该策略生效配置。</summary>
+    /// <summary>按自定义条件实时选股（不落库，调试/试参用）。</summary>
     [HttpPost("screen")]
     public async Task<ActionResult<List<StockSelectionResult>>> Screen(
         [FromBody] SelectionCriteria? criteria, [FromQuery] string? strategy, CancellationToken ct)
@@ -53,10 +54,7 @@ public class SelectionController : ControllerBase
         return Ok(results);
     }
 
-    /// <summary>
-    /// 返回当日已冻结的选股结果（供面板展示）。当日首次访问会生成并落库，
-    /// 之后盘中刷新返回同一份、结果不跳动。需重新选股请调 POST /run。
-    /// </summary>
+    /// <summary>返回当日已冻结的选股结果（供面板展示）。</summary>
     [HttpGet("latest")]
     public async Task<ActionResult<List<StockSelectionResult>>> Latest([FromQuery] int topN = 5, CancellationToken ct = default)
     {
@@ -64,7 +62,7 @@ public class SelectionController : ControllerBase
         return Ok(results);
     }
 
-    /// <summary>重新选股并追加一条历史记录（不覆盖），返回本次结果。strategy 选策略；body 为空则用该策略生效配置。</summary>
+    /// <summary>重新选股并追加一条历史记录。</summary>
     [HttpPost("run")]
     public async Task<ActionResult<List<StockSelectionResult>>> Run(
         [FromBody] SelectionCriteria? criteria, [FromQuery] string? strategy, CancellationToken ct)
@@ -73,7 +71,7 @@ public class SelectionController : ControllerBase
         return Ok(results);
     }
 
-    /// <summary>导入外部选股结果（历史未入库的批次）。date 为该批选股所基于的交易日(yyyy-MM-dd)。</summary>
+    /// <summary>导入外部选股结果。</summary>
     [HttpPost("import")]
     public async Task<ActionResult> Import([FromBody] List<StockSelectionResult>? picks, [FromQuery] string? date, CancellationToken ct = default)
     {
@@ -83,7 +81,6 @@ public class SelectionController : ControllerBase
         return Ok(new { imported = n, tradingDate = d.Date.ToString("yyyy-MM-dd") });
     }
 
-    /// <summary>选股历史记录列表（元信息，按选股时间倒序）。</summary>
     [HttpGet("history")]
     public async Task<ActionResult<List<SelectionHistoryItem>>> History([FromQuery] int take = 30, CancellationToken ct = default)
     {
@@ -91,7 +88,6 @@ public class SelectionController : ControllerBase
         return Ok(items);
     }
 
-    /// <summary>选股历史分页（按选股时间倒序，返回总数+当前页，供前端翻页）。</summary>
     [HttpGet("history/page")]
     public async Task<ActionResult<SelectionHistoryPage>> HistoryPage([FromQuery] int page = 1, [FromQuery] int pageSize = 20, CancellationToken ct = default)
     {
@@ -99,7 +95,6 @@ public class SelectionController : ControllerBase
         return Ok(result);
     }
 
-    /// <summary>按 id 取某次选股的完整结果。</summary>
     [HttpGet("history/{id:long}")]
     public async Task<ActionResult<List<StockSelectionResult>>> HistoryDetail(long id, CancellationToken ct)
     {
@@ -107,7 +102,6 @@ public class SelectionController : ControllerBase
         return Ok(results);
     }
 
-    /// <summary>某批选股的选后表现：次日/至今涨跌、选中后最高涨幅与最低跌幅（按日K）。</summary>
     [HttpGet("history/{id:long}/performance")]
     public async Task<ActionResult<SelectionPerformance>> HistoryPerformance(long id, CancellationToken ct)
     {
@@ -115,15 +109,10 @@ public class SelectionController : ControllerBase
         return perf == null ? NotFound() : Ok(perf);
     }
 
-    /// <summary>手动（重新）触发某批选股的 LLM 复评（异步执行，返回后台轮询 performance 看 reviewStatus）。</summary>
     [HttpPost("history/{id:long}/review")]
     public async Task<ActionResult> ReviewBatch(long id, CancellationToken ct)
         => await _selection.RequestReviewAsync(id, ct) ? Ok(new { queued = true }) : NotFound();
 
-    /// <summary>
-    /// 将指定选股批次的票入交易候选池（手动触发，等价于尾盘选股后的自动入池）。
-    /// 同一只股票多策略命中时取最高分，已处理(status≠0)的候选不覆盖。
-    /// </summary>
     [HttpPost("history/{id:long}/enpool")]
     public async Task<ActionResult> Enpool(long id, CancellationToken ct = default)
     {
@@ -144,9 +133,8 @@ public class SelectionController : ControllerBase
         }
     }
 
-    // ============ 配置中心（版本化的选股条件 + 权重）============
+    // ============ 配置中心 ============
 
-    /// <summary>当前生效的选股条件（含权重）。无配置时返回代码默认值。</summary>
     [HttpGet("config")]
     public async Task<ActionResult<SelectionCriteria>> GetConfig([FromQuery] string? name, CancellationToken ct)
     {
@@ -154,16 +142,13 @@ public class SelectionController : ControllerBase
         return Ok(criteria);
     }
 
-    /// <summary>代码内置默认条件（前端"恢复默认"用）。</summary>
     [HttpGet("config/default")]
     public ActionResult<SelectionCriteria> GetDefaultConfig() => Ok(SelectionConfigService.GetDefaultCriteria());
 
-    /// <summary>列出所有配置版本（含 JSON，供查看/对比）。</summary>
     [HttpGet("config/list")]
     public async Task<ActionResult<List<SelectionConfigEntity>>> ListConfig(CancellationToken ct)
         => Ok(await _config.ListAsync(ct));
 
-    /// <summary>保存为新版本（可选同时激活）。</summary>
     [HttpPost("config")]
     public async Task<ActionResult<SelectionConfigEntity>> SaveConfig([FromBody] SaveConfigRequest req, CancellationToken ct)
     {
@@ -175,17 +160,14 @@ public class SelectionController : ControllerBase
         return Ok(saved);
     }
 
-    /// <summary>激活指定配置版本。</summary>
     [HttpPost("config/{id:long}/activate")]
     public async Task<ActionResult> ActivateConfig(long id, CancellationToken ct)
         => await _config.ActivateAsync(id, ct) ? Ok() : NotFound();
 
-    /// <summary>删除配置版本（生效中的不可删）。</summary>
     [HttpDelete("config/{id:long}")]
     public async Task<ActionResult> DeleteConfig(long id, CancellationToken ct)
         => await _config.DeleteAsync(id, ct) ? Ok() : BadRequest("配置不存在或正在生效，无法删除");
 
-    /// <summary>保存配置请求体。</summary>
     public class SaveConfigRequest
     {
         public string? Name { get; set; }
@@ -195,10 +177,11 @@ public class SelectionController : ControllerBase
         public SelectionCriteria? Criteria { get; set; }
     }
 
+    // ============ 回测 ============
+
     /// <summary>
-    /// 回测历史选股结果：把 [from,to] 区间内已落库的选股记录当信号，按持有期/买点用 K 线统计
-    /// 胜率/平均收益/盈亏比/回撤。entry: NextOpen(默认,T+1开盘) | SignalClose(信号日收盘)。
-    /// tradability=true(默认)：一字涨停买不进剔除、一字跌停卖出顺延；friction：单笔往返摩擦(%)。
+    /// 回测历史选股结果。entry: NextOpen(默认,T+1开盘) | SignalClose(信号日收盘)。
+    /// 新增 exitPreset / exitRules 参数支持高级出场规则。
     /// </summary>
     [HttpGet("backtest")]
     public async Task<ActionResult<BacktestReport>> Backtest(
@@ -206,6 +189,8 @@ public class SelectionController : ControllerBase
         [FromQuery] string? from = null, [FromQuery] string? to = null,
         [FromQuery] bool tradability = true, [FromQuery] decimal friction = 0.3m,
         [FromQuery] decimal stopLoss = 0m, [FromQuery] decimal takeProfit = 0m,
+        [FromQuery] string? exitPreset = null, [FromQuery] string? exitRules = null,
+        [FromQuery] bool rejectBreakdown = false, [FromQuery] decimal ma5SlopePct = 1m,
         CancellationToken ct = default)
     {
         var config = new BacktestConfig
@@ -217,7 +202,24 @@ public class SelectionController : ControllerBase
             FrictionPct = friction,
             StopLossPct = stopLoss,
             TakeProfitPct = takeProfit,
+            ExitPreset = exitPreset,
+            RejectBreakdown = rejectBreakdown,
+            Ma5DownSlopeMaxPct = ma5SlopePct,
         };
+
+        // 解析高级出场规则 JSON
+        if (!string.IsNullOrWhiteSpace(exitRules))
+        {
+            try
+            {
+                config.ExitRules = JsonSerializer.Deserialize<List<ExitRule>>(exitRules);
+            }
+            catch { /* 解析失败时忽略，回退到旧字段 */ }
+        }
+
+        // 用户未配置任何出场规则时，兜底使用「均衡默认」预设（不覆盖用户显式配置）
+        ApplyDefaultExitPresetIfEmpty(config, stopLoss, takeProfit);
+
         DateTime? f = DateTime.TryParse(from, out var fd) ? fd : null;
         DateTime? t = DateTime.TryParse(to, out var td) ? td : null;
         var report = await _backtest.BacktestHistoryAsync(config, f, t, ct);
@@ -225,8 +227,8 @@ public class SelectionController : ControllerBase
     }
 
     /// <summary>
-    /// 参数回放回测：用给定参数(body=criteria，为空则用该策略生效配置)在 [from,to] 历史快照上
-    /// 逐日重跑选股并回测。供大模型自动调参对比。from/to 缺省=最近30天。
+    /// 参数回放回测：用给定参数在 [from,to] 历史快照上逐日重跑选股并回测。
+    /// 新增 exitPreset / exitRules 参数。
     /// </summary>
     [HttpPost("backtest/replay")]
     public async Task<ActionResult<BacktestReport>> ReplayBacktest(
@@ -235,12 +237,15 @@ public class SelectionController : ControllerBase
         [FromQuery] int holdDays = 5, [FromQuery] string entry = "NextOpen",
         [FromQuery] bool tradability = true, [FromQuery] decimal friction = 0.3m,
         [FromQuery] decimal stopLoss = 0m, [FromQuery] decimal takeProfit = 0m,
+        [FromQuery] string? exitPreset = null, [FromQuery] string? exitRules = null,
+        [FromQuery] bool rejectBreakdown = false, [FromQuery] decimal ma5SlopePct = 1m,
         CancellationToken ct = default)
     {
         var c = criteria ?? await _config.GetActiveCriteriaAsync(
             string.IsNullOrWhiteSpace(strategy) ? SelectionConfigService.DefaultName : strategy, ct);
         var toD = DateTime.TryParse(to, out var td) ? td : DateTime.Today;
         var fromD = DateTime.TryParse(from, out var fd) ? fd : toD.AddDays(-30);
+
         var config = new BacktestConfig
         {
             HoldDays = holdDays,
@@ -250,12 +255,42 @@ public class SelectionController : ControllerBase
             FrictionPct = friction,
             StopLossPct = stopLoss,
             TakeProfitPct = takeProfit,
+            ExitPreset = exitPreset,
+            RejectBreakdown = rejectBreakdown,
+            Ma5DownSlopeMaxPct = ma5SlopePct,
         };
+
+        // 解析高级出场规则 JSON
+        if (!string.IsNullOrWhiteSpace(exitRules))
+        {
+            try
+            {
+                config.ExitRules = JsonSerializer.Deserialize<List<ExitRule>>(exitRules);
+            }
+            catch { }
+        }
+
+        // 用户未配置任何出场规则时，兜底使用「均衡默认」预设（不覆盖用户显式配置）
+        ApplyDefaultExitPresetIfEmpty(config, stopLoss, takeProfit);
+
         var report = await _replay.BacktestParamsAsync(strategy, c, fromD, toD, config, ct);
         return Ok(report);
     }
 
-    /// <summary>仅返回第一级活跃度粗筛池（调试/观察用）。</summary>
+    /// <summary>
+    /// 用户完全没配置出场规则（无 preset / 无 exitRules / 无止损止盈）时，兜底填「均衡默认」预设，
+    /// 避免出场只剩裸持有到期。不覆盖任何用户显式配置。
+    /// </summary>
+    private static void ApplyDefaultExitPresetIfEmpty(BacktestConfig config, decimal stopLoss, decimal takeProfit)
+    {
+        if (string.IsNullOrWhiteSpace(config.ExitPreset)
+            && (config.ExitRules == null || config.ExitRules.Count == 0)
+            && stopLoss == 0m && takeProfit == 0m)
+        {
+            config.ExitPreset = "default";
+        }
+    }
+
     [HttpGet("activity")]
     public async Task<ActionResult> Activity(CancellationToken ct)
     {
@@ -271,5 +306,111 @@ public class SelectionController : ControllerBase
             Features = h.Features
         });
         return Ok(dto);
+    }
+
+    // ============ 新增：高级回测接口 ============
+
+    /// <summary>滚动窗口回测（Phase 6.1）。</summary>
+    [HttpGet("backtest/rolling")]
+    public async Task<ActionResult<List<object>>> RollingBacktest(
+        [FromQuery] int windowDays = 60, [FromQuery] int stepDays = 20,
+        [FromQuery] string? from = null, [FromQuery] string? to = null,
+        [FromQuery] int holdDays = 5, [FromQuery] string entry = "NextOpen",
+        CancellationToken ct = default)
+    {
+        var fromD = DateTime.TryParse(from, out var fd) ? fd : DateTime.Today.AddYears(-1);
+        var toD = DateTime.TryParse(to, out var td) ? td : DateTime.Today;
+        var results = new List<object>();
+
+        var currentFrom = fromD;
+        while (currentFrom.AddDays(windowDays) <= toD)
+        {
+            var currentTo = currentFrom.AddDays(windowDays);
+            var config = new BacktestConfig
+            {
+                HoldDays = holdDays,
+                Entry = string.Equals(entry, "SignalClose", StringComparison.OrdinalIgnoreCase)
+                    ? BacktestEntryTiming.SignalClose : BacktestEntryTiming.NextOpen,
+            };
+
+            try
+            {
+                var report = await _backtest.BacktestHistoryAsync(config, currentFrom, currentTo, ct);
+                results.Add(new
+                {
+                    from = currentFrom.ToString("yyyy-MM-dd"),
+                    to = currentTo.ToString("yyyy-MM-dd"),
+                    winRate = report.WinRatePct,
+                    avgReturn = report.AvgReturnPct,
+                    sharpe = report.SharpeRatio,
+                    trades = report.ExecutedTrades,
+                    profitFactor = report.ProfitFactor,
+                });
+            }
+            catch { /* skip collapsed windows */ }
+
+            currentFrom = currentFrom.AddDays(stepDays);
+        }
+
+        return Ok(results);
+    }
+
+    /// <summary>参数网格搜索回测（Phase 6.2）。</summary>
+    [HttpPost("backtest/grid")]
+    public async Task<ActionResult<List<object>>> GridBacktest(
+        [FromBody] GridBacktestRequest request, CancellationToken ct = default)
+    {
+        var results = new List<object>();
+        var holdDaysList = request.HoldDays?.Length > 0 ? request.HoldDays : new[] { 5 };
+        var stopLossList = request.StopLossPct?.Length > 0 ? request.StopLossPct : new[] { 0m };
+        var takeProfitList = request.TakeProfitPct?.Length > 0 ? request.TakeProfitPct : new[] { 0m };
+        var presets = request.ExitPresets?.Length > 0 ? request.ExitPresets : new[] { (string?)null };
+
+        var fromD = DateTime.TryParse(request.From, out var fd) ? fd : DateTime.Today.AddMonths(-3);
+        var toD = DateTime.TryParse(request.To, out var td) ? td : DateTime.Today;
+
+        foreach (var hd in holdDaysList)
+            foreach (var sl in stopLossList)
+                foreach (var tp in takeProfitList)
+                    foreach (var preset in presets)
+                    {
+                        var config = new BacktestConfig
+                        {
+                            HoldDays = hd,
+                            StopLossPct = sl,
+                            TakeProfitPct = tp,
+                            ExitPreset = preset,
+                        };
+                        try
+                        {
+                            var report = await _backtest.BacktestHistoryAsync(config, fromD, toD, ct);
+                            results.Add(new
+                            {
+                                holdDays = hd,
+                                stopLoss = sl,
+                                takeProfit = tp,
+                                exitPreset = preset,
+                                winRate = report.WinRatePct,
+                                avgReturn = report.AvgReturnPct,
+                                sharpe = report.SharpeRatio,
+                                profitFactor = report.ProfitFactor,
+                                trades = report.ExecutedTrades,
+                                maxDrawdown = report.MaxDrawdownPct,
+                            });
+                        }
+                        catch { }
+                    }
+
+        return Ok(results);
+    }
+
+    public class GridBacktestRequest
+    {
+        public int[]? HoldDays { get; set; }
+        public decimal[]? StopLossPct { get; set; }
+        public decimal[]? TakeProfitPct { get; set; }
+        public string[]? ExitPresets { get; set; }
+        public string? From { get; set; }
+        public string? To { get; set; }
     }
 }
